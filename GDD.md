@@ -138,26 +138,54 @@ anywhere else.
 
 | Role | Hex | Notes |
 |---|---|---|
-| Sun / key light | `#fff3d6` | warm, intensity 2.6 |
-| Sky fill (hemi top) | `#a8d8f0` | |
+| Sun / key light | `#fff3d6` | warm, intensity **2.15** |
+| Sky fill (hemi top) | `#a8d8f0` | intensity **0.85** |
 | Bounce fill (hemi bottom) | `#c9b98e` | warm ground bounce, keeps shadows alive |
 | Shadow tint | `#6b7bb5` | mixed 35 % into band 0 |
 | Rim tint | `#dff1ff` | |
 | Sky zenith | `#5fa8d8` | |
 | Sky horizon | `#dceef7` | |
-| Fog | `#cfe4f0` | exp² fog, density 0.0055 |
-| Grass lit | `#9ccc55` | |
-| Grass base | `#7aab45` | |
-| Grass shadow | `#4a7a48` | |
-| Dirt | `#a8794e` | slope blend > 28° |
-| Sand | `#ddc98f` | below waterline + 1.2 m |
-| Rock base | `#98a0a8` | |
-| Rock warm | `#b3a795` | mixed by upward-facing normal |
-| Bark base | `#7a5a3c` | |
-| Bark dark | `#4e3826` | |
-| Foliage lit | `#7cbb46` | |
-| Foliage base | `#5c9639` | |
-| Foliage deep | `#37662f` | interior of clump, from baked AO |
+| Fog | `#cfe4f0` | exp² fog, density **0.0085** |
+| Grass lit | `#8fb861` | |
+| Grass base | `#6e934c` | |
+| Grass shadow | `#455f3f` | |
+| Grass dry | `#a3a663` | warm end of the grass range |
+| Dirt | `#8f6a49` | slope blend from normalY 0.94 |
+| Sand | `#c7b489` | low, flat hollows only |
+| Rock base | `#9b9d99` | warm-grey boulder family |
+| Rock warm | `#b8ab95` | mixed by upward-facing normal |
+| Rock shadow | `#62615c` | warm-neutral, not blue |
+| Cliff lit | `#bcc4c8` | pale blue-grey family — plateaus, spires, basalt, slabs |
+| Cliff base | `#9ba7ae` | |
+| Cliff shadow | `#5d6673` | cool, unlike `rockShadow` |
+| Grass cap lit | `#84a75e` | the flat green tops — duller than `grassLit`, see below |
+| Grass cap base | `#627f45` | |
+| Grass cap deep | `#36512c` | under the draped lip and on shelf turf, from baked AO |
+| Bark base | `#6d5138` | |
+| Bark dark | `#453224` | |
+| Foliage lit | `#74a248` | |
+| Foliage base | `#527d3a` | |
+| Foliage deep | `#2c4c2b` | interior of clump, from baked AO |
+
+**Two rock families, on purpose.** `rock*` is warm grey (boulders, stones);
+`cliff*` is pale blue-grey (plateaus, spires, basalt, slabs). A plateau standing
+next to a boulder has to read as a *different stone*, not the same stone at a
+different size — warm grey against cool grey is the cheapest geological story
+available, and it costs three palette entries.
+
+**Everything here is duller than it looks on a swatch**, and that is deliberate:
+the lit band lands at ~0.95× albedo, so a colour that reads "correct" flat
+arrives on screen clipped. The first pass authored grass at `#9ccc55`/`#7aab45`
+and the ground rendered as flat lime poster paint.
+
+The **grass caps are duller still — below `grassLit` — and that is not an
+oversight.** They were first authored *brighter* than the meadow, reasoning that
+a cap has to separate from the ground it floats above. True, and not an argument
+for saturation: a cap is a large, *flat*, fully-lit plane, so unlike the rolling
+ground it takes the ramp's top band across its whole area with no falloff
+anywhere, and it arrives a full band hotter than the same hex does on terrain.
+The separation it needs is already free — it sits on pale blue-grey stone, so
+hue and value contrast do the work and the rim light draws the edge.
 
 **Saturation-by-distance:** the fog colour is *lighter and bluer* than the sky
 horizon on purpose. Objects therefore lose saturation before they lose contrast,
@@ -176,12 +204,53 @@ Every world object ships **exactly four LOD tiers**, plus a cull distance.
 | Tree | 200 | 110 | 56 | 16 | 162 / 80 / 54 / 16 |
 | Boulder | 180 | 96 | 44 | 12 | 140 / 80 / 36 / 12 |
 | Stone | 72 | 40 | 20 | 8 | 56 / 36 / 20 / 8 |
+| Plateau | 260 | 150 | 80 | 40 | 216 / 144 / 72 / 36 |
+| Cliff spire | 260 | 150 | 100 | 36 | 200 / 120 / 80 / 30 |
+| Basalt cluster | 210 | 124 | 60 | 20 | 196 / 115 / 54 / 18 |
+| Slab | 112 | 76 | 40 | 18 | 96 / 64 / 32 / 16 |
+| Grass rock | 130 | 84 | 40 | 20 | 99 / 63 / 30 / 15 |
 | Terrain chunk (48 m) | 1400 | 400 | 128 | 24 | 1344 / 384 / 120 / 18 |
 | *(future)* Monster | 900 | 420 | 180 | 40 | — |
 | *(future)* Chibi human | 700 | 340 | 150 | 36 | — |
 
 Generators call `assertTriBudget(geometry, budget, name)` and **throw** in dev if
 they exceed it. The budget is a ceiling, not a target.
+
+**The cliff family sits above the boulder, and that is a placement decision
+rather than an art one.** A boulder is scatter — thousands of them, so its
+budget is really a per-*field* budget. A plateau or a spire is placed by hand,
+in tens, and is usually the thing the player is standing on or navigating by, so
+its triangles are seen from two metres rather than from forty. What they buy is
+also different: a boulder spends its budget on a silhouette, while a plateau has
+to spend some on a **genuinely planar top** (it is walkable, and the collider
+claims it is flat) and on the grass cap's lip, which is the feature that
+identifies the whole family.
+
+**Their coarse tiers are budgeted unusually high on purpose, and the split
+between rings and segments is the reason.** This family's identity lives in its
+*section* — a bundle of fused columns whose valleys are genuine arrises — and a
+tier only shows those arrises if its segment count is a multiple of the lobe
+count. Segments are therefore held constant from LOD0 to LOD2 and each tier
+spends its reduction on **rings** instead. That is what pushes LOD2 to 80–100
+rather than the boulder's 44, and it is the right way round: the profile is this
+family's pose and can be approximated, while the section is what makes it
+recognisable at all. LOD3 sits at 36–40 for a related reason — three rings
+cannot describe an anvil or a 2:1 taper with ledges in it, and the tier measured
+45 % over its LOD0 volume until it got a fourth.
+
+Slab and grass rock go the other way — they are stacked and scattered in
+quantity, so they are budgeted nearer the stone than the plateau.
+
+**Tier size is corrected on both axes, not one.** §4.3 explains why a coarse tier
+is a genuinely smaller object and has to be inflated back. That argument applies
+twice over: once to the polygon approximating the *section*, and once to the
+chords approximating the *profile*, where every chord across a concave stretch
+falls outside the true curve and makes a low-ring tier systematically **too fat**.
+Correcting only the first left the cliff family's coarse tiers running 12–62 %
+off LOD0's volume. With both corrections (`sectionAreaInflate` and
+`profileVolumeInflate`) every tier of every prop in the family lands within
+**2.8 %** by volume — under 1 % linear — which is what the dithered crossfade
+needs and what a per-asset fudge factor never reliably delivered.
 
 **LOD3 is a solid impostor blob, not a billboard.** Cross-billboards were the
 obvious choice and are wrong here: with no prop textures (§5.2) there is no alpha
@@ -288,6 +357,46 @@ this is invisible because tier silhouettes are matched by design (R1).
 * **No textures for props.** Colour is vertex colour. The only textures in the
   scene are the 1×N gradient ramp and the shadow map.
 
+### 5.2b Streaming and hierarchical culling
+
+The world is **streamed**, not built at boot. Terrain chunks are generated on a
+Web Worker and uploaded under a per-frame time budget; scatter instances are
+culled through a spatial hierarchy rather than one at a time.
+
+**Hierarchical culling** (`InstancedLodField`). Instances are sorted at build
+time into 48 m cells, stored as contiguous runs. Each frame a cell is classified
+against the frustum once:
+
+* `OUTSIDE` → skipped, then marked **dormant** so subsequent frames cost nothing
+* `INSIDE` → every instance accepted with **no per-instance plane test**
+* `INTERSECTS` → only these pay the per-instance cost
+
+The second-order win matters more than the first: per-instance culling made
+membership churn on every camera *rotation*, which dirtied the instanced matrix
+buffers and re-uploaded them. Measured at 23 223 instances, same build, same
+scripted orbit — scatter CPU worst-case **2.80 → 1.40 ms**, GPU **5.88 → 3.28 ms**.
+The `cell cull` toggle in the perf panel flips it back for A/B measurement.
+
+**Streaming** (`terrain/`). Four rules keep it from being felt:
+
+| rule | why |
+|---|---|
+| Budget, don't burst | Geometry construction and GPU upload are main-thread work no worker can take. The ready queue drains against ~2 ms/frame. Measured max in any frame during traversal: **0.6 ms**. |
+| Hysteresis | Unload radius is 1.25× load radius, or pacing a boundary thrashes. |
+| Predict | The load centre leads the camera along its velocity, so chunks arrive before they're needed. |
+| Pool | Nodes and GPU buffers are recycled. Tier sizes are fixed, so a recycled node's buffers are always the right shape. |
+
+`heightfieldCore.ts` and `chunkGeometry.ts` are **three.js-free** so the worker
+bundle doesn't ship a second copy of three, and so the worker and the
+main-thread fallback run literally the same function — a streaming system whose
+background and fallback paths are two implementations is one where they drift.
+
+Boot build dropped from ~900 ms to **296 ms** once terrain left the constructor.
+
+**Not yet streamed:** scatter instances are still built eagerly over the whole
+world extent, which is why `TerrainOptions.size` still bounds the world. Cell
+sorting is the groundwork for streaming them too — that's the next step.
+
 ### 5.3 Profiling — "which asset wastes the most performance"
 
 `src/world/perf/` provides:
@@ -295,6 +404,11 @@ this is invisible because tier silhouettes are matched by design (R1).
 1. **Live counters** — fps, CPU frame ms, **GPU ms** (via
    `EXT_disjoint_timer_query_webgl2`), draw calls, triangles, programs, geometries,
    textures.
+1b. **Frame-time percentiles** — p50 / p95 / p99 / worst over a 240-frame window,
+   plus a count of frames over budget. A mean hides exactly what players feel: a
+   scene at a flawless 8 ms mean that spends one frame in sixty at 40 ms reads as
+   *stuttering*, and the mean moves by 0.5 ms. Streaming makes this the number
+   that matters, because chunk uploads land on individual frames.
 2. **Per-tag accounting** — every object registers a `perfTag`
    (`terrain`, `trees`, `rocks`, `monsters:bokoblin`, …). Each frame the profiler
    frustum-tests registered roots and attributes visible draw calls, triangles

@@ -269,6 +269,8 @@ export default {
   'loading': { 'tooLong': '読み込みが長すぎますか？ 広告ブロッカーを無効にして再読み込みしてください。' },
   'license': { 'denied': 'アクセスが拒否されました：ライセンスをご購入ください。' },
   'world': {
-    'controlsHint': 'ドラッグで見回す · WASDで移動 · スクロールまたはピンチでズーム'
+    'controlsHint': 'ドラッグで見回す · WASDで移動 · スクロールまたはピンチでズーム',
+    'modeOrbit': '周回視点',
+    'modeFirstPerson': '歩く'
   }
 }

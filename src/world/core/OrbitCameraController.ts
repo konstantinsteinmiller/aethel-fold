@@ -224,7 +224,9 @@ export class OrbitCameraController {
     const speed = this.options.moveSpeed * boost * deltaSeconds * (0.35 + this.distance * 0.045)
 
     _forward.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize()
-    _right.set(_forward.z, 0, -_forward.x)
+    // right = normalize(cross(forward, up)) = (-fz, 0, fx).
+    // This was (fz, 0, -fx) — the exact negation — so A and D were swapped.
+    _right.set(-_forward.z, 0, _forward.x)
 
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) {
       this.desiredFocus.addScaledVector(_forward, speed)

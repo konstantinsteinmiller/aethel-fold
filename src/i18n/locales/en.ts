@@ -389,6 +389,8 @@ export default {
     'denied': 'Access Denied: Please purchase a license.'
   },
   'world': {
-    'controlsHint': 'Drag to look around · WASD to move · scroll or pinch to zoom'
+    'controlsHint': 'Drag to look around · WASD to move · scroll or pinch to zoom',
+    'modeOrbit': 'Orbit view',
+    'modeFirstPerson': 'Walk'
   }
 }

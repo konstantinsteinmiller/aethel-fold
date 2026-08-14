@@ -269,6 +269,8 @@ export default {
   'loading': { 'tooLong': '加载太久？请关闭广告拦截器并刷新页面。' },
   'license': { 'denied': '访问被拒绝：请购买许可证。' },
   'world': {
-    'controlsHint': '拖动环顾四周 · WASD 移动 · 滚轮或双指缩放'
+    'controlsHint': '拖动环顾四周 · WASD 移动 · 滚轮或双指缩放',
+    'modeOrbit': '环绕视角',
+    'modeFirstPerson': '行走'
   }
 }

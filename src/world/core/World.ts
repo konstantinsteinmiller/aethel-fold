@@ -2,10 +2,23 @@ import type { WorldAsset } from '../assets/types'
 import { PerspectiveCamera, Scene, Vector3, type WebGLRenderer } from 'three'
 import { createBoulderAsset, createStoneAsset } from '../assets/rock'
 import { createTreeAsset } from '../assets/tree'
+import {
+  disposeLevelEditor,
+  heldPlacementId,
+  installLevelEditor,
+  levelPlacements,
+  levelRevision,
+  seedLevel,
+  updateLevelEditor
+} from '../editor'
+import { registerAllPlaceables } from '../assets'
 import { budgetLedger } from '../geometry/budget'
+import { buildStartingLevel } from '../level/startingLevel'
+import type { Placement } from '../level/types'
 import { updateLodBiasFromView } from '../lod/config'
 import type { InstancedLodField } from '../lod/InstancedLodField'
 import { Profiler } from '../perf/Profiler'
+import { createPlayer, type Player } from '../player'
 import { createScatterField } from '../scatter'
 import { updateUnitsPerPixel, worldUniforms } from '../shading/globals'
 import { Heightfield } from '../terrain/heightfield'
@@ -35,6 +48,8 @@ export interface WorldSettings {
   shadows: boolean
   wind: boolean
   frustumCullInstances: boolean
+  /** Cell-level culling. Off = the original flat per-instance sweep (A/B). */
+  hierarchical: boolean
   /** 0.6–1.0 quality slider. */
   renderScale: number
 }
@@ -44,6 +59,10 @@ export interface WorldBuildInfo {
   treeInstances: number
   rockInstances: number
   terrainChunks: number
+  /** Editor palette size — how many prop types the level editor can place. */
+  placeables: number
+  /** Props the starting level seeded. 0 once a saved level exists. */
+  seededProps: number
   budgets: { name: string; tris: number; budget: number }[]
 }
 
@@ -51,7 +70,23 @@ export interface WorldOptions {
   seed?: number
   /** Square extent of the terrain, in metres. */
   worldSize?: number
+  /**
+   * Multiplies scatter density. `2` is four times the instances (spacing is a
+   * distance, so the count goes as the square).
+   *
+   * Exists to make culling and streaming work *measurable*: at the shipping
+   * density the frame is vsync-bound and a 10× improvement in the instance loop
+   * shows up as no change at all. Benchmarks run at 3–4.
+   */
+  densityScale?: number
 }
+
+/**
+ * Orbit is the inspection camera the world was built with; first-person is the
+ * capsule player. Both stay attached — a disabled controller ignores every
+ * event — so switching is a flag, not a teardown.
+ */
+export type CameraMode = 'orbit' | 'firstPerson'
 
 export class World {
   readonly renderer: WebGLRenderer
@@ -61,12 +96,14 @@ export class World {
   readonly profiler: Profiler
   readonly terrain: Terrain
   readonly buildInfo: WorldBuildInfo
+  readonly player: Player
 
   readonly settings: WorldSettings = {
     outlines: true,
     shadows: true,
     wind: true,
     frustumCullInstances: true,
+    hierarchical: true,
     renderScale: 1
   }
 
@@ -79,8 +116,25 @@ export class World {
   private height = 1
   private running = false
 
+  private cameraMode: CameraMode = 'orbit'
+
+  /**
+   * Placements the player collides with, refreshed only when the editor's
+   * revision counter moves.
+   *
+   * `levelPlacements()` allocates and sorts, so polling it per frame would
+   * violate the zero-per-frame-allocation rule (GDD §5.2). The revision compare
+   * is one integer. The array identity is also deliberately stable between
+   * changes — the player rebuilds its collider pool when the identity changes,
+   * so handing it a fresh array every frame would defeat its cache too.
+   */
+  private cachedPlacements: Placement[] = []
+  private lastLevelRevision = -1
+
   constructor(canvas: HTMLCanvasElement, options: WorldOptions = {}) {
-    const { seed = 1337, worldSize = 384 } = options
+    const { seed = 1337, worldSize = 384, densityScale = 1 } = options
+    // Spacing is a distance, so dividing it by the scale squares the count.
+    const spacingOf = (base: number): number => base / densityScale
     const buildStart = performance.now()
 
     this.renderer = createRenderer({ canvas })
@@ -107,7 +161,7 @@ export class World {
       const asset = createTreeAsset({ seed: treeSeeds[i]!, height: 5.0 + i * 0.7 })
       const scatter = createScatterField(field, asset, {
         extent: worldSize - 24,
-        spacing: 11 + i * 2,
+        spacing: spacingOf(11 + i * 2),
         seed: 300 + i * 97,
         maxSlope: 0.34,
         clusterSize: 95,
@@ -123,7 +177,7 @@ export class World {
       const asset = createBoulderAsset({ seed })
       const scatter = createScatterField(field, asset, {
         extent: worldSize - 24,
-        spacing: 26 + i * 7,
+        spacing: spacingOf(26 + i * 7),
         seed: 700 + i * 131,
         maxSlope: 0.5,
         clusterSize: 140,
@@ -140,7 +194,7 @@ export class World {
       const asset = createStoneAsset({ seed })
       const scatter = createScatterField(field, asset, {
         extent: worldSize - 24,
-        spacing: 7 + i * 3,
+        spacing: spacingOf(7 + i * 3),
         seed: 900 + i * 173,
         maxSlope: 0.55,
         clusterSize: 60,
@@ -158,11 +212,42 @@ export class World {
     // spawn flat — the opening frame should show the terrain doing something.
     this.controller.setFocus(-38, field.heightAt(-38, 26) + 2.2, 26)
 
+    // ── Player ─────────────────────────────────────────────────────────────
+    this.player = createPlayer({
+      camera: this.camera,
+      heightAt: (x, z) => field.heightAt(x, z),
+      spawn: { x: -38, z: 26 },
+      // Orbit owns the frame on boot; first-person is opt-in.
+      enabled: false
+    })
+    this.scene.add(this.player.object)
+    this.profiler.registerRoot(this.player.object, this.player.perfTag)
+    // Stable identity between revisions — see `cachedPlacements`.
+    this.player.setColliderSource(() => this.cachedPlacements)
+
+    // ── Level editor ───────────────────────────────────────────────────────
+    //
+    // Placeables first so the palette is populated before the editor reads it.
+    // The editor tolerates the other order (it retries unresolved placements on
+    // its first update), but paying for that recovery path on every boot when
+    // the ordering is ours to choose would be silly.
+    const placeables = registerAllPlaceables()
+
+    // Installed unconditionally: the code-word listener has to be live for
+    // "cmonc" to ever be typed, and the editor itself does nothing until it is.
+    installLevelEditor(this)
+
+    // Seeded only on a fresh install (`onlyIfEmpty` is the default), so anyone
+    // who has edited anything keeps their level untouched across reloads.
+    const seeded = seedLevel(buildStartingLevel((x, z) => field.heightAt(x, z)))
+
     this.buildInfo = {
       buildMs: performance.now() - buildStart,
       treeInstances,
       rockInstances,
       terrainChunks: this.terrain.chunks.length,
+      placeables: placeables.length,
+      seededProps: seeded,
       budgets: budgetLedger.slice()
     }
   }
@@ -175,7 +260,39 @@ export class World {
   }
 
   attach(element: HTMLElement): void {
+    // Both attach. Each ignores input while the other owns the frame, so a mode
+    // switch never has to re-bind listeners — and can't lose a pointer capture
+    // mid-drag.
     this.controller.attach(element)
+    this.player.attach(element)
+  }
+
+  /**
+   * Switches who drives the camera. The player is spawned at the orbit focus so
+   * the view doesn't teleport, which also means you drop into first-person
+   * exactly where you were looking.
+   */
+  setCameraMode(mode: CameraMode): void {
+    if (this.cameraMode === mode) {
+      return
+    }
+    this.cameraMode = mode
+
+    if (mode === 'firstPerson') {
+      const focus = this.controller.focus
+      this.player.teleport(focus.x, this.terrain.heightAt(focus.x, focus.z), focus.z)
+      this.player.setEnabled(true)
+    } else {
+      this.player.setEnabled(false)
+      // Hand the orbit rig the player's last position, or the camera snaps back
+      // to wherever it was parked before the switch.
+      const position = this.player.position
+      this.controller.setFocus(position.x, position.y, position.z)
+    }
+  }
+
+  getCameraMode(): CameraMode {
+    return this.cameraMode
   }
 
   setSize(width: number, height: number): void {
@@ -217,6 +334,7 @@ export class World {
 
     for (const scatter of this.fields) {
       scatter.setFrustumCullInstances(this.settings.frustumCullInstances)
+      scatter.setHierarchical(this.settings.hierarchical)
       scatter.setOutlinesEnabled(this.settings.outlines)
     }
 
@@ -253,14 +371,34 @@ export class World {
     this.profiler.beginFrame(this.renderer)
 
     worldUniforms.uTime.value += delta
-    this.controller.update(delta)
+
+    // Collider refresh first: the player is about to move against these, and a
+    // one-frame-stale set means walking through a platform the frame after it
+    // was placed. One integer compare on the quiet path.
+    this.syncColliders()
+
+    if (this.cameraMode === 'firstPerson') {
+      this.profiler.beginCpu('player')
+      this.player.update(delta)
+      this.profiler.endCpu('player')
+    } else {
+      this.controller.update(delta)
+    }
 
     // See the class notes — the LOD systems frustum-test against these, and
     // three wouldn't refresh them until inside render().
     this.camera.updateMatrixWorld()
     this.camera.matrixWorldInverse.copy(this.camera.matrixWorld).invert()
 
-    this.lights.follow(this.controller.focus)
+    // The shadow frustum follows whoever is driving. Following the orbit focus
+    // while in first-person would leave the player standing outside their own
+    // shadow map at any real traversal speed.
+    this.lights.follow(this.cameraMode === 'firstPerson' ? this.player.position : this.controller.focus)
+
+    // After the camera matrices, because the editor's aim ray starts from them.
+    this.profiler.beginCpu('editor')
+    updateLevelEditor(this.camera.position)
+    this.profiler.endCpu('editor')
 
     this.profiler.beginCpu('terrain')
     this.terrain.update(this.camera, this.camera.position)
@@ -277,9 +415,33 @@ export class World {
     this.profiler.endFrame(this.renderer, now)
   }
 
+  /**
+   * Re-reads the level only when the editor says something changed.
+   *
+   * The held prop is excluded: while carried, its *stored* transform stays at
+   * the pre-grab position (so a reload mid-carry can't lose it), and colliding
+   * with that would leave a phantom platform hanging in the air where you
+   * picked it up.
+   */
+  private syncColliders(): void {
+    const revision = levelRevision()
+    if (revision === this.lastLevelRevision) {
+      return
+    }
+    this.lastLevelRevision = revision
+
+    const held = heldPlacementId()
+    const placements = levelPlacements()
+    this.cachedPlacements = held === null ? placements : placements.filter(entry => entry.id !== held)
+    this.player.invalidateColliders()
+  }
+
   dispose(): void {
     this.stop()
+    disposeLevelEditor()
     this.controller.detach()
+    this.player.detach()
+    this.player.dispose()
     for (const scatter of this.fields) {
       scatter.dispose()
     }

@@ -49,12 +49,36 @@ export interface FrameStats {
   programs: number
   geometries: number
   textures: number
+  /**
+   * ─── Percentiles, not averages ────────────────────────────────────────────
+   *
+   * A mean frame time hides exactly what players feel. A scene running at a
+   * flawless 8 ms mean that spends one frame in sixty at 40 ms reads as
+   * *stuttering*, and the mean moves by 0.5 ms — invisible. Streaming makes
+   * this the number that matters: chunk uploads land on individual frames, so
+   * the whole cost shows up in the tail and nowhere else.
+   *
+   * Measured over a 240-frame window (~4 s at 60 fps).
+   */
+  frameMsP50: number
+  frameMsP95: number
+  frameMsP99: number
+  /** Worst frame in the window. The one users actually notice. */
+  frameMsMax: number
+  /** Frames in the window that missed a 60 Hz budget (>16.7 ms). */
+  jankFrames: number
 }
 
 interface Root {
   object: Object3D
   tag: string
 }
+
+/** ~4 s at 60 fps. Long enough to catch a rare hitch, short enough to react. */
+const PERCENTILE_WINDOW = 240
+/** Recomputing percentiles needs a sort, so it runs on a subset of frames. */
+const PERCENTILE_INTERVAL = 15
+const FRAME_BUDGET_MS = 1000 / 60
 
 /** Frames to let the pipeline settle after toggling visibility. */
 const ABLATION_WARMUP = 8
@@ -73,7 +97,12 @@ export class Profiler {
     triangles: 0,
     programs: 0,
     geometries: 0,
-    textures: 0
+    textures: 0,
+    frameMsP50: 0,
+    frameMsP95: 0,
+    frameMsP99: 0,
+    frameMsMax: 0,
+    jankFrames: 0
   }
 
   /** Tag stats, rebuilt each frame. Stable object identity per tag. */
@@ -86,6 +115,18 @@ export class Profiler {
 
   private frameStart = 0
   private frameTimes: number[] = []
+
+  // Ring buffer of frame *deltas*, plus a scratch copy for sorting. The buffers
+  // are preallocated and the sort is amortised across PERCENTILE_INTERVAL
+  // frames — a per-frame sort on the path that measures jank would be its own
+  // source of it. (The two `subarray` views per recompute are the one small
+  // allocation, once every 15 frames.)
+  private readonly frameDeltas = new Float32Array(PERCENTILE_WINDOW)
+  private readonly sortScratch = new Float32Array(PERCENTILE_WINDOW)
+  private deltaCursor = 0
+  private deltaFilled = 0
+  private lastFrameTime = 0
+  private percentileCountdown = 0
 
   // ── Ablation state ───────────────────────────────────────────────────────
   private phase: AblationPhase = 'idle'
@@ -162,8 +203,55 @@ export class Profiler {
       }
     }
 
+    this.recordFrameDelta(now)
     this.collectTagStats()
     this.stepAblation()
+  }
+
+  /**
+   * Records the wall-clock gap between presented frames — not the CPU time
+   * spent inside our own loop. That difference is the point: a GC pause, a
+   * compositor stall or a shader compile shows up here and nowhere else, and
+   * those are precisely the spikes players notice.
+   */
+  private recordFrameDelta(now: number): void {
+    if (this.lastFrameTime > 0) {
+      const delta = now - this.lastFrameTime
+      // Ignore tab-switch gaps; a 4-second delta is not a dropped frame, and
+      // one of them would dominate the max for the next four seconds.
+      if (delta < 1000) {
+        this.frameDeltas[this.deltaCursor] = delta
+        this.deltaCursor = (this.deltaCursor + 1) % PERCENTILE_WINDOW
+        this.deltaFilled = Math.min(PERCENTILE_WINDOW, this.deltaFilled + 1)
+      }
+    }
+    this.lastFrameTime = now
+
+    if (--this.percentileCountdown > 0 || this.deltaFilled < 8) {
+      return
+    }
+    this.percentileCountdown = PERCENTILE_INTERVAL
+
+    const count = this.deltaFilled
+    const scratch = this.sortScratch.subarray(0, count)
+    scratch.set(this.frameDeltas.subarray(0, count))
+    scratch.sort()
+
+    const at = (fraction: number): number =>
+      Math.round(scratch[Math.min(count - 1, Math.floor(fraction * count))]! * 100) / 100
+
+    this.frame.frameMsP50 = at(0.5)
+    this.frame.frameMsP95 = at(0.95)
+    this.frame.frameMsP99 = at(0.99)
+    this.frame.frameMsMax = Math.round(scratch[count - 1]! * 100) / 100
+
+    let janky = 0
+    for (let i = 0; i < count; i++) {
+      if (scratch[i]! > FRAME_BUDGET_MS * 1.5) {
+        janky++
+      }
+    }
+    this.frame.jankFrames = janky
   }
 
   private collectTagStats(): void {

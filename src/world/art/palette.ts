@@ -55,15 +55,103 @@ export const HEX = {
   // boulder into slate.
   rockShadow: 0x62615c,
 
+  // ── Pale cliff rock ──────────────────────────────────────────────────────
+  //
+  // A second rock family — plateaus, sea-stack spires, columnar basalt, slabs.
+  // Deliberately *paler and cooler* than `rockBase`, because the whole point of
+  // a second family is that a plateau standing next to a boulder reads as a
+  // different stone rather than as the same stone at a different size. Warm
+  // grey next to pale blue-grey is the cheapest possible geological story.
+  //
+  // Same authoring discipline as the ground colours: the lit band lands at
+  // ~0.95× albedo, so these are duller than the near-white they read as on a
+  // swatch. An honest near-white here clips to flat paper the instant the sun
+  // hits a flat top, and the flat tops are most of this family's surface area.
+  cliffLit: 0xbcc4c8,
+  cliffBase: 0x9ba7ae,
+  /** Cool, unlike `rockShadow` — this family *is* blue-grey, so the dark end
+   *  leaning into the periwinkle shadow tint is the effect, not a mistake. */
+  cliffShadow: 0x5d6673,
+
+  // ── Grass cap ────────────────────────────────────────────────────────────
+  //
+  // The flat green tops. Now *duller and darker* than `grassLit`, which is the
+  // opposite of the first pass and the second time this exact trap has caught
+  // this palette (see the note on the ground colours above).
+  //
+  // The reasoning that produced `#93c257` was "a cap has to separate from the
+  // meadow it floats above". That is true and it is not an argument for
+  // saturation. A cap is a large, *flat*, fully-lit plane, so unlike the rolling
+  // ground it takes the ramp's top band across its entire area with no falloff
+  // anywhere — it arrives on screen a full band brighter than the same hex does
+  // on the terrain, and it came out as poster paint. The separation the cap
+  // actually needs is already free: it sits on pale blue-grey stone, so value
+  // and hue contrast do the work and the rim light draws the edge.
+  grassCapLit: 0x84a75e,
+  grassCapBase: 0x627f45,
+  /** Under the draped lip and on shelf turf, reached through baked AO. */
+  grassCapDeep: 0x36512c,
+
+  // ── Desert sandstone ─────────────────────────────────────────────────────
+  //
+  // The third rock family: hoodoos, buttes and the banded pillars of the desert
+  // reference. Warm terracotta, and held **well** back from the orange it reads
+  // as on a swatch — this family is defined by large sunlit vertical faces, so
+  // it takes the ramp's top band across most of its area exactly the way the
+  // grass cap does (see the note above `grassCapLit`). The first pass authored
+  // `#d4794f` and every hoodoo arrived as traffic-cone plastic.
+  //
+  // The dark end stays *warm* rather than falling to the family's own hue
+  // rotated cool: sandstone in shadow is bounce-lit by the sand around it, and
+  // a cool shadow here reads as wet slate. The periwinkle band tint (GDD R4) is
+  // already supplying all the cool this family can take.
+  sandstoneLit: 0xc08a68,
+  sandstoneBase: 0xa2664b,
+  sandstoneShadow: 0x6b4030,
+  /** Sedimentary banding — the paler stripe. Mixed by height, never modelled. */
+  sandstoneBand: 0xcaa183,
+
+  // ── Snow ─────────────────────────────────────────────────────────────────
+  //
+  // Never white. A snow cap is the brightest thing in the world and the only
+  // surface guaranteed to sit in the ramp's top band over its whole area, so an
+  // authored `#ffffff` clips to flat paper and takes the silhouette with it —
+  // the rim light (GDD R5) then has nothing left to draw against. Authored at
+  // ~87 % and tinted toward the sky, it still reads as the brightest object on
+  // screen while keeping a band edge.
+  snowLit: 0xdee6f2,
+  snowBase: 0xc3cfe2,
+  /** Under the canopy shelves, reached through baked AO. Blue, not grey. */
+  snowDeep: 0x8b9cbc,
+
   // ── Tree ─────────────────────────────────────────────────────────────────
   barkBase: 0x6d5138,
   barkDark: 0x453224,
+  /** Ancient oak: greyer and more weathered than young bark, and much darker
+   *  in the fissures — an old trunk's identity is its depth of relief. */
+  barkOldBase: 0x5d4b3a,
+  barkOldDark: 0x2e231a,
+  /** Birch: pale, but dulled the same way the snow is, and for the same reason. */
+  birchLit: 0xd6d3c4,
+  birchBase: 0xb3ae9c,
+  /** The dark lenticel bands. Cheap, and the whole reason a birch is a birch. */
+  birchMark: 0x4a453d,
   // Canopy runs a touch cooler and darker than the grass so a treeline reads
   // against the field it stands in rather than dissolving into it.
   foliageLit: 0x74a248,
   foliageBase: 0x527d3a,
   /** Clump interior — reached via baked vertex AO, not by modelling. */
-  foliageDeep: 0x2c4c2b
+  foliageDeep: 0x2c4c2b,
+  /** Second broadleaf species + birch: warmer and yellower, so two trees of the
+   *  same family standing together read as two species rather than two seeds. */
+  foliageWarmLit: 0x93ab4e,
+  foliageWarmBase: 0x6f8c37,
+  foliageWarmDeep: 0x3c5225,
+  /** Conifer needles: darker, cooler and much less saturated than broadleaf —
+   *  a pine stand next to an oak stand has to separate on value, not on hue. */
+  needleLit: 0x4f7c4a,
+  needleBase: 0x365c3c,
+  needleDeep: 0x1c3527
 } as const
 
 export type PaletteKey = keyof typeof HEX

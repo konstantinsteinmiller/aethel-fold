@@ -269,6 +269,8 @@ export default {
   'loading': { 'tooLong': 'Yuklash juda uzoq davom etyaptimi? Reklama bloklagichni o‘chirib, sahifani yangilang.' },
   'license': { 'denied': 'Kirish rad etildi: iltimos, litsenziya sotib oling.' },
   'world': {
-    'controlsHint': 'Atrofga qarash uchun suring · WASD — harakat · gʻildirak yoki chimdish — masshtab'
+    'controlsHint': 'Atrofga qarash uchun suring · WASD — harakat · gʻildirak yoki chimdish — masshtab',
+    'modeOrbit': 'Aylanma koʻrinish',
+    'modeFirstPerson': 'Yurish'
   }
 }

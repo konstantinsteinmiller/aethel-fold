@@ -269,6 +269,8 @@ export default {
   'loading': { 'tooLong': 'O carregamento está demorando? Desative seu bloqueador de anúncios e recarregue.' },
   'license': { 'denied': 'Acesso negado: adquira uma licença.' },
   'world': {
-    'controlsHint': 'Arraste para olhar em volta · WASD para mover · role ou pince para dar zoom'
+    'controlsHint': 'Arraste para olhar em volta · WASD para mover · role ou pince para dar zoom',
+    'modeOrbit': 'Vista orbital',
+    'modeFirstPerson': 'Caminhar'
   }
 }

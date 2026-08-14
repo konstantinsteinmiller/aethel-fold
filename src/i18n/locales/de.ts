@@ -269,6 +269,8 @@ export default {
   'loading': { 'tooLong': 'Laden dauert zu lange? Deaktiviere deinen Adblocker und lade neu.' },
   'license': { 'denied': 'Zugriff verweigert: Bitte erwerbe eine Lizenz.' },
   'world': {
-    'controlsHint': 'Ziehen zum Umsehen · WASD zum Bewegen · Scrollen oder Pinchen zum Zoomen'
+    'controlsHint': 'Ziehen zum Umsehen · WASD zum Bewegen · Scrollen oder Pinchen zum Zoomen',
+    'modeOrbit': 'Orbit-Ansicht',
+    'modeFirstPerson': 'Gehen'
   }
 }

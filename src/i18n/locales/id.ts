@@ -269,6 +269,8 @@ export default {
   'loading': { 'tooLong': 'Memuat terlalu lama? Nonaktifkan pemblokir iklan lalu muat ulang.' },
   'license': { 'denied': 'Akses ditolak: silakan beli lisensi.' },
   'world': {
-    'controlsHint': 'Seret untuk melihat sekeliling · WASD untuk bergerak · gulir atau cubit untuk zoom'
+    'controlsHint': 'Seret untuk melihat sekeliling · WASD untuk bergerak · gulir atau cubit untuk zoom',
+    'modeOrbit': 'Tampilan orbit',
+    'modeFirstPerson': 'Berjalan'
   }
 }

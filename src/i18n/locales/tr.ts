@@ -269,6 +269,8 @@ export default {
   'loading': { 'tooLong': 'Yükleme çok mu uzun sürüyor? Reklam engelleyiciyi kapatıp sayfayı yenile.' },
   'license': { 'denied': 'Erişim reddedildi: lütfen bir lisans satın al.' },
   'world': {
-    'controlsHint': 'Etrafa bakmak için sürükle · Hareket için WASD · Yakınlaştırmak için kaydır veya sıkıştır'
+    'controlsHint': 'Etrafa bakmak için sürükle · Hareket için WASD · Yakınlaştırmak için kaydır veya sıkıştır',
+    'modeOrbit': 'Yörünge görünümü',
+    'modeFirstPerson': 'Yürü'
   }
 }

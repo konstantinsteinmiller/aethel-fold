@@ -269,6 +269,8 @@ export default {
   'loading': { 'tooLong': 'Tải quá lâu? Hãy tắt trình chặn quảng cáo rồi làm mới trang.' },
   'license': { 'denied': 'Từ chối truy cập: vui lòng mua giấy phép.' },
   'world': {
-    'controlsHint': 'Kéo để nhìn quanh · WASD để di chuyển · cuộn hoặc chụm để thu phóng'
+    'controlsHint': 'Kéo để nhìn quanh · WASD để di chuyển · cuộn hoặc chụm để thu phóng',
+    'modeOrbit': 'Chế độ xoay quanh',
+    'modeFirstPerson': 'Đi bộ'
   }
 }

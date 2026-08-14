@@ -269,6 +269,8 @@ export default {
   'loading': { 'tooLong': 'Le chargement est trop long ? Désactivez votre bloqueur de publicités et rechargez.' },
   'license': { 'denied': 'Accès refusé : veuillez acheter une licence.' },
   'world': {
-    'controlsHint': 'Glissez pour regarder · WASD pour vous déplacer · molette ou pincement pour zoomer'
+    'controlsHint': 'Glissez pour regarder · WASD pour vous déplacer · molette ou pincement pour zoomer',
+    'modeOrbit': 'Vue orbitale',
+    'modeFirstPerson': 'Marcher'
   }
 }

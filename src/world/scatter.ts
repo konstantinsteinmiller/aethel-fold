@@ -104,5 +104,8 @@ export const createScatterField = (
     }
   }
 
+  // Sorts the instances into spatial cells for hierarchical culling. Cheap
+  // here, and it's what stops the per-frame loop being O(instances).
+  scatterField.commit()
   return scatterField
 }

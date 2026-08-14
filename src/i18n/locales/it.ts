@@ -269,6 +269,8 @@ export default {
   'loading': { 'tooLong': 'Il caricamento è troppo lento? Disattiva il blocco annunci e ricarica.' },
   'license': { 'denied': 'Accesso negato: acquista una licenza.' },
   'world': {
-    'controlsHint': 'Trascina per guardarti intorno · WASD per muoverti · rotella o pizzico per lo zoom'
+    'controlsHint': 'Trascina per guardarti intorno · WASD per muoverti · rotella o pizzico per lo zoom',
+    'modeOrbit': 'Vista orbitale',
+    'modeFirstPerson': 'Cammina'
   }
 }

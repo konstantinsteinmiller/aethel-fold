@@ -269,6 +269,8 @@ export default {
   'loading': { 'tooLong': 'Ładowanie trwa zbyt długo? Wyłącz blokadę reklam i odśwież.' },
   'license': { 'denied': 'Odmowa dostępu: kup licencję.' },
   'world': {
-    'controlsHint': 'Przeciągnij, aby się rozejrzeć · WASD, aby się poruszać · kółko lub szczypnięcie, aby przybliżyć'
+    'controlsHint': 'Przeciągnij, aby się rozejrzeć · WASD, aby się poruszać · kółko lub szczypnięcie, aby przybliżyć',
+    'modeOrbit': 'Widok orbitalny',
+    'modeFirstPerson': 'Chodź'
   }
 }

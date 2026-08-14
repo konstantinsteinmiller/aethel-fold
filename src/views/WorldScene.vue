@@ -7,6 +7,19 @@
 
     WorldPerfPanel(:world="world")
 
+    //- Self-gating on the editor mode, so this renders nothing until "cmonc"
+    //- is typed and costs nothing while it's off.
+    LevelEditorPanel
+
+    //- Camera mode switch. Deliberately a plain button rather than a hotkey:
+    //- every letter key is either camera movement or an editor binding, and
+    //- pointer lock needs a real user gesture to be granted anyway.
+    button(
+      type="button"
+      class="absolute right-3 bottom-3 z-40 rounded-full bg-slate-950/65 px-4 py-2 text-xs text-slate-200 backdrop-blur-sm"
+      @click="toggleCameraMode"
+    ) {{ firstPerson ? t('world.modeOrbit') : t('world.modeFirstPerson') }}
+
     //- Controls hint. Fades out once the player has moved — a permanent overlay
     //- on a world you're meant to look at is the wrong trade.
     transition(name="hint")
@@ -33,6 +46,7 @@
 <script setup lang="ts">
 import { markRaw, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import LevelEditorPanel from '@/components/organisms/LevelEditorPanel.vue'
 import WorldPerfPanel from '@/components/organisms/WorldPerfPanel.vue'
 import { World } from '@/world/core/World'
 
@@ -44,6 +58,16 @@ const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
 // See the comment above — shallowRef + markRaw, never a plain ref.
 const world = shallowRef<World | null>(null)
 const showHint = ref(true)
+const firstPerson = ref(false)
+
+const toggleCameraMode = (): void => {
+  const instance = world.value
+  if (!instance) {
+    return
+  }
+  firstPerson.value = !firstPerson.value
+  instance.setCameraMode(firstPerson.value ? 'firstPerson' : 'orbit')
+}
 
 let observer: ResizeObserver | null = null
 let hintTimer: number | null = null
@@ -55,7 +79,13 @@ onMounted(() => {
     return
   }
 
-  const instance = markRaw(new World(canvasElement))
+  // `?density=3` multiplies scatter density for benchmarking. Dev only — at
+  // shipping density the frame is vsync-bound, so culling work is unmeasurable
+  // without a way to load the scene up.
+  const density = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get('density')) : Number.NaN
+  const instance = markRaw(
+    new World(canvasElement, Number.isFinite(density) && density > 0 ? { densityScale: density } : {})
+  )
   instance.attach(canvasElement)
   world.value = instance
 

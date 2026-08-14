@@ -36,6 +36,25 @@
             span geometries
             span(class="tabular-nums text-slate-200") {{ frame.geometries }}
 
+        //- Frame-time tail. The mean hides the spikes players actually feel,
+        //- so p99 and the worst frame get equal billing with the average.
+        div(class="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-0.5 border-t border-white/10 pt-1.5 text-slate-400")
+          div(class="flex justify-between")
+            span p50
+            span(class="tabular-nums text-slate-200") {{ frame.frameMsP50.toFixed(1) }}
+          div(class="flex justify-between")
+            span p95
+            span(:class="['tabular-nums', tailClass(frame.frameMsP95)]") {{ frame.frameMsP95.toFixed(1) }}
+          div(class="flex justify-between")
+            span p99
+            span(:class="['tabular-nums', tailClass(frame.frameMsP99)]") {{ frame.frameMsP99.toFixed(1) }}
+          div(class="flex justify-between")
+            span worst
+            span(:class="['tabular-nums', tailClass(frame.frameMsMax)]") {{ frame.frameMsMax.toFixed(1) }}
+          div(class="col-span-2 flex justify-between")
+            span janky frames / 240
+            span(:class="['tabular-nums', frame.jankFrames > 0 ? 'text-amber-400' : 'text-slate-200']") {{ frame.jankFrames }}
+
         //- ── Per-tag table ─────────────────────────────────────────────────
         div(class="mt-2 border-t border-white/10 pt-2")
           div(class="mb-1 flex items-center justify-between")
@@ -153,7 +172,12 @@ const frame = ref<FrameStats>({
   triangles: 0,
   programs: 0,
   geometries: 0,
-  textures: 0
+  textures: 0,
+  frameMsP50: 0,
+  frameMsP95: 0,
+  frameMsP99: 0,
+  frameMsMax: 0,
+  jankFrames: 0
 })
 
 const tags = shallowRef<TagStats[]>([])
@@ -162,11 +186,21 @@ const settings = ref<WorldSettings>({
   shadows: true,
   wind: true,
   frustumCullInstances: true,
+  hierarchical: true,
   renderScale: 1
 })
 
 const build = computed(
-  () => props.world?.buildInfo ?? { buildMs: 0, treeInstances: 0, rockInstances: 0, terrainChunks: 0, budgets: [] }
+  () =>
+    props.world?.buildInfo ?? {
+      buildMs: 0,
+      treeInstances: 0,
+      rockInstances: 0,
+      terrainChunks: 0,
+      placeables: 0,
+      seededProps: 0,
+      budgets: []
+    }
 )
 const budgets = computed(() => build.value.budgets)
 
@@ -180,7 +214,8 @@ const toggles = [
   { key: 'outlines' as const, label: 'outlines' },
   { key: 'shadows' as const, label: 'shadows' },
   { key: 'wind' as const, label: 'wind' },
-  { key: 'frustumCullInstances' as const, label: 'inst cull' }
+  { key: 'frustumCullInstances' as const, label: 'inst cull' },
+  { key: 'hierarchical' as const, label: 'cell cull' }
 ]
 
 let timer: number | null = null
@@ -243,6 +278,17 @@ const fpsClass = computed(() => {
   }
   return 'text-rose-500'
 })
+
+// 16.7 ms is the 60 Hz budget; 25 ms is a frame the eye registers as a hitch.
+const tailClass = (ms: number): string => {
+  if (ms >= 25) {
+    return 'text-rose-400'
+  }
+  if (ms > 16.7) {
+    return 'text-amber-400'
+  }
+  return 'text-slate-200'
+}
 
 const gpuClass = (value: number): string => {
   if (value < 0) {
