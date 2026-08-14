@@ -40,8 +40,10 @@ export type TerrainWorkerMessage = InitMessage | BuildMessage
  */
 export interface TerrainTierBuffers {
   position: Float32Array<ArrayBufferLike>
-  normal: Float32Array<ArrayBufferLike>
-  color: Float32Array<ArrayBufferLike>
+  /** Int16, normalized. See `chunkGeometry`'s compression notes. */
+  normal: Int16Array<ArrayBufferLike>
+  /** Uint16, normalized. */
+  color: Uint16Array<ArrayBufferLike>
   index: Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike>
   boundsY: [number, number]
 }

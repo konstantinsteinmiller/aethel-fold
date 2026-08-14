@@ -409,6 +409,16 @@ The `cell cull` toggle in the perf panel flips it back for A/B measurement.
 | Predict | The load centre leads the camera along its velocity, so chunks arrive before they're needed. |
 | Pool | Nodes and GPU buffers are recycled. Tier sizes are fixed, so a recycled node's buffers are always the right shape. |
 
+**Vertex compression.** Terrain normals are `Int16` and colours `Uint16`, both
+*normalized* attributes — WebGL expands them back to floats in fixed-function
+hardware, so **24 B/vertex instead of 40 (−40 %)** across transfer, GPU upload
+and resident memory, with **zero shader changes**. Positions stay `Float32`:
+they're chunk-local, so 48 m already has millimetre precision, and quantising
+them is where faceting on a gentle slope would show first. 16-bit rather than
+8-bit because these colours are *linear* and terrain greens sit around 0.1–0.4,
+where an 8-bit step is ~4 % relative — visible banding on a large hillside for
+the cheap half of the saving.
+
 `heightfieldCore.ts` and `chunkGeometry.ts` are **three.js-free** so the worker
 bundle doesn't ship a second copy of three, and so the worker and the
 main-thread fallback run literally the same function — a streaming system whose

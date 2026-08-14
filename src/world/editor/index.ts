@@ -1,6 +1,7 @@
 import type { Vector3 } from 'three'
 import { ref } from 'vue'
 import type { World } from '../core/World'
+import { triangleCount } from '../geometry/budget'
 import { allPlaceables } from '../level/catalog'
 import type { PlaceableCategory, Placement } from '../level/types'
 import { hasStoredPlacements, LevelEditor, type LevelSeed } from './LevelEditor'
@@ -60,6 +61,17 @@ export interface PaletteEntry {
   id: string
   label: string
   category: PlaceableCategory
+  /**
+   * LOD0 triangle count — what one of these costs standing next to the player.
+   *
+   * LOD0 rather than a sum or an average of the ladder, because the question the
+   * number answers is "can I afford to put this here", and the answer is set by
+   * the tier that draws when the prop is close. A prop's coarse tiers are what
+   * it costs at 200 m, which is never the reason a scene got heavy.
+   */
+  tris: number
+  /** All four tiers, finest first, for the row's tooltip. */
+  lodTris: number[]
 }
 
 let editor: LevelEditor | null = null
@@ -156,7 +168,14 @@ export const editorPalette = (): PaletteEntry[] =>
   allPlaceables().map(definition => ({
     id: definition.id,
     label: definition.label,
-    category: definition.category
+    category: definition.category,
+    // Counted here rather than passed through from the generator's budget
+    // assertion, because this must be the count of the geometry that will
+    // actually be drawn — a ledger entry can go stale against its mesh, and a
+    // number the designer is budgeting against that quietly disagrees with the
+    // renderer is worse than no number at all.
+    tris: definition.asset.tiers[0] ? triangleCount(definition.asset.tiers[0]) : 0,
+    lodTris: definition.asset.tiers.map(triangleCount)
   }))
 
 export const selectPlaceable = (id: string): void => {

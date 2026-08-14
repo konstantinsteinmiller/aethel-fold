@@ -54,10 +54,12 @@
             v-for="entry in group.entries"
             :key="entry.id"
             :class="{ sel: entry.id === editorSelectedId }"
+            :title="costTitle(entry)"
             @click="selectPlaceable(entry.id)"
             @pointerdown.stop
           )
             span.ed-item-name {{ entry.label }}
+            span.ed-item-tris(:class="costClass(entry.tris)") {{ entry.tris }}
             span.ed-item-id {{ entry.id }}
     .ed-foot {{ placedLabel }} · type #[b cmonc] to exit
 </template>
@@ -171,6 +173,25 @@ const toggle = (category: PlaceableCategory): void => {
   }
   collapsed.value = next
 }
+
+/**
+ * Cost banding for the LOD0 triangle count.
+ *
+ * The thresholds are drawn from where the catalogue actually clusters rather
+ * than from round numbers: scatter props (stone 56, slab 96, grass rock 99) sit
+ * under 120, the ordinary hand-placed props (tree 162, pine 192, plateau 216)
+ * run to about 240, and only the hero geometry — mesa 280, ancient oak 320 —
+ * goes past it. So the three bands separate "place freely", "place normally"
+ * and "this one is a landmark, place a few".
+ *
+ * Banding rather than a bare number because the number alone requires knowing
+ * the budget table to interpret, and the point of putting it here is that the
+ * designer should not have to.
+ */
+const costClass = (tris: number): string => (tris <= 120 ? 'low' : tris <= 240 ? 'mid' : 'high')
+
+const costTitle = (entry: PaletteEntry): string =>
+  `${entry.id}\nLOD0–3: ${entry.lodTris.join(' / ')} tris`
 
 let messageTimer: ReturnType<typeof setTimeout> | null = null
 const flashStatus = (): void => {
@@ -343,7 +364,9 @@ const runClear = (): void => {
 .ed-item
   display: flex
   align-items: baseline
-  gap: 0.4rem
+  // Tighter than the 0.4rem it was: the row carries a third column now, and the
+  // label is the one that gives up space to it.
+  gap: 0.3rem
   text-align: left
   background: #191d28
   border: 1px solid transparent
@@ -363,6 +386,23 @@ const runClear = (): void => {
   overflow: hidden
   text-overflow: ellipsis
   white-space: nowrap
+.ed-item-tris
+  flex: 0 0 auto
+  min-width: 1.7rem
+  text-align: right
+  font-size: 0.58rem
+  font-variant-numeric: tabular-nums
+  // Tabular figures and a min-width wide enough for three digits, so a 96 and a
+  // 280 occupy the same slot and the number does not shift the id beside it as
+  // the list is filtered. The counts do not share a global right edge — the id
+  // column is variable width — which is why the cost banding carries the
+  // at-a-glance read rather than the alignment.
+  &.low
+    color: #7fb08a
+  &.mid
+    color: #c9b676
+  &.high
+    color: #d98c74
 .ed-item-id
   flex: 0 0 auto
   font-size: 0.56rem

@@ -435,8 +435,10 @@ export class Terrain {
 
 interface TierData {
   position: Float32Array
-  normal: Float32Array
-  color: Float32Array
+  /** Int16, normalized — see `chunkGeometry`'s compression notes. */
+  normal: Int16Array
+  /** Uint16, normalized. */
+  color: Uint16Array
   index: Uint16Array | Uint32Array
   boundsY: [number, number]
 }
@@ -448,8 +450,11 @@ interface TierData {
 const createTierGeometry = (tier: TierData): BufferGeometry => {
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(tier.position, 3))
-  geometry.setAttribute('normal', new BufferAttribute(tier.normal, 3))
-  geometry.setAttribute('color', new BufferAttribute(tier.color, 3))
+  // `normalized: true` is the whole compression scheme: WebGL expands the
+  // integers back to floats in fixed-function hardware, so nothing downstream —
+  // no shader, no chunk, no material — has to know they aren't Float32.
+  geometry.setAttribute('normal', new BufferAttribute(tier.normal, 3, true))
+  geometry.setAttribute('color', new BufferAttribute(tier.color, 3, true))
   geometry.setIndex(new BufferAttribute(tier.index, 1))
   geometry.computeBoundingSphere()
   return geometry
@@ -461,8 +466,8 @@ const writeTier = (geometry: BufferGeometry, tier: TierData): void => {
   const normal = geometry.getAttribute('normal') as BufferAttribute
   const color = geometry.getAttribute('color') as BufferAttribute
   ;(position.array as Float32Array).set(tier.position)
-  ;(normal.array as Float32Array).set(tier.normal)
-  ;(color.array as Float32Array).set(tier.color)
+  ;(normal.array as Int16Array).set(tier.normal)
+  ;(color.array as Uint16Array).set(tier.color)
   position.needsUpdate = true
   normal.needsUpdate = true
   color.needsUpdate = true

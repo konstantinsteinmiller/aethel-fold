@@ -24,10 +24,34 @@ export interface ChunkRequest {
   withSkirt: boolean
 }
 
+/**
+ * ─── Vertex compression ─────────────────────────────────────────────────────
+ *
+ * Positions stay `Float32` — they are chunk-local, so 48 m of range already has
+ * millimetre precision and quantising them is where faceting on a gentle slope
+ * would show first.
+ *
+ * Normals and colours become **normalized integer** attributes, which WebGL
+ * expands back to floats in fixed-function hardware. That means 40 B → 24 B per
+ * vertex (−40 %) across transfer, GPU upload and resident memory, for **zero
+ * shader changes** — three declares the attributes normalized and the existing
+ * `color_vertex` / `defaultnormal_vertex` chunks read them unmodified.
+ *
+ * `Int16`/`Uint16` rather than 8-bit on purpose. Colours here are *linear*, and
+ * terrain greens sit around 0.1–0.4, where an 8-bit step is ~4 % relative — that
+ * bands on a large flat hillside. 16-bit is still a 2× win with no risk, and the
+ * cheap half of the saving isn't worth a subtle regression that only shows up on
+ * a specific slope in a specific light.
+ */
+export const NORMAL_SCALE = 32767
+export const COLOR_SCALE = 65535
+
 export interface ChunkBuffers {
   position: Float32Array
-  normal: Float32Array
-  color: Float32Array
+  /** Int16, normalized — decode is `v / 32767`, done by the GPU. */
+  normal: Int16Array
+  /** Uint16, normalized — decode is `v / 65535`, done by the GPU. */
+  color: Uint16Array
   index: Uint16Array | Uint32Array
   /** Bounding sphere, so the main thread never has to walk the positions. */
   boundsY: [min: number, max: number]
@@ -57,8 +81,8 @@ export const buildChunkBuffers = (request: ChunkRequest, params: HeightfieldPara
   const vertexCount = vertexCountFor(segments, withSkirt)
 
   const position = new Float32Array(vertexCount * 3)
-  const normal = new Float32Array(vertexCount * 3)
-  const color = new Float32Array(vertexCount * 3)
+  const normal = new Int16Array(vertexCount * 3)
+  const color = new Uint16Array(vertexCount * 3)
   const step = size / segments
 
   let minY = Infinity
@@ -79,12 +103,14 @@ export const buildChunkBuffers = (request: ChunkRequest, params: HeightfieldPara
       position[index * 3] = localX
       position[index * 3 + 1] = height
       position[index * 3 + 2] = localZ
-      normal[index * 3] = _normal[0]!
-      normal[index * 3 + 1] = _normal[1]!
-      normal[index * 3 + 2] = _normal[2]!
-      color[index * 3] = _color[0]!
-      color[index * 3 + 1] = _color[1]!
-      color[index * 3 + 2] = _color[2]!
+      normal[index * 3] = _normal[0]! * NORMAL_SCALE
+      normal[index * 3 + 1] = _normal[1]! * NORMAL_SCALE
+      normal[index * 3 + 2] = _normal[2]! * NORMAL_SCALE
+      // Colours are already in [0,1]; the clamp guards against a palette entry
+      // or a paint pass overshooting, which would wrap rather than saturate.
+      color[index * 3] = Math.min(1, Math.max(0, _color[0]!)) * COLOR_SCALE
+      color[index * 3 + 1] = Math.min(1, Math.max(0, _color[1]!)) * COLOR_SCALE
+      color[index * 3 + 2] = Math.min(1, Math.max(0, _color[2]!)) * COLOR_SCALE
 
       if (height < minY) {
         minY = height
