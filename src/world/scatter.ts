@@ -1,27 +1,32 @@
-import { Vector3 } from 'three'
 import type { WorldAsset } from './assets/types'
-import { makeRng } from './geometry/rng'
-import { fbm2D } from './geometry/rng'
-import { InstancedLodField } from './lod/InstancedLodField'
+import { fbm2D, makeRng } from './geometry/rng'
+import { type InstancedLodField, type InstanceTransform } from './lod/InstancedLodField'
 import type { Heightfield } from './terrain/heightfield'
 
 /**
  * ─── Scatter placement ──────────────────────────────────────────────────────
  *
- * Jittered-grid sampling with a noise density mask. Not true Poisson-disc: at
- * these densities the visual difference is nil, and a jittered grid gives a
- * guaranteed minimum spacing for free (one sample per cell) while running in
- * O(n) instead of needing a spatial index.
+ * Jittered-grid sampling with a noise density mask, generated **per chunk** so
+ * scatter streams with the terrain it stands on.
+ *
+ * Not true Poisson-disc: at these densities the visual difference is nil, and a
+ * jittered grid gives a guaranteed minimum spacing for free (one sample per
+ * cell) while running in O(n) with no spatial index.
  *
  * The density mask is what turns "scattered props" into "a landscape". A
- * uniform sprinkle of trees reads as procedural immediately; clumping them into
- * groves with genuinely empty clearings between reads as authored, and costs
- * one extra fbm sample per candidate.
+ * uniform sprinkle reads as procedural immediately; clumping into groves with
+ * genuinely empty clearings reads as authored, for one extra fbm sample.
+ *
+ * ── Why per-chunk placement is deterministic, not incremental ───────────────
+ *
+ * A chunk's scatter is a pure function of `(seed, chunk coordinates)`. It has to
+ * be: a chunk is generated afresh every time it streams in, and if the result
+ * depended on generation *order* — a single walking RNG across the world, say —
+ * then walking away and back would silently reshuffle the forest behind you.
+ * Seeding a fresh RNG per chunk costs nothing and makes the world stable.
  */
 
 export interface ScatterOptions {
-  /** Square extent to scatter over, centred on the origin. */
-  extent: number
   /** Average metres between instances. Also the jittered-grid cell size. */
   spacing: number
   seed?: number
@@ -40,15 +45,19 @@ export interface ScatterOptions {
   clearRadius?: number
 }
 
-const _position = new Vector3()
-
-export const createScatterField = (
+/**
+ * Placements for one chunk. Pure: same inputs always give the same output, so a
+ * chunk that streams out and back in is identical.
+ */
+export const scatterChunk = (
   field: Heightfield,
-  asset: WorldAsset,
-  options: ScatterOptions
-): InstancedLodField => {
+  options: ScatterOptions,
+  originX: number,
+  originZ: number,
+  chunkSize: number,
+  out: InstanceTransform[] = []
+): InstanceTransform[] => {
   const {
-    extent,
     spacing,
     seed = 7,
     maxSlope = 0.32,
@@ -60,22 +69,20 @@ export const createScatterField = (
     clearRadius = 0
   } = options
 
-  const rng = makeRng(seed)
-  const cells = Math.floor(extent / spacing)
-  const half = extent / 2
-
-  // Capacity is the grid size, not the expected yield — the field allocates
-  // per-tier matrix buffers up front and cannot grow, so it has to be sized for
-  // the worst case rather than the average.
-  const capacity = cells * cells
-  const scatterField = new InstancedLodField(asset, capacity)
-
+  out.length = 0
+  const cells = Math.max(1, Math.round(chunkSize / spacing))
+  const step = chunkSize / cells
+  // Chunk coordinates fold into the seed, so placement depends on *where* the
+  // chunk is, never on when it was generated.
+  const cx = Math.round(originX / chunkSize)
+  const cz = Math.round(originZ / chunkSize)
+  const rng = makeRng((seed * 73856093) ^ (cx * 19349663) ^ (cz * 83492791))
   const inverseCluster = 1 / clusterSize
 
   for (let gz = 0; gz < cells; gz++) {
     for (let gx = 0; gx < cells; gx++) {
-      const x = -half + (gx + 0.5) * spacing + rng.spread(spacing * 0.45)
-      const z = -half + (gz + 0.5) * spacing + rng.spread(spacing * 0.45)
+      const x = originX + (gx + 0.5) * step + rng.spread(step * 0.45)
+      const z = originZ + (gz + 0.5) * step + rng.spread(step * 0.45)
 
       if (clearRadius > 0 && x * x + z * z < clearRadius * clearRadius) {
         continue
@@ -99,13 +106,47 @@ export const createScatterField = (
         continue
       }
 
-      _position.set(x, height - sink, z)
-      scatterField.add(_position, rng.range(0, Math.PI * 2), rng.range(scaleRange[0], scaleRange[1]))
+      out.push({
+        x,
+        y: height - sink,
+        z,
+        rotY: rng.range(0, Math.PI * 2),
+        scale: rng.range(scaleRange[0], scaleRange[1])
+      })
     }
   }
 
-  // Sorts the instances into spatial cells for hierarchical culling. Cheap
-  // here, and it's what stops the per-frame loop being O(instances).
-  scatterField.commit()
-  return scatterField
+  return out
 }
+
+/**
+ * Worst-case instances a chunk can yield, used to size a field's slot pool.
+ *
+ * The bound is the full grid — every candidate surviving every rejection test.
+ * Deliberately pessimistic: a field that runs out of slots mid-traversal drops
+ * scatter silently, and the cost of over-reserving is a few hundred KB.
+ */
+export const maxInstancesPerChunk = (spacing: number, chunkSize: number): number => {
+  const cells = Math.max(1, Math.round(chunkSize / spacing))
+  return cells * cells
+}
+
+/** Adds a chunk's scatter to a field. Returns how many were placed. */
+export const addChunkScatter = (
+  fieldInstance: InstancedLodField,
+  heightfield: Heightfield,
+  options: ScatterOptions,
+  key: string,
+  originX: number,
+  originZ: number,
+  chunkSize: number,
+  scratch: InstanceTransform[]
+): number => {
+  scatterChunk(heightfield, options, originX, originZ, chunkSize, scratch)
+  if (scratch.length === 0) {
+    return 0
+  }
+  return fieldInstance.addCell(key, scratch) ? scratch.length : 0
+}
+
+export type { WorldAsset }

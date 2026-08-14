@@ -18,9 +18,18 @@ import { coverageAt, cullDistanceFor, TIER_COUNT } from './config'
 /**
  * ─── Instanced scatter with dithered LOD ────────────────────────────────────
  *
- * One field per asset. Every instance lives in a single source-of-truth matrix
- * buffer; each frame it is assigned to one tier (or two, inside a crossfade
- * band) and the tier's `InstancedMesh` is packed with the members it needs.
+ * One field per asset. Instances live in a fixed-capacity slot pool grouped into
+ * **cells**; each frame a cell is classified against the frustum once, then its
+ * members are assigned to a tier (or two, inside a crossfade band) and the
+ * tier's `InstancedMesh` is packed with what it needs.
+ *
+ * ── Cells are the unit of streaming *and* of culling ────────────────────────
+ *
+ * A cell is added and removed whole, which is what lets scatter stream with the
+ * terrain chunk it belongs to. Slots come from a free list, so a cell's members
+ * are *usually* contiguous but never guaranteed to be — correctness does not
+ * depend on it, only cache locality does, and bulk adds keep runs long in
+ * practice.
  *
  * ── The two costs, and how each is avoided ──────────────────────────────────
  *
@@ -48,6 +57,15 @@ import { coverageAt, cullDistanceFor, TIER_COUNT } from './config'
  * geometry would write each other's fades. Cloning ≤200-triangle geometry is
  * ~50 KB and happens once.
  */
+
+/** One placed instance. Uniform scale only — see `addCell`. */
+export interface InstanceTransform {
+  x: number
+  y: number
+  z: number
+  rotY: number
+  scale: number
+}
 
 export interface InstancedLodFieldOptions {
   /**
@@ -91,17 +109,20 @@ interface Tier {
 }
 
 /**
- * A spatial bucket of instances, stored as a contiguous run so the per-frame
- * loop can skip or accept a whole neighbourhood with one test.
+ * A spatial bucket of instances — the unit of both culling and streaming, so
+ * the per-frame loop can skip a whole neighbourhood with one test and the
+ * streamer can add or drop one with a terrain chunk.
  */
 interface Cell {
+  /** Stream key, normally the terrain chunk's. */
+  key: string
   /** Bounding sphere in world space, sized to include instance extents. */
   centerX: number
   centerY: number
   centerZ: number
   radius: number
-  /** Contiguous range in the (cell-sorted) instance arrays. */
-  start: number
+  /** Slot indices owned by this cell. Not required to be contiguous. */
+  slots: Int32Array
   count: number
   /**
    * True while every instance in the cell is already masked off. Lets a cell
@@ -167,9 +188,17 @@ export class InstancedLodField {
   /** Per-tier visible instance counts, for the perf panel. */
   readonly tierCounts = new Int32Array(TIER_COUNT)
 
-  /** Spatial cells, built by `commit()`. Empty until then. */
+  /**
+   * Live cells, in a stable order. Pass 1 and pass 2 walk this in the *same*
+   * order — the fade array is filled in pass 1 and the matrices in pass 2, so a
+   * mismatch would pair every instance with someone else's fade.
+   */
   private cells: Cell[] = []
-  private committed = false
+  private readonly cellByKey = new Map<string, Cell>()
+  /** Slots not currently owned by any cell. */
+  private readonly freeSlots: number[] = []
+  /** Set when cell order changed, forcing every tier to repack. */
+  private dirtyAll = false
 
   /** Cells touched last frame, split by classification — diagnostics only. */
   readonly cellStats = { total: 0, outside: 0, inside: 0, partial: 0, instancesTested: 0 }
@@ -190,10 +219,57 @@ export class InstancedLodField {
     this.sourcePositions = new Float32Array(capacity * 3)
     this.sourceRadii = new Float32Array(capacity)
     this.masks = new Uint8Array(capacity)
+    // Descending, so `pop()` hands out ascending slots and a bulk `addCell`
+    // lands on a contiguous run — correctness doesn't need it, cache locality
+    // in the per-frame walk does.
+    for (let slot = capacity - 1; slot >= 0; slot--) {
+      this.freeSlots.push(slot)
+    }
 
-    const sourceSphere = asset.tiers[0]!.boundingSphere
-    this.sphereOffsetY = sourceSphere ? sourceSphere.center.y : asset.radius * 0.5
-    this.sphereRadius = sourceSphere ? sourceSphere.radius : asset.radius
+    // ── Culling sphere, measured across EVERY tier ─────────────────────────
+    //
+    // Deliberately not `asset.radius`, and deliberately not LOD0's bounding
+    // sphere either. Both under-report: a published radius is hand-derived from
+    // the shape description and misses whatever the generator adds afterwards
+    // (area inflation, a lump peak, a grass cap's rim lap), and tiers are
+    // size-corrected against *each other* rather than against LOD0, so the tier
+    // that pokes out furthest is routinely a coarse one.
+    //
+    // An undersized sphere doesn't look like a culling bug — the prop vanishes
+    // at the screen edge while part of it is still visible, which reads as a
+    // streaming failure. Measuring the real geometry costs one pass at build.
+    let reach = 0
+    let lowest = Number.POSITIVE_INFINITY
+    let highest = Number.NEGATIVE_INFINITY
+    for (const geometry of asset.tiers) {
+      const position = geometry.getAttribute('position')
+      const array = position.array as ArrayLike<number>
+      for (let i = 0; i < position.count; i++) {
+        const x = array[i * 3]!
+        const y = array[i * 3 + 1]!
+        const z = array[i * 3 + 2]!
+        const horizontal = Math.sqrt(x * x + z * z)
+        if (y < lowest) {
+          lowest = y
+        }
+        if (y > highest) {
+          highest = y
+        }
+        if (horizontal > reach) {
+          reach = horizontal
+        }
+      }
+    }
+    if (!Number.isFinite(lowest)) {
+      lowest = 0
+      highest = asset.radius
+    }
+    // Centre the sphere on the mesh's vertical midpoint rather than its origin:
+    // a tree's origin is at its foot, so an origin-centred sphere has to be
+    // twice as large to contain the canopy.
+    this.sphereOffsetY = (lowest + highest) / 2
+    const halfHeight = (highest - lowest) / 2
+    this.sphereRadius = Math.sqrt(reach * reach + halfHeight * halfHeight)
 
     for (let tier = 0; tier < asset.tiers.length; tier++) {
       this.tiers.push(this.createTier(asset, tier, capacity))
@@ -254,136 +330,125 @@ export class InstancedLodField {
   }
 
   /**
-   * Adds one instance. Uniform scale only — the outline shader treats the
-   * instance matrix's rotation block as orthogonal (see `outlineMaterial.ts`),
-   * and non-uniform scale would thin the outline on the squashed axis.
+   * Adds a whole cell of instances.
+   *
+   * Bulk, not one-at-a-time, because a cell is the unit that streams: it is
+   * added when its terrain chunk loads and dropped when the chunk unloads, and
+   * its bounding sphere has to be computed from the finished set anyway.
+   *
+   * Uniform scale only — the outline shader treats the instance matrix's
+   * rotation block as orthogonal (see `outlineMaterial.ts`), and non-uniform
+   * scale would thin the outline on the squashed axis.
+   *
+   * Returns false when the field is full. That is a soft failure on purpose:
+   * dropping some scatter is survivable, throwing mid-traversal is not.
    */
-  add(position: Vector3, rotationY: number, scale: number): number {
-    if (this.instanceCount >= this.capacity) {
-      throw new Error(`[world] ${this.asset.name}: field is full at ${this.capacity} instances`)
+  addCell(key: string, transforms: readonly InstanceTransform[]): boolean {
+    if (this.cellByKey.has(key)) {
+      return true
     }
-    const index = this.instanceCount++
+    const count = transforms.length
+    if (count === 0) {
+      return true
+    }
+    if (this.freeSlots.length < count) {
+      return false
+    }
 
-    _quaternion.setFromAxisAngle(_up, rotationY)
-    _scale.setScalar(scale)
-    _matrix.compose(position, _quaternion, _scale)
-    _matrix.toArray(this.sourceMatrices, index * 16)
+    const slots = new Int32Array(count)
+    let sumX = 0
+    let sumY = 0
+    let sumZ = 0
+    let maxRadius = 0
 
-    this.sourcePositions[index * 3] = position.x
-    this.sourcePositions[index * 3 + 1] = position.y
-    this.sourcePositions[index * 3 + 2] = position.z
-    this.sourceRadii[index] = this.sphereRadius * scale
-    // Force a rebuild of whichever tier claims it on the first update.
-    this.masks[index] = 0xff
+    for (let n = 0; n < count; n++) {
+      const transform = transforms[n]!
+      const slot = this.freeSlots.pop()!
+      slots[n] = slot
 
-    return index
+      _position.set(transform.x, transform.y, transform.z)
+      _quaternion.setFromAxisAngle(_up, transform.rotY)
+      _scale.setScalar(transform.scale)
+      _matrix.compose(_position, _quaternion, _scale)
+      _matrix.toArray(this.sourceMatrices, slot * 16)
+
+      this.sourcePositions[slot * 3] = transform.x
+      this.sourcePositions[slot * 3 + 1] = transform.y
+      this.sourcePositions[slot * 3 + 2] = transform.z
+      const radius = this.sphereRadius * transform.scale
+      this.sourceRadii[slot] = radius
+      // Force a rebuild of whichever tier claims it on the first update.
+      this.masks[slot] = 0xff
+
+      sumX += transform.x
+      sumY += transform.y
+      sumZ += transform.z
+      if (radius > maxRadius) {
+        maxRadius = radius
+      }
+    }
+
+    // Sphere around the cell's actual members, not the nominal grid square — a
+    // sparsely-populated cell gets a tight sphere and culls better.
+    const centerX = sumX / count
+    const centerY = sumY / count + this.sphereOffsetY
+    const centerZ = sumZ / count
+    let extent = 0
+    for (let n = 0; n < count; n++) {
+      const slot = slots[n]!
+      const dx = this.sourcePositions[slot * 3]! - centerX
+      const dy = this.sourcePositions[slot * 3 + 1]! + this.sphereOffsetY - centerY
+      const dz = this.sourcePositions[slot * 3 + 2]! - centerZ
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      if (distance > extent) {
+        extent = distance
+      }
+    }
+
+    const cell: Cell = {
+      key,
+      centerX,
+      centerY,
+      centerZ,
+      radius: extent + maxRadius,
+      slots,
+      count,
+      dormant: false
+    }
+    this.cells.push(cell)
+    this.cellByKey.set(key, cell)
+    this.instanceCount += count
+    return true
   }
 
-  /**
-   * Sorts instances into spatial cells. Call once after the last `add()`.
-   *
-   * Reordering the source arrays so a cell's instances are **contiguous** is
-   * what makes the hierarchy pay: the per-frame loop walks whole runs, and a
-   * cell that is off-screen is skipped with one sphere test instead of N.
-   * Sorting once at build is far cheaper than an every-frame indirection.
-   *
-   * Idempotent — safe to call again; `update()` calls it lazily if a caller
-   * forgets.
-   */
-  commit(): void {
-    if (this.committed) {
+  removeCell(key: string): void {
+    const cell = this.cellByKey.get(key)
+    if (!cell) {
       return
     }
-    this.committed = true
-    this.cells.length = 0
-    if (this.instanceCount === 0) {
-      return
+    this.cellByKey.delete(key)
+    const index = this.cells.indexOf(cell)
+    if (index >= 0) {
+      this.cells.splice(index, 1)
     }
-
-    // ── Bucket by cell ──────────────────────────────────────────────────────
-    const keyOf = new Int32Array(this.instanceCount)
-    const buckets = new Map<number, number[]>()
-    let minX = Infinity
-    let minZ = Infinity
-    for (let i = 0; i < this.instanceCount; i++) {
-      minX = Math.min(minX, this.sourcePositions[i * 3]!)
-      minZ = Math.min(minZ, this.sourcePositions[i * 3 + 2]!)
+    for (let n = 0; n < cell.count; n++) {
+      const slot = cell.slots[n]!
+      this.masks[slot] = 0
+      this.freeSlots.push(slot)
     }
-    for (let i = 0; i < this.instanceCount; i++) {
-      const gx = Math.floor((this.sourcePositions[i * 3]! - minX) / CELL_SIZE)
-      const gz = Math.floor((this.sourcePositions[i * 3 + 2]! - minZ) / CELL_SIZE)
-      // 16-bit pack; a field spanning >65 km of cells is not a thing here.
-      const key = gx * 65536 + gz
-      keyOf[i] = key
-      const bucket = buckets.get(key)
-      if (bucket) {
-        bucket.push(i)
-      } else {
-        buckets.set(key, [i])
-      }
-    }
+    this.instanceCount -= cell.count
+    // Removing a cell reorders the ones after it, so every tier's packing is
+    // stale — not just the tiers this cell was in.
+    this.dirtyAll = true
+  }
 
-    // ── Rewrite the source arrays in cell order ─────────────────────────────
-    const matrices = new Float32Array(this.instanceCount * 16)
-    const positions = new Float32Array(this.instanceCount * 3)
-    const radii = new Float32Array(this.instanceCount)
-    let write = 0
+  hasCell(key: string): boolean {
+    return this.cellByKey.has(key)
+  }
 
-    for (const bucket of buckets.values()) {
-      const start = write
-      let sumX = 0
-      let sumY = 0
-      let sumZ = 0
-      let maxRadius = 0
-
-      for (const source of bucket) {
-        for (let k = 0; k < 16; k++) {
-          matrices[write * 16 + k] = this.sourceMatrices[source * 16 + k]!
-        }
-        const x = this.sourcePositions[source * 3]!
-        const y = this.sourcePositions[source * 3 + 1]!
-        const z = this.sourcePositions[source * 3 + 2]!
-        positions[write * 3] = x
-        positions[write * 3 + 1] = y
-        positions[write * 3 + 2] = z
-        radii[write] = this.sourceRadii[source]!
-        sumX += x
-        sumY += y
-        sumZ += z
-        maxRadius = Math.max(maxRadius, this.sourceRadii[source]!)
-        write++
-      }
-
-      // Sphere around the cell's actual members, not the nominal grid square —
-      // a sparsely-populated cell gets a tight sphere and culls better.
-      const count = bucket.length
-      const centerX = sumX / count
-      const centerY = sumY / count + this.sphereOffsetY
-      const centerZ = sumZ / count
-      let extent = 0
-      for (let i = start; i < write; i++) {
-        const dx = positions[i * 3]! - centerX
-        const dy = positions[i * 3 + 1]! + this.sphereOffsetY - centerY
-        const dz = positions[i * 3 + 2]! - centerZ
-        extent = Math.max(extent, Math.sqrt(dx * dx + dy * dy + dz * dz))
-      }
-
-      this.cells.push({
-        centerX,
-        centerY,
-        centerZ,
-        radius: extent + maxRadius,
-        start,
-        count,
-        dormant: false
-      })
-    }
-
-    this.sourceMatrices.set(matrices)
-    this.sourcePositions.set(positions)
-    this.sourceRadii.set(radii)
-    // Order changed, so every tier has to repack from scratch.
-    this.masks.fill(0xff)
+  /** Slots available for new cells. The streamer uses this to avoid overfilling. */
+  get freeCapacity(): number {
+    return this.freeSlots.length
   }
 
   /**
@@ -392,11 +457,6 @@ export class InstancedLodField {
    * one matrix copy.
    */
   update(camera: PerspectiveCamera, cameraPosition: Vector3): void {
-    // Lazy, so a caller that forgets `commit()` still gets the hierarchy rather
-    // than silently falling back to an O(n) sweep nobody would notice.
-    if (!this.committed) {
-      this.commit()
-    }
     const tiers = this.tiers
     const tierCount = tiers.length
     const scale = this.asset.distanceScale
@@ -412,7 +472,8 @@ export class InstancedLodField {
       _frustum.setFromProjectionMatrix(_viewProjection)
     }
 
-    let dirty = 0
+    let dirty = this.dirtyAll ? 0xff : 0
+    this.dirtyAll = false
     const stats = this.cellStats
     stats.total = this.cells.length
     stats.outside = 0
@@ -430,7 +491,6 @@ export class InstancedLodField {
     // accepts its instances without any plane test at all.
     for (let c = 0; c < this.cells.length; c++) {
       const cell = this.cells[c]!
-      const end = cell.start + cell.count
 
       const cdx = cell.centerX - cameraPosition.x
       const cdy = cell.centerY - cameraPosition.y
@@ -456,7 +516,8 @@ export class InstancedLodField {
         if (cell.dormant) {
           continue
         }
-        for (let i = cell.start; i < end; i++) {
+        for (let n = 0; n < cell.count; n++) {
+          const i = cell.slots[n]!
           if (this.masks[i] !== 0) {
             dirty |= this.masks[i]!
             this.masks[i] = 0
@@ -477,7 +538,8 @@ export class InstancedLodField {
         stats.partial++
       }
 
-      for (let i = cell.start; i < end; i++) {
+      for (let n = 0; n < cell.count; n++) {
+        const i = cell.slots[n]!
         const dx = this.sourcePositions[i * 3]! - cameraPosition.x
         const dy = this.sourcePositions[i * 3 + 1]! - cameraPosition.y
         const dz = this.sourcePositions[i * 3 + 2]! - cameraPosition.z
@@ -536,18 +598,24 @@ export class InstancedLodField {
       const source = this.sourceMatrices
       const bit = 1 << t
       let write = 0
-      for (let i = 0; i < this.instanceCount; i++) {
-        if ((this.masks[i]! & bit) === 0) {
-          continue
+      // Same cell order as pass 1 — the fade array was filled in that order and
+      // the two are indexed together.
+      for (let c = 0; c < this.cells.length; c++) {
+        const cell = this.cells[c]!
+        for (let n = 0; n < cell.count; n++) {
+          const i = cell.slots[n]!
+          if ((this.masks[i]! & bit) === 0) {
+            continue
+          }
+          const from = i * 16
+          const to = write * 16
+          // Unrolled rather than `set(subarray(...))`: a subarray view is a
+          // fresh object per call, and this runs thousands of times a frame.
+          for (let k = 0; k < 16; k++) {
+            target[to + k] = source[from + k]!
+          }
+          write++
         }
-        const from = i * 16
-        const to = write * 16
-        // Unrolled rather than `set(subarray(...))`: a subarray view is a fresh
-        // object per call, and this loop can run thousands of times a frame.
-        for (let k = 0; k < 16; k++) {
-          target[to + k] = source[from + k]!
-        }
-        write++
       }
       tierState.mesh.instanceMatrix.needsUpdate = true
     }
@@ -596,7 +664,7 @@ export class InstancedLodField {
       return
     }
     this.options.hierarchical = enabled
-    this.masks.fill(0xff)
+    this.dirtyAll = true
     for (const cell of this.cells) {
       cell.dormant = false
     }
@@ -609,7 +677,7 @@ export class InstancedLodField {
     this.options.frustumCullInstances = enabled
     // Membership is about to change wholesale; force a full repack, and wake
     // every cell — a dormant one would otherwise never re-evaluate.
-    this.masks.fill(0xff)
+    this.dirtyAll = true
     for (const cell of this.cells) {
       cell.dormant = false
     }

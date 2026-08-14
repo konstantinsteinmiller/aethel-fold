@@ -201,7 +201,11 @@ Every world object ships **exactly four LOD tiers**, plus a cull distance.
 
 | Asset | LOD0 | LOD1 | LOD2 | LOD3 | actual (0/1/2/3) |
 |---|---:|---:|---:|---:|---|
-| Tree | 200 | 110 | 56 | 16 | 162 / 80 / 54 / 16 |
+| Tree (broadleaf) | 200 | 110 | 56 | 16 | 162 / 80 / 54 / 16 |
+| Tree (crown) | 200 | 110 | 56 | 16 | 180 / 84 / 54 / 16 |
+| Pine (spruce/fir, ±snow) | 200 | 110 | 56 | 16 | 192 / 98 / 52 / 15 |
+| Birch | 180 | 100 | 50 | 14 | 172 / 90 / 44 / 14 |
+| Ancient oak | 340 | 190 | 95 | 26 | 320 / 184 / 92 / 22 |
 | Boulder | 180 | 96 | 44 | 12 | 140 / 80 / 36 / 12 |
 | Stone | 72 | 40 | 20 | 8 | 56 / 36 / 20 / 8 |
 | Plateau | 260 | 150 | 80 | 40 | 216 / 144 / 72 / 36 |
@@ -209,6 +213,10 @@ Every world object ships **exactly four LOD tiers**, plus a cull distance.
 | Basalt cluster | 210 | 124 | 60 | 20 | 196 / 115 / 54 / 18 |
 | Slab | 112 | 76 | 40 | 18 | 96 / 64 / 32 / 16 |
 | Grass rock | 130 | 84 | 40 | 20 | 99 / 63 / 30 / 15 |
+| Mesa / butte | 300 | 175 | 95 | 44 | 280 / 168 / 84 / 42 |
+| Stacked pillar | 260 | 150 | 82 | 38 | 240 / 144 / 72 / 36 |
+| Shard wall | 260 | 150 | 78 | 30 | 252 / 144 / 72 / 24 |
+| Hoodoo | 250 | 145 | 80 | 36 | 240 / 120 / 72 / 36 |
 | Terrain chunk (48 m) | 1400 | 400 | 128 | 24 | 1344 / 384 / 120 / 18 |
 | *(future)* Monster | 900 | 420 | 180 | 40 | — |
 | *(future)* Chibi human | 700 | 340 | 150 | 36 | — |
@@ -240,6 +248,21 @@ cannot describe an anvil or a 2:1 taper with ledges in it, and the tier measured
 
 Slab and grass rock go the other way — they are stacked and scattered in
 quantity, so they are budgeted nearer the stone than the plateau.
+
+**The ancient oak is budgeted as a landmark, not as flora.** 340 at LOD0 against
+the scatter tree's 200, on exactly the argument the cliff family already makes
+above: a scatter tree's budget is really a per-*field* budget, while the oak is
+placed by hand in ones and twos and is the thing the player navigates by. What
+it buys is branch structure — three or four gnarled limbs — which is the one
+feature that separates an old tree from a big one, and which no amount of canopy
+lumping substitutes for.
+
+**The desert props are not new budget rows for new shapes.** A hoodoo is the
+same lofted surface of revolution as a sea stack and a desert mesa is the same
+mesa; the family is a `StonePalette` (`assets/stone.ts`) plus a sedimentary
+banding paint pass, so it costs three colours and zero triangles. That is R1
+taken to its conclusion: the strongest identifying feature of the whole desert
+reference — the horizontal strata — is vertex colour, not geometry.
 
 **Tier size is corrected on both axes, not one.** §4.3 explains why a coarse tier
 is a genuinely smaller object and has to be inflated back. That argument applies
@@ -393,9 +416,48 @@ background and fallback paths are two implementations is one where they drift.
 
 Boot build dropped from ~900 ms to **296 ms** once terrain left the constructor.
 
-**Not yet streamed:** scatter instances are still built eagerly over the whole
-world extent, which is why `TerrainOptions.size` still bounds the world. Cell
-sorting is the groundwork for streaming them too — that's the next step.
+**Scatter streams too.** Instances live in a fixed slot pool grouped into cells;
+a cell is added when its terrain chunk loads and dropped when it unloads, so
+scatter can never outlive the ground it stands on. Placement is a pure function
+of `(seed, chunk coords)` — it has to be, or walking away and back would
+reshuffle the forest behind you. **The world is unbounded**: `TerrainOptions.size`
+is no longer passed. Verified by traversing to 1 399 m (the old bound was 192 m)
+at a steady 60 fps with **zero janky frames**.
+
+Two bugs only an unbounded world could expose, both found by walking out:
+
+* The **sky dome** is a finite sphere that was fixed at the origin, so past
+  900 m the player walked out through it and the horizon rendered as black
+  wedges. It now follows the camera.
+* Instance **culling spheres** were derived from LOD0's bounding sphere. Tiers
+  are size-corrected against *each other* (§4.3), never against LOD0, so the
+  tier reaching furthest is routinely a coarse one — an undersized sphere makes
+  a prop vanish at the screen edge while part of it is still visible, which
+  reads as a streaming failure rather than a culling one. The sphere is now
+  measured across every tier.
+
+### 5.2c Cascaded shadow maps
+
+Three cascades over the view depth (splits ≈ 0 / 0.175 / 0.396 / 1.0 of a 260 m
+range), replacing a single 2048 map over a 120 m box that simply stopped casting
+60 m from the camera — the hard cap on view distance once terrain streamed past
+it.
+
+**three's `CSM.setupMaterial` cannot be used here.** It does
+`material.onBeforeCompile = function (shader) { … }` — a plain assignment. Every
+material in this world is a `ToonMaterial` whose `onBeforeCompile` carries the
+dithered LOD crossfade, the fresnel rim, the periwinkle shadow tint and the
+foliage wind. Calling it would silently delete all of that: the scene still
+renders, just without any art direction, and nothing errors.
+
+`core/shadows.ts` therefore applies the pieces by hand — two defines, three
+uniforms, and enrolment in CSM's refresh map — and `ToonMaterial` *chains* into
+it at the end of its own patches. The failure mode when that chain is missing is
+worth recording: `USE_CSM` is defined, so the shader compiles the cascade branch,
+which gates `RE_Direct` on the fragment's depth falling inside a cascade range.
+With the uniforms absent that array reads as all-zero, no cascade ever matches,
+and **the direct light disappears entirely** — no shadows, no toon bands, no
+error.
 
 ### 5.3 Profiling — "which asset wastes the most performance"
 

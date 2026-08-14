@@ -120,6 +120,20 @@ export class Terrain {
   private readonly materialTemplate: TerrainMaterial
   private disposed = false
 
+  /**
+   * Chunk lifecycle hooks. Scatter streams on the back of terrain rather than
+   * running its own residency logic — two systems deciding independently what
+   * is loaded is two systems that can disagree, and a tree standing on a chunk
+   * that has been unloaded is a tree floating in the sky.
+   */
+  onChunkLoad: ((key: string, originX: number, originZ: number, chunkSize: number) => void) | null = null
+  onChunkUnload: ((key: string) => void) | null = null
+
+  /** Chunk edge length, in metres. Scatter needs it to match its cells. */
+  get size(): number {
+    return this.chunkSize
+  }
+
   constructor(field: Heightfield, options: TerrainOptions = {}) {
     const {
       chunkSize = 48,
@@ -370,6 +384,7 @@ export class Terrain {
     this.group.add(node.lod)
     this.live.set(key, node)
     this.chunks.push(node.lod)
+    this.onChunkLoad?.(key, originX, originZ, this.chunkSize)
   }
 
   private unloadDistant(cameraPosition: Vector3): void {
@@ -380,6 +395,7 @@ export class Terrain {
         continue
       }
       this.live.delete(key)
+      this.onChunkUnload?.(key)
       this.group.remove(node.lod)
       const index = this.chunks.indexOf(node.lod)
       if (index >= 0) {

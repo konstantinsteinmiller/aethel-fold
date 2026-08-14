@@ -99,16 +99,16 @@ import type { WorldAsset } from './types'
  * surface crosses the trunk's radius at ~1.35 m, so that is exactly how much
  * bark is ever visible; carrying the tube up inside the canopy would spend a
  * fifth of LOD2's entire budget on geometry nothing can see. The spike at the
- * top is the canopy's own leader — the profile holds under 4 % of full radius
- * for the first sixth of its length — which is both cheaper and correct: a
- * spruce leader is needled, and a bark-coloured spike above the last whorl reads
- * as a dead top.
+ * top is the canopy's own leader — measured, the profile stays under 3 % of full
+ * radius through the top fifth — which is both cheaper and correct: a spruce
+ * leader is needled, and a bark-coloured spike above the last whorl reads as a
+ * dead top.
  *
  * The canopy's bottom ring tucks to ~10 % of skirt radius, well *inside* the
  * trunk, so the loft's open bottom is plugged by the tube rather than showing
  * daylight through a back-face-culled shell.
  *
- * Budget ladder (GDD §4.1): 200 / 110 / 56 / 16 → 176 / 98 / 52 / 15.
+ * Budget ladder (GDD §4.1): 200 / 110 / 56 / 16 → 192 / 98 / 52 / 15.
  *
  * Unlike the cliff family, this one holds its **rings** from LOD1 to LOD2 and
  * spends the reduction on segments. The trade is stated the other way round in
@@ -116,13 +116,23 @@ import type { WorldAsset } from './types'
  * section and a conifer by its profile. LOD1 and LOD2 therefore share a ring
  * list exactly and differ only in how finely the section is sampled.
  *
+ * With both size corrections applied, the four tiers' mean projected silhouette
+ * width — averaged over 36 view azimuths, which is the number that matters mid
+ * crossfade — lands within **4 %** of LOD0 for LOD1 and LOD2 and within 6 % for
+ * the impostor. Seeding matters as much as the corrections do: LOD1 originally
+ * pinned three whorl rims and ran 6.5 % narrow, because the chord it was left
+ * with spanned the whole concave leader and `profileVolumeInflate` shrank the
+ * tier to compensate. Handing two of those rings back to `buildRingList`'s error
+ * refinement halved the error — the refiner puts them where the profile
+ * actually deviates, and a hand-placed ring cannot know that.
+ *
  * LOD3 is the same loft at 3 rings and 3 segments plus a 6-triangle bark stub.
  * The stub is not optional — see the note on `buildImpostor` in `tree.ts`; a
- * canopy-only impostor makes every tree hop upward at the tier boundary. A
- * 3-gon section runs ~18 % wide even after `sectionAreaInflate`, which is
- * knowingly spent: at `distanceScale: 2` LOD3 begins at 220 m, where exp² fog
- * (`FOG_DENSITY`) has already erased 97 % of the object, so the tier exists to
- * hold the silhouette's mass and not its shape.
+ * canopy-only impostor makes every tree hop upward at the tier boundary. Three
+ * segments is what is left after paying for it, and it is affordable because at
+ * `distanceScale: 2` LOD3 begins at 220 m, where exp² fog (`FOG_DENSITY`) has
+ * already erased 97 % of the object: the tier holds the silhouette's mass, not
+ * its shape.
  */
 
 export type PineForm = 'spruce' | 'fir'
@@ -437,8 +447,11 @@ interface PineTier {
  * Trunk triangles = `trunkRadial × (trunkRings − 1) × 2`.
  *
  * Seed count must never exceed `rings`: `buildRingList` only ever *adds*, so an
- * over-seeded tier silently ships more rings than it budgeted for. Both forms
- * are checked — spruce seeds 11/7/7/3, fir 10/7/7/3.
+ * over-seeded tier silently ships more rings than it budgeted for and blows a
+ * budget that arithmetic said was safe. Seeds are `2 + leader + rims + tucks`,
+ * so both forms are checked against `rings` of 12/7/7/3 — spruce seeds 12/6/6/3,
+ * fir 11/6/6/3. The slack at LOD1 and LOD2 is deliberate and is what
+ * `buildRingList`'s error refinement spends on the concave leader.
  */
 const TIERS: PineTier[] = [
   { segments: 8, rings: 12, leader: true, rims: 5, tucks: 4, trunkRadial: 6, trunkRings: 3, budget: 200, aoSamples: 14 },

@@ -12,6 +12,7 @@ import {
   WIND_PARS_VERTEX_GLSL,
   WIND_VERTEX_GLSL
 } from './glsl'
+import { getActiveShadowCascades } from '../core/shadows'
 import { getDefaultRamp } from './ramp'
 
 /**
@@ -88,6 +89,12 @@ export class ToonMaterial extends MeshToonMaterial {
     if (this.windEnabled) {
       this.defines = { ...this.defines, WORLD_WIND: '' }
     }
+
+    // Enrol in cascaded shadows. Done here rather than by
+    // `CSM.setupMaterial`, which would assign over `onBeforeCompile` and delete
+    // every patch this class applies — see `core/shadows.ts`. Null before the
+    // lighting rig exists, which is fine: nothing renders before then.
+    getActiveShadowCascades()?.register(this)
   }
 
   /**
@@ -97,7 +104,9 @@ export class ToonMaterial extends MeshToonMaterial {
    * easier to reason about.
    */
   override customProgramCacheKey(): string {
-    return `world-toon|${this.windEnabled ? 'w' : ''}`
+    // The CSM cascade count is a define, so it has to be in the key — two
+    // materials with different cascade counts must not share a program.
+    return `world-toon|${this.windEnabled ? 'w' : ''}|${this.defines?.CSM_CASCADES ?? 0}`
   }
 
   override onBeforeCompile(shader: WebGLProgramParametersWithUniforms): void {
@@ -135,6 +144,15 @@ export class ToonMaterial extends MeshToonMaterial {
       // half of them dies, the better.
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${FADE_FRAGMENT_GLSL}`)
       .replace('#include <opaque_fragment>', `${SURFACE_FRAGMENT_GLSL}\n#include <opaque_fragment>`)
+
+    // Cascaded shadows last, and *chained* rather than assigned. `USE_CSM` is
+    // already on this material's defines, so the shader is compiling the cascade
+    // branch — which gates `RE_Direct` on `linearDepth` falling inside a cascade
+    // range. Without these uniforms that array reads as all-zero, no cascade
+    // ever matches, and the direct light silently disappears entirely: the scene
+    // renders lit only by the hemisphere fill, with no shadows and no toon
+    // bands. (Exactly what happened when this call was missing.)
+    getActiveShadowCascades()?.applyToShader(this, shader)
   }
 
   /** Crossfade coverage. Driven by `DitheredLod`; not for hand-tuning. */

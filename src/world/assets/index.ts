@@ -1,12 +1,21 @@
 import { getPlaceable, registerPlaceable } from '../level/catalog'
 import type { PlaceableDefinition } from '../level/types'
 import { basaltMetrics, createBasaltAsset } from './basalt'
+import { birchMetrics, createBirchAsset } from './birch'
 import { cliffMetrics, createCliffAsset } from './cliff'
+import { measuredRadius } from './common'
 import { createGrassRockAsset, grassRockMetrics } from './grassRock'
+import { createHoodooAsset, hoodooMetrics } from './hoodoo'
+import { createMesaAsset, mesaMetrics } from './mesa'
+import { createOldOakAsset, oldOakMetrics } from './oldOak'
+import { createPillarStackAsset, pillarStackMetrics } from './pillarStack'
+import { createPineAsset, pineMetrics } from './pine'
 import { assertFiniteGeometry, createPlateauAsset, plateauMetrics } from './plateau'
 import { createBoulderAsset, createStoneAsset } from './rock'
+import { createShardWallAsset, shardWallMetrics } from './shardWall'
 import { createSlabAsset, slabMetrics } from './slab'
-import { createTreeAsset } from './tree'
+import { DESERT_STONE } from './stone'
+import { createTreeAsset, treeMetrics } from './tree'
 
 /**
  * ─── The placeable catalogue ────────────────────────────────────────────────
@@ -51,6 +60,24 @@ const GRASS_ROCK_SEED = 103
 const TREE_SEED = 11
 const BOULDER_SEED = 23
 const STONE_SEED = 5
+const TREE_CROWN_SEED = 19
+const PINE_SEED = 37
+const FIR_SEED = 59
+const PINE_SNOW_SEED = 73
+const BIRCH_SEED = 41
+const OLD_OAK_SEED = 7
+const MESA_SEED = 113
+const BUTTE_SEED = 127
+const MESA_DESERT_SEED = 131
+const BUTTE_DESERT_SEED = 137
+const PILLAR_TOWER_SEED = 149
+const PILLAR_STEP_SEED = 151
+const PILLAR_DESERT_SEED = 157
+const HOODOO_SQUAT_SEED = 163
+const HOODOO_TALL_SEED = 167
+const SHARD_WALL_SEED = 173
+const SHARD_CLUSTER_SEED = 179
+const SHARD_DESERT_SEED = 181
 
 const buildDefinitions = (): PlaceableDefinition[] => {
   const plateauWide = { seed: PLATEAU_WIDE_SEED, form: 'wide' as const }
@@ -73,6 +100,80 @@ const buildDefinitions = (): PlaceableDefinition[] => {
 
   const boulder = createBoulderAsset({ seed: BOULDER_SEED })
   const stone = createStoneAsset({ seed: STONE_SEED })
+
+  // ── Flora ────────────────────────────────────────────────────────────────
+  //
+  // Every option object is declared once and handed to both the generator and
+  // the metrics function, because the two must agree on the seed *and* on every
+  // other option — a metrics call that re-derives from a different literal is a
+  // collider silently describing a different tree.
+  const treeCrown = { seed: TREE_CROWN_SEED, form: 'crown' as const }
+  const pine = { seed: PINE_SEED, form: 'spruce' as const }
+  const fir = { seed: FIR_SEED, form: 'fir' as const }
+  const pineSnow = { seed: PINE_SNOW_SEED, form: 'spruce' as const, snow: true }
+  const birch = { seed: BIRCH_SEED }
+  const oldOak = { seed: OLD_OAK_SEED }
+
+  const crownTrunk = treeMetrics(treeCrown)
+  const spruce = pineMetrics(pine)
+  const firTrunk = pineMetrics(fir)
+  const snowTrunk = pineMetrics(pineSnow)
+  const birchTrunk = birchMetrics(birch)
+  const oldOakTrunk = oldOakMetrics(oldOak)
+
+  // ── Stone: the pale family ───────────────────────────────────────────────
+  const mesa = { seed: MESA_SEED, form: 'mesa' as const }
+  const butte = { seed: BUTTE_SEED, form: 'butte' as const }
+  const pillarTower = { seed: PILLAR_TOWER_SEED, form: 'tower' as const }
+  const pillarStep = { seed: PILLAR_STEP_SEED, form: 'step' as const }
+  const shardWall = { seed: SHARD_WALL_SEED, form: 'wall' as const }
+  const shardCluster = { seed: SHARD_CLUSTER_SEED, form: 'cluster' as const }
+
+  const mesaTop = mesaMetrics(mesa)
+  const butteTop = mesaMetrics(butte)
+  const towerTop = pillarStackMetrics(pillarTower)
+  const stepTop = pillarStackMetrics(pillarStep)
+  const wallBox = shardWallMetrics(shardWall)
+  const clusterBox = shardWallMetrics(shardCluster)
+
+  // ── Stone: the desert family ─────────────────────────────────────────────
+  //
+  // Same generators, same shapes, `DESERT_STONE` instead of the pale palette
+  // plus the sedimentary banding pass — see `assets/stone.ts`. `grassCap` and
+  // `shelfGrass` switch themselves off for a non-pale palette, but `grassCap`
+  // is passed explicitly here anyway: it is a *visual* decision the catalogue
+  // owns, and inheriting it from a default would make it invisible at the one
+  // place someone would look for it.
+  const mesaDesert = {
+    seed: MESA_DESERT_SEED,
+    form: 'mesa' as const,
+    stone: DESERT_STONE,
+    grassCap: false,
+    banding: 1
+  }
+  const butteDesert = {
+    seed: BUTTE_DESERT_SEED,
+    form: 'butte' as const,
+    stone: DESERT_STONE,
+    grassCap: false,
+    banding: 1
+  }
+  const pillarDesert = {
+    seed: PILLAR_DESERT_SEED,
+    form: 'tower' as const,
+    stone: DESERT_STONE,
+    banding: 1
+  }
+  const shardDesert = { seed: SHARD_DESERT_SEED, form: 'wall' as const, stone: DESERT_STONE, banding: 1 }
+  const hoodooSquat = { seed: HOODOO_SQUAT_SEED, form: 'squat' as const }
+  const hoodooTall = { seed: HOODOO_TALL_SEED, form: 'tall' as const }
+
+  const mesaDesertTop = mesaMetrics(mesaDesert)
+  const butteDesertTop = mesaMetrics(butteDesert)
+  const pillarDesertTop = pillarStackMetrics(pillarDesert)
+  const shardDesertBox = shardWallMetrics(shardDesert)
+  const squatWaist = hoodooMetrics(hoodooSquat)
+  const tallWaist = hoodooMetrics(hoodooTall)
 
   return [
     {
@@ -207,6 +308,257 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.1,
       defaultScale: 1,
       scaleRange: [0.8, 1.3]
+    },
+    {
+      id: 'tree-crown',
+      label: 'Broadleaf tree (crown)',
+      category: 'flora',
+      asset: createTreeAsset(treeCrown),
+      // Same rule as `tree-oak` — trunk only. `treeMetrics` reports the trunk's
+      // *widest* section, flare included, which inverts the inscribed rule used
+      // everywhere else in this file: that rule protects a player standing on a
+      // top, and this is a blocker, where the failure to avoid is walking into
+      // visible wood. The 1.12 reproduces the hand-tuned 0.46 the oak above has
+      // carried since before the metric existed.
+      collider: { kind: 'cylinder', radius: crownTrunk.trunkRadius * 1.12, height: crownTrunk.trunkHeight },
+      walkable: false,
+      groundOffset: -0.1,
+      defaultScale: 1,
+      scaleRange: [0.8, 1.25]
+    },
+    {
+      id: 'tree-pine',
+      label: 'Pine (spruce)',
+      category: 'flora',
+      asset: createPineAsset(pine),
+      // Chest-height trunk radius, and only 40 % of the tree's height: a
+      // conifer's skirt starts low, and a collider tall enough to include it
+      // would stop the player a metre out from a trunk they can walk up to.
+      collider: { kind: 'cylinder', radius: spruce.radius, height: spruce.height },
+      walkable: false,
+      groundOffset: -0.12,
+      defaultScale: 1,
+      scaleRange: [0.75, 1.35]
+    },
+    {
+      id: 'tree-fir',
+      label: 'Pine (fir)',
+      category: 'flora',
+      asset: createPineAsset(fir),
+      collider: { kind: 'cylinder', radius: firTrunk.radius, height: firTrunk.height },
+      walkable: false,
+      groundOffset: -0.12,
+      defaultScale: 1,
+      scaleRange: [0.75, 1.35]
+    },
+    {
+      id: 'tree-pine-snow',
+      label: 'Pine (snow-laden)',
+      category: 'flora',
+      // Identical geometry to `tree-pine` — the snow is a paint pass, not a
+      // mesh (GDD R1). Different seed only so the two don't stand next to each
+      // other as the same tree in two colours.
+      asset: createPineAsset(pineSnow),
+      collider: { kind: 'cylinder', radius: snowTrunk.radius, height: snowTrunk.height },
+      walkable: false,
+      groundOffset: -0.12,
+      defaultScale: 1,
+      scaleRange: [0.75, 1.35]
+    },
+    {
+      id: 'tree-birch',
+      label: 'Birch',
+      category: 'flora',
+      asset: createBirchAsset(birch),
+      // Circumscribed across *both* stems below chest height. A metric sized to
+      // one stem would let the player stand inside the other, which is the one
+      // place a two-trunk species differs from every other blocker here.
+      collider: { kind: 'cylinder', radius: birchTrunk.radius, height: birchTrunk.height },
+      walkable: false,
+      groundOffset: -0.08,
+      defaultScale: 1,
+      scaleRange: [0.8, 1.3]
+    },
+    {
+      id: 'tree-oak-ancient',
+      label: 'Ancient oak',
+      category: 'flora',
+      asset: createOldOakAsset(oldOak),
+      // `oldOakMetrics` is inscribed on the fused-buttress section, and on a
+      // 1.7 m bole the gap between the inscribed and circumscribed bearings is
+      // wide enough to walk into. Opened to 1.2× — still inside the crests, but
+      // no longer inside the visible wood.
+      collider: { kind: 'cylinder', radius: oldOakTrunk.radius * 1.2, height: oldOakTrunk.height },
+      walkable: false,
+      groundOffset: -0.15,
+      defaultScale: 1,
+      scaleRange: [0.85, 1.2]
+    },
+
+    // ── Platforms: the pale stone family ─────────────────────────────────────
+    {
+      id: 'mesa-wide',
+      label: 'Mesa (grass top)',
+      category: 'platform',
+      asset: createMesaAsset(mesa),
+      // No second shave here, unlike `plateau-*`: `mesaMetrics` already reports
+      // the narrowest fluted bearing (measured at 0.79 of the crest radius
+      // across seeds), and stacking the plateau's extra 0.94 on top of that
+      // would cost most of a metre off a six-metre landing pad.
+      collider: { kind: 'cylinder', radius: mesaTop.radius, height: mesaTop.height },
+      walkable: true,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.8, 1.3]
+    },
+    {
+      id: 'mesa-butte',
+      label: 'Butte (grass top)',
+      category: 'platform',
+      asset: createMesaAsset(butte),
+      collider: { kind: 'cylinder', radius: butteTop.radius, height: butteTop.height },
+      walkable: true,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.85, 1.25]
+    },
+    {
+      id: 'pillar-tower',
+      label: 'Stacked pillar (tower)',
+      category: 'platform',
+      asset: createPillarStackAsset(pillarTower),
+      collider: { kind: 'cylinder', radius: towerTop.radius, height: towerTop.height },
+      walkable: true,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.85, 1.25]
+    },
+    {
+      id: 'pillar-step',
+      label: 'Stacked pillar (step)',
+      category: 'platform',
+      asset: createPillarStackAsset(pillarStep),
+      collider: { kind: 'cylinder', radius: stepTop.radius, height: stepTop.height },
+      walkable: true,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.8, 1.35]
+    },
+
+    // ── Cliffs: the fin walls ────────────────────────────────────────────────
+    {
+      id: 'shard-wall',
+      label: 'Shard wall',
+      category: 'cliff',
+      asset: createShardWallAsset(shardWall),
+      // A box, not a cylinder — this is the one prop in the family that is a
+      // *line* rather than a surface of revolution, and a cylinder around a
+      // seven-metre row of fins would be mostly thin air. The box is
+      // axis-aligned in object space before the placement's Y-rotation, which
+      // is why the generator fixes the row's bearing rather than jittering it.
+      collider: { kind: 'box', halfX: wallBox.halfX, halfZ: wallBox.halfZ, height: wallBox.height },
+      walkable: false,
+      groundOffset: -0.15,
+      defaultScale: 1,
+      scaleRange: [0.8, 1.35]
+    },
+    {
+      id: 'shard-cluster',
+      label: 'Shard cluster',
+      category: 'cliff',
+      asset: createShardWallAsset(shardCluster),
+      collider: {
+        kind: 'box',
+        halfX: clusterBox.halfX,
+        halfZ: clusterBox.halfZ,
+        height: clusterBox.height
+      },
+      walkable: false,
+      groundOffset: -0.15,
+      defaultScale: 1,
+      scaleRange: [0.75, 1.4]
+    },
+
+    // ── Desert: the same shapes in sandstone ─────────────────────────────────
+    {
+      id: 'mesa-desert',
+      label: 'Desert mesa',
+      category: 'desert',
+      asset: createMesaAsset(mesaDesert),
+      collider: { kind: 'cylinder', radius: mesaDesertTop.radius, height: mesaDesertTop.height },
+      walkable: true,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.8, 1.3]
+    },
+    {
+      id: 'butte-desert',
+      label: 'Desert butte',
+      category: 'desert',
+      asset: createMesaAsset(butteDesert),
+      collider: { kind: 'cylinder', radius: butteDesertTop.radius, height: butteDesertTop.height },
+      walkable: true,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.85, 1.25]
+    },
+    {
+      id: 'hoodoo-squat',
+      label: 'Hoodoo (squat)',
+      category: 'desert',
+      asset: createHoodooAsset(hoodooSquat),
+      // Not walkable, and the collider is the **waist** rather than the cap.
+      // Both follow from the same fact about the shape: the cap overhangs the
+      // stem by about 2.5×, so a cap-sized cylinder is an invisible wall a
+      // metre out from a stem the player can plainly see is thin, and a
+      // walkable cap would stand them on a disc a third the width of the rock
+      // they appear to be on. Walking *under* the overhang is the point.
+      collider: { kind: 'cylinder', radius: squatWaist.radius, height: squatWaist.height },
+      walkable: false,
+      groundOffset: -0.1,
+      defaultScale: 1,
+      // The reference sheet runs these from ankle height to house height, and
+      // one generator covering that whole range is most of why the desert reads
+      // as a formation rather than as a row of identical props.
+      scaleRange: [0.55, 1.6]
+    },
+    {
+      id: 'hoodoo-tall',
+      label: 'Hoodoo (tall)',
+      category: 'desert',
+      asset: createHoodooAsset(hoodooTall),
+      collider: { kind: 'cylinder', radius: tallWaist.radius, height: tallWaist.height },
+      walkable: false,
+      groundOffset: -0.12,
+      defaultScale: 1,
+      scaleRange: [0.75, 1.3]
+    },
+    {
+      id: 'pillar-desert',
+      label: 'Desert pillar stack',
+      category: 'desert',
+      asset: createPillarStackAsset(pillarDesert),
+      collider: { kind: 'cylinder', radius: pillarDesertTop.radius, height: pillarDesertTop.height },
+      walkable: true,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.85, 1.25]
+    },
+    {
+      id: 'shard-desert',
+      label: 'Desert shard wall',
+      category: 'desert',
+      asset: createShardWallAsset(shardDesert),
+      collider: {
+        kind: 'box',
+        halfX: shardDesertBox.halfX,
+        halfZ: shardDesertBox.halfZ,
+        height: shardDesertBox.height
+      },
+      walkable: false,
+      groundOffset: -0.15,
+      defaultScale: 1,
+      scaleRange: [0.8, 1.35]
     }
   ]
 }
@@ -223,12 +575,21 @@ let definitions: PlaceableDefinition[] | null = null
  * per prop and no geometry.
  *
  * The finite check runs over **every tier of every placeable**, not only the
- * five generated by this family. The generators in `plateau.ts` and friends
- * already validate themselves through `finishTier`, but the tree and the two
- * rocks come from modules this change does not own, and the catalogue is the one
- * place all eleven are in scope at once. A NaN in any of them renders as a solid
- * black prop, which the art contract bans outright (GDD R4) — so it is caught
- * here, at generation, rather than in a screenshot.
+ * ones generated by the cliff family. The generators in `plateau.ts` and friends
+ * already validate themselves through `finishTier`, but the flora modules do
+ * not, and the catalogue is the one place every prop in the world is in scope at
+ * once. A NaN in any of them renders as a solid black prop, which the art
+ * contract bans outright (GDD R4) — so it is caught here, at generation, rather
+ * than in a screenshot.
+ *
+ * ── Registration is not optional ────────────────────────────────────────────
+ *
+ * **A generator that is not registered here does not exist.** The level editor's
+ * palette is a projection of this catalogue and nothing else, so an asset module
+ * that compiles, passes its budgets and renders perfectly is still unreachable
+ * until it has a row below. Adding the generator and forgetting the row is the
+ * failure mode this note exists to prevent — it looks like finished work right
+ * up until someone opens the editor and cannot find the thing.
  */
 export const registerAllPlaceables = (): PlaceableDefinition[] => {
   if (!definitions) {
@@ -237,6 +598,19 @@ export const registerAllPlaceables = (): PlaceableDefinition[] => {
       for (const [tier, geometry] of definition.asset.tiers.entries()) {
         assertFiniteGeometry(geometry, `${definition.id}/LOD${tier}`)
       }
+      // Widen — never narrow — the published bounding radius to the mesh's
+      // actual reach. See `measuredRadius`: a generator derives this number from
+      // its shape description, which misses everything applied afterwards, and
+      // ten of the props here shipped a radius short of their own geometry (the
+      // worst by 27.7 %). Since the radius drives instanced frustum culling,
+      // that is a prop vanishing while a quarter of it is still on screen.
+      //
+      // Corrected here rather than in ten generators because this is the one
+      // place every prop in the world is in scope, and because a generator that
+      // *deliberately* publishes a larger radius — the plateau reports its
+      // bounding-box corner so a player standing on the rim can't cull it — must
+      // keep it. `Math.max` is what makes both true at once.
+      definition.asset.radius = Math.max(definition.asset.radius, measuredRadius(definition.asset.tiers))
     }
   }
   for (const definition of definitions) {
@@ -248,9 +622,17 @@ export const registerAllPlaceables = (): PlaceableDefinition[] => {
 }
 
 export { createBasaltAsset } from './basalt'
+export { createBirchAsset } from './birch'
 export { createCliffAsset } from './cliff'
 export { createGrassRockAsset } from './grassRock'
+export { createHoodooAsset } from './hoodoo'
+export { createMesaAsset } from './mesa'
+export { createOldOakAsset } from './oldOak'
+export { createPillarStackAsset } from './pillarStack'
+export { createPineAsset } from './pine'
 export { createPlateauAsset } from './plateau'
 export { createBoulderAsset, createRockAsset, createStoneAsset } from './rock'
+export { createShardWallAsset } from './shardWall'
 export { createSlabAsset } from './slab'
+export { DESERT_STONE, PALE_STONE, type StonePalette } from './stone'
 export { createTreeAsset } from './tree'

@@ -1,4 +1,5 @@
 import { type BufferGeometry, Color, Euler, Matrix4, Quaternion, Vector3 } from 'three'
+import { triangleCount } from '../geometry/budget'
 import { applyCutPlane, blobGeometry, type CutPlane, type Lump, lumpRadius, makeLumps } from '../geometry/build'
 import { makeRng, type Rng } from '../geometry/rng'
 import { bakeVertexAO } from '../geometry/vertexAO'
@@ -42,12 +43,12 @@ import type { WorldAsset } from './types'
  *     perpendicular to the axis is inexpressible; a slanted top would have to be
  *     faked with a cap part, which is a differently-authored mesh in all but
  *     name.
- *   • At these budgets a fin is 8–36 triangles. A loft's cheapest closed form is
+ *   • At these budgets a fin is 8–60 triangles. A loft's cheapest closed form is
  *     3 rings × 4 segments plus two caps, and both caps are buried or
  *     edge-on-invisible on a plate.
  *
  * So each fin is `blobGeometry` — a lump-displaced spheroid at a 5 : 1 : 0.2
- * scale — sliced by five to seven **bevelled** half-space cuts: two that shear
+ * scale — sliced by five or six **bevelled** half-space cuts: two that shear
  * the sides into a blade, two that flatten the broad faces, and one or two that
  * chip the top. The bevel is not optional: an unbevelled plate edge catches a
  * pixel-wide specular line along a perfectly hard edge and reads as papercraft
@@ -87,16 +88,17 @@ import type { WorldAsset } from './types'
  *
  * ── Tier reduction: a countable set, so dropping is measured, not assumed ────
  *
- * Fins are ranked by prominence (tall and central survives) the way `basalt.ts`
- * ranks its columns, but **only LOD3 drops any**. At `distanceScale` 2.4 the
+ * Fins are ranked by prominence (tall and central first) the way `basalt.ts`
+ * ranks its columns, but **only LOD3 loses any**. At `distanceScale` 2.4 the
  * LOD0→LOD1 crossfade sits at 43–50 m, where an outer fin is still ~26 px wide;
  * removing one there pops, plainly. LOD1 and LOD2 therefore keep every fin and
  * spend their whole reduction on per-fin sampling instead, handed out
  * prominence-first by `allocateGrids` so the tall central plates that carry the
- * silhouette are the last to coarsen. LOD3's crossfade is at 264–302 m, where
- * the whole 7 m wall is ~30 px across, one fin is ~4 px, and exp² fog has
- * already erased most of it — so it keeps the three most prominent, widened to
- * hold the coverage the others carried.
+ * silhouette are the last to coarsen.
+ *
+ * LOD3 cannot: seven fins at the ladder's cheapest rung is 56 triangles against
+ * a budget of 30. It folds the row into three instead of dropping four of it —
+ * see `foldFins`, which records what the two obvious selection rules measured.
  *
  * Budgets (GDD §4.1): 260 / 150 / 78 / 30.
  */
@@ -160,11 +162,10 @@ const FOOT_SHAVE = 0.94
  * A cut plane, held as a *fraction* of one of the fin's half-extents rather than
  * as an absolute distance.
  *
- * LOD3 widens its survivors to carry the coverage of the fins it dropped, and an
- * absolute distance would not move with them: the side cuts would bite deeper by
- * exactly the amount the fin grew and the plate would come out the same width it
- * started. Fractions scale with the fin, so a widened fin is the same shape,
- * larger.
+ * LOD3 folds several fins into one wider plate (`foldFins`), and an absolute
+ * distance would not move with it: the side cuts would bite deeper by exactly
+ * the amount the fin grew and the plate would come out the width it started.
+ * Fractions scale with the fin, so a widened fin is the same shape, larger.
  */
 interface FinCut {
   normal: Vector3
@@ -187,7 +188,7 @@ interface Fin {
   tiltOut: number
   yaw: number
   matrix: Matrix4
-  /** Ranking for the triangle allocator and for LOD3's survivors. */
+  /** Ranking for the triangle allocator and for LOD3's fold. */
   prominence: number
   /** This fin's single value draw, and the AO resolve target it implies. */
   shade: number
@@ -220,8 +221,9 @@ const makeFinCuts = (rng: Rng): FinCut[] => {
   }
 
   // Broad faces. The tiny Y term is what makes the plate a wedge in profile —
-  // thicker at the foot than at the top — and 0.012 is already ~4 cm of taper
-  // over a 7 m fin.
+  // thicker at the foot than at the top — and 0.012 already takes a third of the
+  // thickness out of the top of a 7 m fin. Signed independently per face, so
+  // some plates shear instead of tapering.
   for (const side of [1, -1]) {
     cuts.push({
       normal: new Vector3(rng.spread(0.06), rng.spread(0.012), side).normalize(),
@@ -251,17 +253,16 @@ const makeFinCuts = (rng: Rng): FinCut[] => {
   return cuts
 }
 
-const cutPlanesFor = (fin: Fin, widen: number): CutPlane[] => {
-  const halfWidth = fin.halfWidth * widen
+const cutPlanesFor = (fin: Fin): CutPlane[] => {
   const bevel = fin.halfThick * BEVEL
   return fin.cuts.map(cut => {
     const n = cut.normal
     const reference =
       cut.against === 'width'
-        ? halfWidth
+        ? fin.halfWidth
         : cut.against === 'thickness'
           ? fin.halfThick
-          : Math.hypot(halfWidth * n.x, fin.halfHeight * n.y, fin.halfThick * n.z)
+          : Math.hypot(fin.halfWidth * n.x, fin.halfHeight * n.y, fin.halfThick * n.z)
     return { normal: n, dist: reference * cut.frac, bevel }
   })
 }
@@ -276,15 +277,39 @@ const composeFin = (fin: Fin): Matrix4 =>
     new Vector3(1, 1, 1)
   )
 
+/**
+ * Grids one fin can be built at, cheapest first. Triangles = `W × (2H − 2)`.
+ *
+ * Both counts are even in every entry, which is the constraint that lets the
+ * sphere inflation be cancelled — see the header. The ladder alternates between
+ * spending on the section (W: 4 gives a rhombic plate, 6 gives genuinely flat
+ * broad faces) and on the profile (H: 2 collapses the fin to a bipyramid, 4
+ * describes the taper, 6 resolves the chipped top as a facet rather than as a
+ * point), so each rung is a real step up in fidelity.
+ *
+ * It runs one rung past what a 7-fin wall can afford on purpose: the counts are
+ * drawn from the seed, and without a top rung above 36 a 5-fin wall spent 180 of
+ * its 260 and had nowhere to put the rest.
+ */
+const GRIDS: readonly (readonly [number, number])[] = [
+  [4, 2],
+  [6, 2],
+  [4, 4],
+  [6, 4],
+  [6, 6]
+]
+
+/** The top rung. LOD0 draws its fins at this or the one below it, never coarser. */
+const FINEST = GRIDS[GRIDS.length - 1]!
+
 const _dir = new Vector3()
 const _point = new Vector3()
 const _scale = new Vector3()
 
 /**
  * `blobGeometry`'s shape function for one fin, reproduced so the metrics and the
- * grass-free measurements below run against the surface the mesh actually sits
- * on. Order is load-bearing: lump field, then the anisotropic scale, then the
- * cuts as passed.
+ * measurements below run against the surface the mesh actually sits on. Order is
+ * load-bearing: lump field, then the anisotropic scale, then the cuts as passed.
  */
 const finSurface = (fin: Fin, cuts: readonly CutPlane[], direction: Vector3, out: Vector3): Vector3 => {
   out.copy(direction).multiplyScalar(lumpRadius(direction, fin.lumps))
@@ -307,27 +332,82 @@ interface FinMeasure {
   reach: number
 }
 
-const POLAR_SAMPLES = 20
-const AZIMUTH_SAMPLES = 24
+const _prev = new Vector3()
+const _edge = new Vector3()
 
+/**
+ * Widens `measure`'s footprint by the part of one mesh edge that crosses the
+ * player's height band.
+ *
+ * Sampling the *surface* in that band and sampling the *mesh* in it are not the
+ * same measurement, and the difference is a collider bug. The first version
+ * swept the continuous surface densely and came out 9 % wider than LOD0's own
+ * bounding box: a 6-gon section is up to 12 % short of its ellipse between its
+ * samples, and the lump field's widest point rarely lands on a ring. A box wider
+ * than the mesh is an invisible wall, so the walk is over the mesh's edges —
+ * which are straight, so clipping to the band and reading the two ends is exact.
+ */
+const accumulateFootprint = (a: Vector3, b: Vector3, measure: FinMeasure): void => {
+  const dy = b.y - a.y
+  let t0 = 0
+  let t1 = 1
+
+  if (Math.abs(dy) < 1e-9) {
+    if (a.y < 0 || a.y > PLAYER_REACH) {
+      return
+    }
+  } else {
+    const low = -a.y / dy
+    const high = (PLAYER_REACH - a.y) / dy
+    t0 = Math.max(0, Math.min(low, high))
+    t1 = Math.min(1, Math.max(low, high))
+    if (t0 > t1) {
+      return
+    }
+  }
+
+  // Both ends of the clipped edge. The edge is straight, so its widest point in
+  // the band is one of the two — there is nothing to sample in between.
+  _edge.copy(a).lerp(b, t0)
+  measure.footX = Math.max(measure.footX, Math.abs(_edge.x))
+  measure.footZ = Math.max(measure.footZ, Math.abs(_edge.z))
+  _edge.copy(a).lerp(b, t1)
+  measure.footX = Math.max(measure.footX, Math.abs(_edge.x))
+  measure.footZ = Math.max(measure.footZ, Math.abs(_edge.z))
+}
+
+/**
+ * Everything the collider and the bounds need, taken from the **finest rung's
+ * own vertices and edges** rather than from a dense sweep — so every number here
+ * describes a mesh that gets drawn rather than a surface nothing samples.
+ *
+ * The two rungs LOD0 can land on share their bearings, their poles and their
+ * equator, so the apex measured here is LOD0's apex to the millimetre on every
+ * seed tried; `FOOT_SHAVE` carries the couple of percent the ring counts can
+ * differ by in the footprint.
+ */
 const measureFin = (fin: Fin): FinMeasure => {
-  const cuts = cutPlanesFor(fin, 1)
+  const cuts = cutPlanesFor(fin)
   const measure: FinMeasure = { apex: Number.NEGATIVE_INFINITY, footX: 0, footZ: 0, reach: 0 }
+  const bearings = FINEST[0]
+  const rings = FINEST[1]
 
-  for (let j = 0; j <= POLAR_SAMPLES; j++) {
-    const polar = (j / POLAR_SAMPLES) * Math.PI
-    const sin = Math.sin(polar)
-    const cos = Math.cos(polar)
-    for (let k = 0; k < AZIMUTH_SAMPLES; k++) {
-      const azimuth = (k / AZIMUTH_SAMPLES) * TAU
-      _dir.set(sin * Math.cos(azimuth), cos, sin * Math.sin(azimuth))
+  for (let k = 0; k < bearings; k++) {
+    const azimuth = (k / bearings) * TAU
+    const cosAzimuth = Math.cos(azimuth)
+    const sinAzimuth = Math.sin(azimuth)
+
+    for (let j = 0; j <= rings; j++) {
+      const polar = (j / rings) * Math.PI
+      const sin = Math.sin(polar)
+      _dir.set(sin * cosAzimuth, Math.cos(polar), sin * sinAzimuth)
       finSurface(fin, cuts, _dir, _point).applyMatrix4(fin.matrix)
       measure.apex = Math.max(measure.apex, _point.y)
       measure.reach = Math.max(measure.reach, Math.hypot(_point.x, _point.z))
-      if (_point.y >= 0 && _point.y <= PLAYER_REACH) {
-        measure.footX = Math.max(measure.footX, Math.abs(_point.x))
-        measure.footZ = Math.max(measure.footZ, Math.abs(_point.z))
+      if (j > 0) {
+        accumulateFootprint(_prev, _point, measure)
       }
+      _prev.copy(_point)
     }
   }
 
@@ -337,7 +417,7 @@ const measureFin = (fin: Fin): FinMeasure => {
 // ─── Shape ──────────────────────────────────────────────────────────────────
 
 interface ShardShape {
-  /** Prominence-ordered — LOD3 takes a prefix, and so does the allocator. */
+  /** Prominence-ordered, which is the order the triangle allocator spends in. */
   fins: Fin[]
   stone: StonePalette
   bands: StoneBand[]
@@ -466,22 +546,6 @@ const buildShape = (options: ShardWallOptions): ShardShape => {
 
 // ─── Tiers ──────────────────────────────────────────────────────────────────
 
-/**
- * Grids one fin can be built at, cheapest first. Triangles = `W × (2H − 2)`.
- *
- * Both counts are even in every entry, which is the constraint that lets the
- * sphere inflation be cancelled — see the header. The ladder alternates between
- * spending on the section (W: 4 gives a rhombic plate, 6 gives genuinely flat
- * broad faces) and on the profile (H: 2 collapses the fin to a bipyramid, 4
- * describes the taper), so each rung is a real step up in fidelity.
- */
-const GRIDS: readonly (readonly [number, number])[] = [
-  [4, 2],
-  [6, 2],
-  [4, 4],
-  [6, 4]
-]
-
 const gridTriangles = (grid: readonly [number, number]): number => grid[0] * (2 * grid[1] - 2)
 
 /**
@@ -511,8 +575,97 @@ const allocateGrids = (fins: number, budget: number): number[] => {
   return levels
 }
 
+const _axis = new Vector3()
+
+/**
+ * Folds the row down to `keep` fins, and it **folds** rather than selects.
+ *
+ * Two rules were tried first and both pop, measured against LOD0's bounding box
+ * at the 264 m crossfade where the whole wall is ~27 px wide:
+ *
+ *   • `basalt.ts`'s rule — keep the most prominent — left LOD3 at **47 %** of
+ *     LOD0's length. A rosette's tallest column is also its most central, so
+ *     keeping it holds the cluster's extent; a row's tall fins are *all* in the
+ *     middle, so keeping them shortens the wall by half.
+ *   • Prominence-weighted farthest-point sampling recovered only to 51–66 %,
+ *     because a fin short enough to sit at the end of the row is short enough to
+ *     lose every tie-break.
+ *
+ * So each surviving fin stands for a contiguous *group* of the row: it is the
+ * group's most prominent member, moved to the middle of the group's footprint
+ * and widened to cover it. That is `basalt.ts`'s LOD3 argument taken to a row
+ * rather than to a point — real geometry from the same shape function at its
+ * coarsest, not a stand-in that shades differently — and because the cut
+ * distances are fractions of the half-width, widening the plate rescales its
+ * taper and its chip with it instead of eating them.
+ *
+ * The group's height is its members' mean, except for the group holding the
+ * tallest fin, which keeps that fin's own height: the peak of the silhouette is
+ * the one number a collider and a skyline both depend on. Taking the lead's
+ * height everywhere instead raised the ends of the row by up to 2.8 m, which is
+ * a *larger* error at the crossfade than the one it was fixing.
+ */
+const foldFins = (fins: readonly Fin[], keep: number): Fin[] => {
+  if (keep >= fins.length) {
+    return [...fins]
+  }
+
+  const tallest = fins[0]!
+  const ordered = [...fins].sort((a, b) => a.x - b.x)
+  const folded: Fin[] = []
+
+  for (let g = 0; g < keep; g++) {
+    const group = ordered.filter((_, i) => Math.floor((i * keep) / ordered.length) === g)
+    if (group.length === 0) {
+      continue
+    }
+
+    let lead = group[0]!
+    for (const fin of group) {
+      if (fin.prominence > lead.prominence) {
+        lead = fin
+      }
+    }
+    if (group.length === 1) {
+      folded.push(lead)
+      continue
+    }
+
+    // The lead's own width axis, because a plate can only grow sideways: object
+    // space +X turned by the fin's bearing.
+    _axis.set(Math.cos(lead.yaw), 0, -Math.sin(lead.yaw))
+    let low = Number.POSITIVE_INFINITY
+    let high = Number.NEGATIVE_INFINITY
+    let heightSum = 0
+    for (const fin of group) {
+      const along = (fin.x - lead.x) * _axis.x + (fin.z - lead.z) * _axis.z
+      low = Math.min(low, along - fin.halfWidth)
+      high = Math.max(high, along + fin.halfWidth)
+      heightSum += fin.halfHeight
+    }
+
+    const middle = (low + high) * 0.5
+    const halfHeight = group.includes(tallest) ? lead.halfHeight : heightSum / group.length
+    const merged: Fin = {
+      ...lead,
+      halfWidth: (high - low) * 0.5,
+      halfHeight,
+      x: lead.x + _axis.x * middle,
+      z: lead.z + _axis.z * middle,
+      y: halfHeight * (1 - 2 * BURY),
+      matrix: new Matrix4()
+    }
+    merged.matrix = composeFin(merged)
+    folded.push(merged)
+  }
+
+  // Back into prominence order, because that is the order `allocateGrids`
+  // spends in — the groups came out sorted along the row.
+  return folded.sort((a, b) => b.prominence - a.prominence)
+}
+
 interface ShardTier {
-  /** Fins kept. Only LOD3 drops any — see the header for the measurement. */
+  /** Fins kept. Only LOD3 is below the maximum — see `foldFins`. */
   fins: number
   budget: number
   aoSamples: number
@@ -545,7 +698,7 @@ const allocationCeiling = (tier: number, spent: number): number => {
   return Math.min(budget, Math.floor(spent * (budget / TIERS[tier - 1]!.budget)))
 }
 
-const buildFin = (fin: Fin, grid: readonly [number, number], widen: number): BufferGeometry => {
+const buildFin = (fin: Fin, grid: readonly [number, number]): BufferGeometry => {
   const widthSegments = grid[0]
   // `blobGeometry` multiplies by `1/cos(π/W)^0.6` before the scale; dividing the
   // scale by the same factor cancels it exactly. See the header for why a plate
@@ -557,24 +710,19 @@ const buildFin = (fin: Fin, grid: readonly [number, number], widen: number): Buf
     widthSegments,
     heightSegments: grid[1],
     lumps: fin.lumps,
-    cuts: cutPlanesFor(fin, widen),
-    scale: _scale.set(fin.halfWidth * widen, fin.halfHeight, fin.halfThick).divideScalar(inflate)
+    cuts: cutPlanesFor(fin),
+    scale: _scale.set(fin.halfWidth, fin.halfHeight, fin.halfThick).divideScalar(inflate)
   })
 
   return geometry.applyMatrix4(fin.matrix)
 }
 
-const buildTier = (shape: ShardShape, tier: ShardTier, name: string): BufferGeometry => {
-  const kept = shape.fins.slice(0, Math.min(tier.fins, shape.fins.length))
-  // Width only. A fin that gets thicker stops being a fin, and the coverage the
-  // dropped plates carried was along the row, not across it. The exponent is
-  // `basalt.ts`'s, and for the same reason: the survivors already overlap what
-  // their neighbours covered, so conserving footprint outright makes a slab.
-  const widen = (shape.fins.length / kept.length) ** 0.28
-  const levels = allocateGrids(kept.length, tier.budget)
+const buildTier = (shape: ShardShape, tier: ShardTier, ceiling: number, name: string): BufferGeometry => {
+  const kept = foldFins(shape.fins, tier.fins)
+  const levels = allocateGrids(kept.length, ceiling)
 
   const parts = kept.map((fin, i) => {
-    const geometry = buildFin(fin, GRIDS[levels[i]!]!, widen)
+    const geometry = buildFin(fin, GRIDS[levels[i]!]!)
     // Per fin, before the merge: the ramp reads the geometry's own box, so one
     // call on the merged cluster would give a 3 m fin the top of a 7 m one and
     // the whole row would flatten into a single gradient.
@@ -617,7 +765,12 @@ export const createShardWallAsset = (options: ShardWallOptions = {}): WorldAsset
   const shape = buildShape(options)
   const name = `shard-${form}-${shape.banding > 0 ? 'banded' : 'plain'}-${options.seed ?? 1}`
 
-  const tiers = TIERS.map((tier, i) => buildTier(shape, tier, `${name}/LOD${i}`))
+  let spent = 0
+  const tiers = TIERS.map((tier, i) => {
+    const geometry = buildTier(shape, tier, allocationCeiling(i, spent), `${name}/LOD${i}`)
+    spent = triangleCount(geometry)
+    return geometry
+  })
 
   return {
     name,
@@ -650,6 +803,11 @@ export const createShardWallAsset = (options: ShardWallOptions = {}): WorldAsset
  * Not walkable, and not a judgement call: the tops are chipped and a few
  * centimetres wide, so a walkable box would put the player standing on a
  * rectangle of thin air spanning the whole row.
+ *
+ * `height` is the tallest fin's apex as the **finest grid** samples it, which is
+ * LOD0's own top rather than that of a continuous surface nothing draws — the
+ * shape is rescaled at generation time to make the two the same number, so the
+ * `height` option means what it says (see `buildShape`).
  */
 export const shardWallMetrics = (
   options: ShardWallOptions = {}

@@ -1,5 +1,5 @@
 import type { WorldAsset } from '../assets/types'
-import { PerspectiveCamera, Scene, Vector3, type WebGLRenderer } from 'three'
+import { type Mesh, PerspectiveCamera, Scene, Vector3, type WebGLRenderer } from 'three'
 import { createBoulderAsset, createStoneAsset } from '../assets/rock'
 import { createTreeAsset } from '../assets/tree'
 import {
@@ -16,10 +16,10 @@ import { budgetLedger } from '../geometry/budget'
 import { buildStartingLevel } from '../level/startingLevel'
 import type { Placement } from '../level/types'
 import { updateLodBiasFromView } from '../lod/config'
-import type { InstancedLodField } from '../lod/InstancedLodField'
+import { InstancedLodField, type InstanceTransform } from '../lod/InstancedLodField'
 import { Profiler } from '../perf/Profiler'
 import { createPlayer, type Player } from '../player'
-import { createScatterField } from '../scatter'
+import { addChunkScatter, maxInstancesPerChunk, type ScatterOptions } from '../scatter'
 import { updateUnitsPerPixel, worldUniforms } from '../shading/globals'
 import { Heightfield } from '../terrain/heightfield'
 import { Terrain } from '../terrain/Terrain'
@@ -107,8 +107,13 @@ export class World {
     renderScale: 1
   }
 
+  private readonly sky: Mesh
   private readonly lights: LightRig
   private readonly fields: InstancedLodField[] = []
+  /** Per-species scatter config, consulted by the terrain load hook. */
+  private readonly scatterSpecies: { field: InstancedLodField; options: ScatterOptions }[] = []
+  /** Reused across every chunk load — placement generation must not allocate. */
+  private readonly scatterScratch: InstanceTransform[] = []
   private readonly assets: WorldAsset[] = []
   private rafId: number | null = null
   private lastTime = 0
@@ -142,11 +147,21 @@ export class World {
     this.controller = new OrbitCameraController(this.camera)
     this.profiler = new Profiler(this.renderer)
 
-    this.scene.add(createSky())
-    this.lights = createLightRig(this.scene)
+    // Held, not just added: the dome has to follow the camera. It is a finite
+    // sphere, so with a streamed (unbounded) world the player eventually walks
+    // out through it and the horizon renders as black wedges — which is exactly
+    // what happened at 1 km once terrain stopped being bounded.
+    this.sky = createSky()
+    this.scene.add(this.sky)
+    this.lights = createLightRig(this.scene, { camera: this.camera })
 
     const field = new Heightfield({ seed })
-    this.terrain = new Terrain(field, { size: worldSize, chunkSize: 48 })
+    // `size` is deliberately NOT passed: with scatter streaming per chunk there
+    // is nothing left that assumes a bounded world, so the terrain is infinite.
+    // The starting level still sits near the origin; it just no longer defines
+    // the edge of everything.
+    const loadRadius = 190
+    this.terrain = new Terrain(field, { chunkSize: 48, loadRadius })
     this.scene.add(this.terrain.group)
     this.profiler.registerRoot(this.terrain.group, 'terrain')
 
@@ -155,55 +170,88 @@ export class World {
     // Several seeded variants per species rather than one. Instancing means a
     // variant costs one extra draw call per visible tier, and three visibly
     // different trees is the difference between a forest and a wallpaper.
+    //
+    // Fields are now empty shells: instances arrive per chunk from the terrain
+    // streamer's load hook, so the world is unbounded and only what's nearby is
+    // resident.
+    const species: { asset: WorldAsset; tag: string; scatter: ScatterOptions }[] = []
+
     const treeSeeds = [11, 29, 47]
-    let treeInstances = 0
     for (let i = 0; i < treeSeeds.length; i++) {
-      const asset = createTreeAsset({ seed: treeSeeds[i]!, height: 5.0 + i * 0.7 })
-      const scatter = createScatterField(field, asset, {
-        extent: worldSize - 24,
-        spacing: spacingOf(11 + i * 2),
-        seed: 300 + i * 97,
-        maxSlope: 0.34,
-        clusterSize: 95,
-        clusterThreshold: 0.47,
-        clearRadius: 16
+      species.push({
+        asset: createTreeAsset({ seed: treeSeeds[i]!, height: 5.0 + i * 0.7 }),
+        tag: 'trees',
+        scatter: {
+          spacing: spacingOf(11 + i * 2),
+          seed: 300 + i * 97,
+          maxSlope: 0.34,
+          clusterSize: 95,
+          clusterThreshold: 0.47,
+          clearRadius: 16
+        }
       })
-      this.registerField(asset, scatter, 'trees')
-      treeInstances += scatter.count
     }
 
-    let rockInstances = 0
     for (const [i, seed] of [23, 61].entries()) {
-      const asset = createBoulderAsset({ seed })
-      const scatter = createScatterField(field, asset, {
-        extent: worldSize - 24,
-        spacing: spacingOf(26 + i * 7),
-        seed: 700 + i * 131,
-        maxSlope: 0.5,
-        clusterSize: 140,
-        clusterThreshold: 0.42,
-        sink: 0.28,
-        scaleRange: [0.7, 1.5],
-        clearRadius: 10
+      species.push({
+        asset: createBoulderAsset({ seed }),
+        tag: 'boulders',
+        scatter: {
+          spacing: spacingOf(26 + i * 7),
+          seed: 700 + i * 131,
+          maxSlope: 0.5,
+          clusterSize: 140,
+          clusterThreshold: 0.42,
+          sink: 0.28,
+          scaleRange: [0.7, 1.5],
+          clearRadius: 10
+        }
       })
-      this.registerField(asset, scatter, 'boulders')
-      rockInstances += scatter.count
     }
 
     for (const [i, seed] of [5, 91].entries()) {
-      const asset = createStoneAsset({ seed })
-      const scatter = createScatterField(field, asset, {
-        extent: worldSize - 24,
-        spacing: spacingOf(7 + i * 3),
-        seed: 900 + i * 173,
-        maxSlope: 0.55,
-        clusterSize: 60,
-        clusterThreshold: 0.44,
-        sink: 0.1,
-        scaleRange: [0.6, 1.4]
+      species.push({
+        asset: createStoneAsset({ seed }),
+        tag: 'stones',
+        scatter: {
+          spacing: spacingOf(7 + i * 3),
+          seed: 900 + i * 173,
+          maxSlope: 0.55,
+          clusterSize: 60,
+          clusterThreshold: 0.44,
+          sink: 0.1,
+          scaleRange: [0.6, 1.4]
+        }
       })
-      this.registerField(asset, scatter, 'stones')
-      rockInstances += scatter.count
+    }
+
+    const chunkSize = this.terrain.size
+    // Slots must cover every chunk that can be resident at once — the *unload*
+    // radius, not the load radius, since a chunk lingers past the load boundary
+    // by design. Over-reserving costs a few hundred KB; running out drops
+    // scatter silently in the middle of a traversal.
+    const residentChunks = Math.ceil((Math.PI * (loadRadius * 1.25) ** 2) / (chunkSize * chunkSize)) + 8
+
+    for (const entry of species) {
+      const capacity = residentChunks * maxInstancesPerChunk(entry.scatter.spacing, chunkSize)
+      const scatter = new InstancedLodField(entry.asset, capacity)
+      this.registerField(entry.asset, scatter, entry.tag)
+      this.scatterSpecies.push({ field: scatter, options: entry.scatter })
+    }
+
+    // Scatter rides the terrain's residency decisions rather than running its
+    // own — two systems deciding independently what is loaded eventually
+    // disagree, and the failure mode is a tree standing on a chunk that no
+    // longer exists.
+    this.terrain.onChunkLoad = (key, originX, originZ, size) => {
+      for (const entry of this.scatterSpecies) {
+        addChunkScatter(entry.field, field, entry.options, key, originX, originZ, size, this.scatterScratch)
+      }
+    }
+    this.terrain.onChunkUnload = key => {
+      for (const entry of this.scatterSpecies) {
+        entry.field.removeCell(key)
+      }
     }
 
     // ── Camera ─────────────────────────────────────────────────────────────
@@ -243,8 +291,8 @@ export class World {
 
     this.buildInfo = {
       buildMs: performance.now() - buildStart,
-      treeInstances,
-      rockInstances,
+      treeInstances: 0,
+      rockInstances: 0,
       terrainChunks: this.terrain.chunks.length,
       placeables: placeables.length,
       seededProps: seeded,
@@ -310,6 +358,9 @@ export class World {
       // thickness with the window and LOD would coarsen on a resize.
       updateUnitsPerPixel(this.camera.fov, bufferHeight)
       updateLodBiasFromView(bufferHeight, this.camera.fov)
+      // Cascade splits are derived from the projection, and CSM only refreshes
+      // their uniforms here — `update()` re-fits the lights but not the splits.
+      this.lights.onProjectionChanged()
     }
   }
 
@@ -410,6 +461,11 @@ export class World {
       scatter.update(this.camera, this.camera.position)
       this.profiler.endCpu(tag)
     }
+
+    // Recentre the sky on the viewer. Depth write is off and it renders first,
+    // so moving it costs nothing and keeps the horizon closed at any distance
+    // from the origin.
+    this.sky.position.copy(this.camera.position)
 
     this.renderer.render(this.scene, this.camera)
     this.profiler.endFrame(this.renderer, now)

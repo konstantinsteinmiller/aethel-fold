@@ -67,11 +67,11 @@ import type { WorldAsset } from './types'
  *
  *   • **max, not sum.** A sum of the same circles is smooth everywhere and
  *     renders as the dowel this file exists to avoid.
- *   • **sample on the arris.** Segment counts are `2 × LOBES` down to LOD2 and
- *     `LOBES` at LOD3+LOD2's fallback, never a number coprime with the bundle;
- *     at 8 the mesh lands on all four crests *and* all four valley arrises, and
- *     at 4 it still lands on every crest. A trunk at 7 or 9 segments renders the
- *     same section as a smooth polygon and the flutes never reach a triangle.
+ *   • **sample on the arris.** Segment counts are `2 × LOBES` at LOD0 and LOD1
+ *     and `LOBES` at LOD2 — never a number coprime with the bundle. At 8 the
+ *     mesh lands on all four crests *and* all four valley arrises; at 4 it still
+ *     lands on every crest. A trunk at 7 or 9 segments renders the same section
+ *     as a smooth polygon and the flutes never reach a triangle at all.
  *
  * ── Limbs are lofts in a rotated frame, not `tubeGeometry` ──────────────────
  *
@@ -244,7 +244,7 @@ interface OakClump {
   lumps: Lump[]
 }
 
-export interface OldOakShape {
+interface OldOakShape {
   height: number
   trunkTop: number
   splitY: number
@@ -258,7 +258,6 @@ export interface OldOakShape {
   mossTop: number
   limbs: OakLimb[]
   clumps: OakClump[]
-  canopyCenter: Vector3
   /** Peak of the canopy's support function — the cull radius and AO scale. */
   canopyRadius: number
   /** Its mean over bearings — what the LOD3 impostor is solved against. */
@@ -321,7 +320,7 @@ const makeLimbFrame = (origin: Vector3, bearing: number, tilt: number, out: Matr
 const _localTip = new Vector3()
 const _outward = new Vector3()
 
-export const buildShape = (options: OldOakOptions): OldOakShape => {
+const buildShape = (options: OldOakOptions): OldOakShape => {
   const { seed = 1, height = 11 } = options
   const rng = makeRng(seed)
 
@@ -396,9 +395,9 @@ export const buildShape = (options: OldOakOptions): OldOakShape => {
     const radius = outerRadius * rng.range(0.92, 1.08)
     clumps.push({
       // Inboard along the bearing and up by half the clump's own squashed
-      // half-height, which leaves the tip about two thirds of the way to the
-      // clump's surface — buried, but not so deep that the limb stops carrying
-      // the canopy's weight visually.
+      // half-height, which puts the tip a bit past half way to the clump's
+      // surface — buried at every seed (measured worst case 0.54), but not so
+      // deep that the limb stops looking like it carries the canopy.
       center: _localTip
         .clone()
         .addScaledVector(_outward, -radius * 0.4)
@@ -467,15 +466,11 @@ export const buildShape = (options: OldOakOptions): OldOakShape => {
     makeLimbFrame(limb.origin, limb.bearing, limb.tilt, limb.frame)
   }
 
-  const canopyCenter = new Vector3()
   let canopyRadius = 0
   let canopyBottom = Number.POSITIVE_INFINITY
   for (const clump of clumps) {
     clump.center.multiplyScalar(k)
     clump.radius *= k
-    canopyCenter.addScaledVector(clump.center, 1 / clumps.length)
-  }
-  for (const clump of clumps) {
     canopyBottom = Math.min(canopyBottom, clump.center.y - clump.radius * clump.squash)
   }
 
@@ -522,7 +517,6 @@ export const buildShape = (options: OldOakOptions): OldOakShape => {
     mossTop: splitY + (limbs[0]?.length ?? 0) * 0.45,
     limbs,
     clumps,
-    canopyCenter,
     canopyRadius,
     canopyMeanRadius,
     canopyBottom,
@@ -709,13 +703,17 @@ const buildClump = (clump: OakClump, widthSegments: number, heightSegments: numb
     scale: new Vector3(1, clump.squash, 1)
   })
 
-  // The foliage law (GDD R3). `radiusBias` is more than double `tree.ts`'s
-  // because this canopy is a flat umbrella rather than a ball: at 0.18 the top
-  // of a squashed clump still curls over into the mid band and the umbrella
-  // reads as a row of separate cushions. Pushing the virtual centre most of a
-  // radius down flattens the whole top into the light band, which is what makes
-  // the canopy read as one continuous mass.
-  blendNormalsToSphere(geometry, new Vector3(0, 0, 0), 0.85, clump.radius * 0.42)
+  // The foliage law (GDD R3), at the mandated 0.85.
+  //
+  // `radiusBias` is held just above `tree.ts`'s 0.18 rather than scaled up with
+  // the squash, and that restraint is deliberate. The bias offsets the *virtual*
+  // centre, so its influence grows as `atan(bias / r)` toward the equator: at
+  // 0.42 a point 78 % of the way to this clump's pole shades at 40° off
+  // horizontal instead of the surface's true 83°, which is a rounder, darker
+  // clump — the opposite of the flat top it is supposed to buy. The umbrella's
+  // flatness comes from the *layout* (§ Canopy, and the crown clumps' height
+  // above the outer ring), not from bending the normals until it appears.
+  blendNormalsToSphere(geometry, new Vector3(0, 0, 0), 0.85, clump.radius * 0.22)
 
   // `paintRadial` replaces; the other two blend into what is already there.
   paintUniform(geometry, C.foliageBase)
@@ -748,9 +746,11 @@ interface OakTier {
  * The trunk keeps `2 × LOBES` down to LOD1 and spends its reduction on rings,
  * which is the cliff family's rule and applies for the same reason: the fused
  * section is what makes the bole recognisable, the profile is only its pose.
- * LOD2 is the exception — at 117 m (this asset's LOD1→LOD2 switch, at
- * `distanceScale` 2.6) a 1.7 m trunk is a couple of pixels wide, and the tier
- * needs those four triangles for the canopy, which is still 20 across.
+ * LOD2 is the exception, and it is a placement argument rather than a section
+ * one: at 117 m — this asset's LOD1→LOD2 switch, at `distanceScale` 2.6 — a
+ * 1.7 m bole is a couple of pixels wide while the canopy is still 10 m across,
+ * so the four triangles the second lobe pass costs buy nothing there and buy a
+ * whole clump ring in the canopy.
  */
 const TIERS: OakTier[] = [
   {
@@ -869,7 +869,7 @@ const buildImpostor = (shape: OldOakShape, name: string): BufferGeometry => {
     lumps: source.lumps,
     scale: new Vector3(1, squash, 1)
   })
-  blendNormalsToSphere(canopy, new Vector3(0, 0, 0), 0.9, radius * 0.4)
+  blendNormalsToSphere(canopy, new Vector3(0, 0, 0), 0.9, radius * 0.22)
   paintUniform(canopy, C.foliageBase)
   paintRadial(canopy, new Vector3(0, radius * 0.35, 0), C.foliageBase, C.foliageDeep, radius * 1.7)
   paintByUpness(canopy, C.foliageLit, 0.5, 2)

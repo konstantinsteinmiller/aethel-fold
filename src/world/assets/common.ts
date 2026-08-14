@@ -50,6 +50,46 @@ export const mergeParts = (parts: BufferGeometry[], name: string): BufferGeometr
   return merged
 }
 
+/**
+ * Object-space reach: the distance from the origin to the furthest vertex of
+ * **any** tier.
+ *
+ * This is what `WorldAsset.radius` is supposed to be, and hand-deriving it from
+ * the shape description reliably under-reports. Measured across the catalogue,
+ * ten of twenty-nine props published a radius short of their own mesh — from
+ * 0.5 % on a plateau to **27.7 % on the grass-capped boulder** — because the
+ * derivation misses whatever the generator adds *after* it: the section's area
+ * inflation, a lump field's peak, a grass cap's 1.03 rim lap, a canopy clump's
+ * outermost lobe.
+ *
+ * The consequence is not cosmetic. The radius drives instanced frustum culling,
+ * so a prop whose radius is 27 % short is dropped while a quarter of it is still
+ * inside the frustum — it vanishes at the screen edge as the camera pans, which
+ * reads as a streaming failure rather than as a culling one.
+ *
+ * Every tier is measured, not just LOD0. Tiers are size-corrected against *each
+ * other* (§4.3), never against the published radius, so the tier that pokes out
+ * furthest is routinely a coarse one — the ancient oak's LOD0 reaches 11.11 m
+ * and one of its coarse tiers reaches 11.29 m.
+ */
+export const measuredRadius = (tiers: readonly BufferGeometry[]): number => {
+  let furthest = 0
+  for (const geometry of tiers) {
+    const position = geometry.getAttribute('position')
+    const array = position.array as ArrayLike<number>
+    for (let i = 0; i < position.count; i++) {
+      const x = array[i * 3]!
+      const y = array[i * 3 + 1]!
+      const z = array[i * 3 + 2]!
+      const distanceSq = x * x + y * y + z * z
+      if (distanceSq > furthest) {
+        furthest = distanceSq
+      }
+    }
+  }
+  return Math.sqrt(furthest)
+}
+
 /** Vertex range of each part inside the merged buffer, in merge order. */
 export const partRanges = (parts: BufferGeometry[]): { start: number; count: number }[] => {
   const ranges: { start: number; count: number }[] = []
