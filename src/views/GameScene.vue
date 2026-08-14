@@ -49,7 +49,8 @@ import {
   claimReward, canOfferReward, adInFlight, isRewardGated,
   canShowInterstitial, markInterstitialShown
 } from '@/use/useAdGate'
-import { signalGameplayLoaded, syncGameplayLifecycle } from '@/use/useCrazyGames'
+import { signalGameplayLoaded } from '@/use/useCrazyGames'
+import { syncGameplayLifecycle } from '@/use/useGameplayLifecycle'
 import { isAnyModalOpen } from '@/use/useModalState'
 import { playFirstStartInterstitial } from '@/use/useFirstStartInterstitial'
 
@@ -1895,7 +1896,12 @@ onUnmounted(() => {
 // row of buttons falls past the edge. Drive the same values off the short axis.
 @media (orientation: landscape) and (max-height: 500px)
   .result
-    gap: 0.3rem
+    // 0.3rem left the dialog ~9px taller than a 764x385 Chromebook embed, which
+    // is not a cut-off button but IS a scrollbar over the defeat screen. The
+    // gap is the cheapest place to find it: the alternative was dropping the
+    // "(137 this run)" note, which is the half of the strip that tells the
+    // player why to press Defend Again.
+    gap: 0.08rem
 
   .result__wave
     font-size: clamp(0.95rem, 4vh, 1.3rem)
@@ -1910,7 +1916,7 @@ onUnmounted(() => {
   // Same reasoning as everything above it: drive the strip off the SHORT axis
   // in landscape, or it opens up widest exactly where there is least room.
   .result__stats
-    padding: 0.2rem 0.6rem
+    padding: 0.14rem 0.6rem
     border-radius: 0.55rem
 
   .result__stat-label

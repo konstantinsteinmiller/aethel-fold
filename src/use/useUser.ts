@@ -46,7 +46,7 @@ export const version: string = APP_VERSION
 
 // ─── Persisted settings ────────────────────────────────────────────────────
 //
-// Tower Siege persists FIVE user settings — difficulty, sound volume, music
+// 3d-world persists FIVE user settings — difficulty, sound volume, music
 // volume, locale, music track — as fields inside the single `tower_state`
 // blob (keys catalogued in `src/keys.ts`), never as their own localStorage
 // entries. On a platform build the blob goes through the patched

@@ -1,4 +1,4 @@
-// ─── Tower Siege — core domain types ────────────────────────────────────────
+// ─── 3d-world — core domain types ────────────────────────────────────────
 //
 // Pure data. No Vue, no DOM, no side effects — so the simulation is unit
 // testable in isolation and the renderer can consume snapshots without

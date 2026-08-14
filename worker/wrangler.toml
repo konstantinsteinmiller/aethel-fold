@@ -1,12 +1,12 @@
-name = "tower-siege-leaderboard"
+name = "3d-world-leaderboard"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
-# Fill `database_id` in after `wrangler d1 create tower-siege-leaderboard` —
+# Fill `database_id` in after `wrangler d1 create 3d-world-leaderboard` —
 # the command prints it.
 [[d1_databases]]
 binding = "DB"
-database_name = "tower-siege-leaderboard"
+database_name = "3d-world-leaderboard"
 database_id = "333cb2d9-e937-485e-bc5a-87efbad7d5fc"
 
 [vars]

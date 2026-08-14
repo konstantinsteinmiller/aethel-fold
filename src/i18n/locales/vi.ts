@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Tower Siege',
+  'gameName': '3d-world',
   'cancel': 'Hủy',
   'close': 'Đóng',
   'ok': 'OK',
@@ -267,5 +267,8 @@ export default {
     'retry': 'Thử lại', 'dismiss': 'bỏ qua'
   },
   'loading': { 'tooLong': 'Tải quá lâu? Hãy tắt trình chặn quảng cáo rồi làm mới trang.' },
-  'license': { 'denied': 'Từ chối truy cập: vui lòng mua giấy phép.' }
+  'license': { 'denied': 'Từ chối truy cập: vui lòng mua giấy phép.' },
+  'world': {
+    'controlsHint': 'Kéo để nhìn quanh · WASD để di chuyển · cuộn hoặc chụm để thu phóng'
+  }
 }

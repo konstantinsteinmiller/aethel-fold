@@ -59,7 +59,7 @@ const useCheats = () => {
 
   const { addCoins } = useTowerEconomy()
 
-  // Dev shortcuts, retargeted to Tower Siege. Waves are simulated rather than
+  // Dev shortcuts, retargeted to 3d-world. Waves are simulated rather than
   // jumped to (there is no "set wave" that produces a sensible tower), so the
   // useful cheats are resource / coin injection and wave + speed control.
   //

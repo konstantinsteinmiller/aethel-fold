@@ -9,7 +9,7 @@
 // the player's actual keys. The blob lets the next hydrate score local vs.
 // remote and pick a winner deterministically without prompting.
 //
-// Score formula (Tower Siege):
+// Score formula (3d-world):
 //   bestWave         × 500
 // + totalTechLevels  × 150
 // + runsPlayed       ×  10

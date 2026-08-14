@@ -3,7 +3,7 @@ import { ref, type Ref } from 'vue'
 /**
  * ─── `tower_state` — the single persisted state object ───────────────────────
  *
- * EVERY persisted value Tower Siege touches — meta progression, the resumable
+ * EVERY persisted value 3d-world touches — meta progression, the resumable
  * run snapshot, user settings, retention bookkeeping — lives inside ONE
  * in-memory record (`towerState`), and exactly ONE localStorage key is ever
  * written: `tower_state`.

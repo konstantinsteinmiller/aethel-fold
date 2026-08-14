@@ -272,7 +272,7 @@ describe('buildCsp', () => {
   })
 
   describe('leaderboard endpoint', () => {
-    const URL = 'https://tower-siege-leaderboard.example.workers.dev'
+    const URL = 'https://3d-world-leaderboard.example.workers.dev'
 
     it('folds the endpoint origin into connect-src', () => {
       // Derived from the build's own env rather than hard-coded, so pointing a

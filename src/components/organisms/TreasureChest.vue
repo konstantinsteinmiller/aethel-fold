@@ -4,7 +4,7 @@ import useTowerEconomy from '@/use/useTowerEconomy'
 import useSounds from '@/use/useSound.ts'
 import { spawnCoinExplosion } from '@/use/useCoinExplosion'
 import IconCoin from '@/components/icons/IconCoin.vue'
-// Persist through the unified `tower-siege_state` blob — getState/setState write
+// Persist through the unified `3d-world_state` blob — getState/setState write
 // the chest's collected-at key into the single in-memory record that the
 // SaveManager mirrors to localStorage AND the active platform SDK's cloud save.
 import { getState, setState } from '@/use/useTowerState'

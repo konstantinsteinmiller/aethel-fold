@@ -3,7 +3,7 @@
 // this folder mirror the shape. Vite ships each non-English locale as its own
 // lazy chunk (see `src/i18n/index.ts`).
 export default {
-  'gameName': 'Tower Siege',
+  'gameName': '3d-world',
   'cancel': 'Cancel',
   'close': 'Close',
   'ok': 'Ok',
@@ -387,5 +387,8 @@ export default {
   },
   'license': {
     'denied': 'Access Denied: Please purchase a license.'
+  },
+  'world': {
+    'controlsHint': 'Drag to look around · WASD to move · scroll or pinch to zoom'
   }
 }

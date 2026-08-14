@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Tower Siege',
+  'gameName': '3d-world',
   'cancel': 'Batal',
   'close': 'Tutup',
   'ok': 'Oke',
@@ -267,5 +267,8 @@ export default {
     'retry': 'Coba lagi', 'dismiss': 'tutup'
   },
   'loading': { 'tooLong': 'Memuat terlalu lama? Nonaktifkan pemblokir iklan lalu muat ulang.' },
-  'license': { 'denied': 'Akses ditolak: silakan beli lisensi.' }
+  'license': { 'denied': 'Akses ditolak: silakan beli lisensi.' },
+  'world': {
+    'controlsHint': 'Seret untuk melihat sekeliling · WASD untuk bergerak · gulir atau cubit untuk zoom'
+  }
 }

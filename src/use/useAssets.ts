@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { prependBaseUrl } from '@/utils/function'
 
-// Tower Siege draws all gameplay art programmatically (Canvas 2D) and uses
+// 3d-world draws all gameplay art programmatically (Canvas 2D) and uses
 // inline SVG for HUD icons, so the preloader only has to decode two pieces of
 // UI chrome. SFX decode on first play (see `useSound.ts`) and are warmed on an
 // idle slot after first paint; the splash exits as soon as the bundle parses.
@@ -238,7 +238,7 @@ const decodeImage = (src: string): Promise<void> => {
 // ─── Off-hot-path background warm-up ───────────────────────────────────────
 // Runs ONCE, after the splash has hidden (hot path done + first paint).
 //
-// Tower Siege draws every block, enemy and background layer procedurally, so
+// 3d-world draws every block, enemy and background layer procedurally, so
 // there is no gameplay art to decode here — the only deferred work is the SFX
 // buffer decode. Doing it on an idle slot means the first explosion of a
 // session doesn't pay a decode cost mid-frame, without delaying first paint.
@@ -258,7 +258,7 @@ const runBackgroundWarmup = (): void => {
 export default () => {
   const preloadAssets = async (): Promise<void> => {
     // ── HOT PATH ──
-    // Tower Siege has NO gameplay bitmaps: blocks, enemies, projectiles and the
+    // 3d-world has NO gameplay bitmaps: blocks, enemies, projectiles and the
     // whole background are drawn from code. The only critical images are the
     // splash logo and the result-screen ribbon, and the renderer chunk itself.
     //

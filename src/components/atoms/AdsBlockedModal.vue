@@ -14,7 +14,7 @@
 // flips the modal-visible flag. Mounted unconditionally in App.vue;
 // visibility is purely reactive on the flag.
 //
-// Wording is kid-safe because tower-siege targets ages 6+. No mention
+// Wording is kid-safe because 3d-world targets ages 6+. No mention
 // of "ad blocker brand X", no urging to disable site-wide — just a
 // gentle "we couldn't show your ad, please allow ads here to earn the
 // reward". Adult-audience games can swap copy via a simple text edit.

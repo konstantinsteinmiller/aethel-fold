@@ -1,4 +1,4 @@
-# Tower Siege
+# 3d-world
 
 A mobile-first 2D build-and-defend game. Stack blocks into a tower, bolt cannons
 and lightning coils onto it, and hold off waves of enemies marching in from both
@@ -6,7 +6,7 @@ sides. Every block has HP. When one breaks, anything it was holding up
 **collapses**. The run ends when the Gate falls — then you spend what you earned
 in the tech tree and build a taller, meaner tower.
 
-WIP: [playable demo](https://konstantinsteinmiller.github.io/tower-siege/)
+WIP: [playable demo](https://konstantinsteinmiller.github.io/3d-world/)
 
 
 Built with Vue 3 + TypeScript + Canvas 2D, shipping to CrazyGames, Playgama,

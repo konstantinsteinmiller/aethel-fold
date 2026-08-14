@@ -16,7 +16,7 @@
         div(:style="sizeStyle")
           img(
             :src="logoSrc"
-            alt="tower-siege"
+            alt="3d-world"
             class="w-full h-full object-contain"
             draggable="false"
           )

@@ -42,7 +42,7 @@ npx wrangler whoami
 ## 3. Create the database
 
 ```powershell
-npx wrangler d1 create tower-siege-leaderboard
+npx wrangler d1 create 3d-world-leaderboard
 ```
 
 It prints a block like this:
@@ -50,7 +50,7 @@ It prints a block like this:
 ```toml
 [[d1_databases]]
 binding = "DB"
-database_name = "tower-siege-leaderboard"
+database_name = "3d-world-leaderboard"
 database_id = "0f2c9a51-....-............"
 ```
 
@@ -73,7 +73,7 @@ answer `y`. You should see two `CREATE TABLE` statements and one `CREATE INDEX`
 execute.
 
 Verify from the dashboard if you like: **Storage & Databases → D1 →
-tower-siege-leaderboard → Tables** should now list `scores` and `board_cache`.
+3d-world-leaderboard → Tables** should now list `scores` and `board_cache`.
 
 ## 5. Deploy
 
@@ -85,8 +85,8 @@ On a brand-new account this asks you to register a `workers.dev` subdomain
 first — pick anything, it becomes part of the URL. When it finishes it prints:
 
 ```
-Published tower-siege-leaderboard
-  https://tower-siege-leaderboard.<your-subdomain>.workers.dev
+Published 3d-world-leaderboard
+  https://3d-world-leaderboard.<your-subdomain>.workers.dev
 ```
 
 **That URL is what the game needs.** Keep it.
@@ -95,12 +95,12 @@ Published tower-siege-leaderboard
 
 ```powershell
 # The board — empty at this point, which is the correct answer.
-Invoke-RestMethod https://tower-siege-leaderboard.<your-subdomain>.workers.dev/top
+Invoke-RestMethod https://3d-world-leaderboard.<your-subdomain>.workers.dev/top
 
 # Post a fake score and get a rank back.
 $body = @{ id = 'testplayer01'; name = 'Tester'; score = 137; wave = 21 } | ConvertTo-Json
 Invoke-RestMethod -Method Post -ContentType 'application/json' -Body $body `
-  https://tower-siege-leaderboard.<your-subdomain>.workers.dev/score
+  https://3d-world-leaderboard.<your-subdomain>.workers.dev/score
 ```
 
 The first returns `entries: {}` / `total: 0`. The second returns
@@ -112,7 +112,7 @@ Sanity-check the guards while you are here — both should be **rejected**:
 # 422: a score no run could produce at that wave.
 $bad = @{ id = 'testplayer01'; name = 'Cheat'; score = 999999999; wave = 3 } | ConvertTo-Json
 Invoke-RestMethod -Method Post -ContentType 'application/json' -Body $bad `
-  https://tower-siege-leaderboard.<your-subdomain>.workers.dev/score
+  https://3d-world-leaderboard.<your-subdomain>.workers.dev/score
 
 # 429: two writes for the same id inside the 3 s cooldown.
 ```
@@ -120,10 +120,10 @@ Invoke-RestMethod -Method Post -ContentType 'application/json' -Body $bad `
 Delete the test row when you are done:
 
 ```powershell
-npx wrangler d1 execute tower-siege-leaderboard --remote `
+npx wrangler d1 execute 3d-world-leaderboard --remote `
   --command "DELETE FROM scores WHERE id = 'testplayer01'"
 # The cached blob still holds the old table until the next write rebuilds it:
-npx wrangler d1 execute tower-siege-leaderboard --remote `
+npx wrangler d1 execute 3d-world-leaderboard --remote `
   --command "DELETE FROM board_cache"
 ```
 
@@ -132,7 +132,7 @@ npx wrangler d1 execute tower-siege-leaderboard --remote `
 In the repo root, edit `.env`:
 
 ```
-VITE_LEADERBOARD_URL=https://tower-siege-leaderboard.<your-subdomain>.workers.dev
+VITE_LEADERBOARD_URL=https://3d-world-leaderboard.<your-subdomain>.workers.dev
 ```
 
 Leave `VITE_LEADERBOARD_SECRET` empty for now (see "Signed submissions" below).
@@ -230,11 +230,11 @@ Then `npm run deploy` again.
 ## Watching it in production
 
 * **Live logs:** `npx wrangler tail` (from `worker/`), or the dashboard under
-  **Workers & Pages → tower-siege-leaderboard → Logs**.
+  **Workers & Pages → 3d-world-leaderboard → Logs**.
 * **Quota use:** same page, **Metrics**. The numbers to watch are requests/day
   (100k) and D1 rows written/day (100k). Reads are effectively free under this
   design — see the table in `README.md`.
-* **The data:** **Storage & Databases → D1 → tower-siege-leaderboard → Console**
+* **The data:** **Storage & Databases → D1 → 3d-world-leaderboard → Console**
   lets you run SQL straight from the browser, e.g.
   `SELECT * FROM scores ORDER BY score DESC LIMIT 20;`
 
@@ -248,9 +248,9 @@ duplicates from another player's rows.
 
 ```powershell
 cd worker
-npx wrangler d1 execute tower-siege-leaderboard --remote --command "DELETE FROM scores"
+npx wrangler d1 execute 3d-world-leaderboard --remote --command "DELETE FROM scores"
 # The materialised top-N is a separate row and does not clear itself.
-npx wrangler d1 execute tower-siege-leaderboard --remote --command "DELETE FROM board_cache"
+npx wrangler d1 execute 3d-world-leaderboard --remote --command "DELETE FROM board_cache"
 ```
 
 If you would rather keep the highest score per name, and you accept that every

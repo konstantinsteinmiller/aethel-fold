@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Tower Siege',
+  'gameName': '3d-world',
   'cancel': '取消',
   'close': '关闭',
   'ok': '确定',
@@ -267,5 +267,8 @@ export default {
     'retry': '重试', 'dismiss': '忽略'
   },
   'loading': { 'tooLong': '加载太久？请关闭广告拦截器并刷新页面。' },
-  'license': { 'denied': '访问被拒绝：请购买许可证。' }
+  'license': { 'denied': '访问被拒绝：请购买许可证。' },
+  'world': {
+    'controlsHint': '拖动环顾四周 · WASD 移动 · 滚轮或双指缩放'
+  }
 }

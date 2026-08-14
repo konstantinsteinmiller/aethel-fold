@@ -1,4 +1,4 @@
-# Tower Siege leaderboard
+# 3d-world leaderboard
 
 A single Cloudflare Worker in front of one D1 database. It is deliberately the
 smallest thing that can hold a public leaderboard honestly: the game bundle is
@@ -15,13 +15,13 @@ npm install
 
 # 1. Create the database. This prints a database_id — paste it into
 #    wrangler.toml under [[d1_databases]].
-npx wrangler d1 create tower-siege-leaderboard
+npx wrangler d1 create 3d-world-leaderboard
 
 # 2. Create the tables (remote = the real database, not the local emulator).
 npm run db:init
 
 # 3. Ship it. This prints the URL, e.g.
-#    https://tower-siege-leaderboard.<your-subdomain>.workers.dev
+#    https://3d-world-leaderboard.<your-subdomain>.workers.dev
 npm run deploy
 ```
 

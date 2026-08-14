@@ -1,6 +1,6 @@
 {
-  "name": "Tower Siege",
-  "short_name": "Tower Siege",
+  "name": "3d-world",
+  "short_name": "3d-world",
   "description": "Build a tower of cannons and crates, survive endless waves of siege, and rebuild it taller every run.",
   "display": "standalone",
   "display_override": [

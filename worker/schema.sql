@@ -1,4 +1,4 @@
--- ─── Tower Siege leaderboard schema ────────────────────────────────────────
+-- ─── 3d-world leaderboard schema ────────────────────────────────────────
 --
 -- Two tables. `scores` is one row per player — the board is a personal-best
 -- table, not a log of runs, so it grows with the player base rather than with

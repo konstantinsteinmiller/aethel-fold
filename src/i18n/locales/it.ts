@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Tower Siege',
+  'gameName': '3d-world',
   'cancel': 'Annulla',
   'close': 'Chiudi',
   'ok': 'Ok',
@@ -267,5 +267,8 @@ export default {
     'retry': 'Riprova', 'dismiss': 'ignora'
   },
   'loading': { 'tooLong': 'Il caricamento è troppo lento? Disattiva il blocco annunci e ricarica.' },
-  'license': { 'denied': 'Accesso negato: acquista una licenza.' }
+  'license': { 'denied': 'Accesso negato: acquista una licenza.' },
+  'world': {
+    'controlsHint': 'Trascina per guardarti intorno · WASD per muoverti · rotella o pizzico per lo zoom'
+  }
 }

@@ -4,7 +4,7 @@ import useUser from '@/use/useUser'
 import useSounds from '@/use/useSound'
 
 /**
- * ─── Tower Siege audio ──────────────────────────────────────────────────────
+ * ─── 3d-world audio ──────────────────────────────────────────────────────
  *
  * Two sources, one entry point (`playFx`):
  *

@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Tower Siege',
+  'gameName': '3d-world',
   'cancel': 'Bekor qilish',
   'close': 'Yopish',
   'ok': 'Ok',
@@ -267,5 +267,8 @@ export default {
     'retry': 'Qayta urinish', 'dismiss': 'yashirish'
   },
   'loading': { 'tooLong': 'Yuklash juda uzoq davom etyaptimi? Reklama bloklagichni o‘chirib, sahifani yangilang.' },
-  'license': { 'denied': 'Kirish rad etildi: iltimos, litsenziya sotib oling.' }
+  'license': { 'denied': 'Kirish rad etildi: iltimos, litsenziya sotib oling.' },
+  'world': {
+    'controlsHint': 'Atrofga qarash uchun suring · WASD — harakat · gʻildirak yoki chimdish — masshtab'
+  }
 }

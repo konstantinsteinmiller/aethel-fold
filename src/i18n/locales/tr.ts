@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Tower Siege',
+  'gameName': '3d-world',
   'cancel': 'İptal',
   'close': 'Kapat',
   'ok': 'Tamam',
@@ -267,5 +267,8 @@ export default {
     'retry': 'Yeniden dene', 'dismiss': 'kapat'
   },
   'loading': { 'tooLong': 'Yükleme çok mu uzun sürüyor? Reklam engelleyiciyi kapatıp sayfayı yenile.' },
-  'license': { 'denied': 'Erişim reddedildi: lütfen bir lisans satın al.' }
+  'license': { 'denied': 'Erişim reddedildi: lütfen bir lisans satın al.' },
+  'world': {
+    'controlsHint': 'Etrafa bakmak için sürükle · Hareket için WASD · Yakınlaştırmak için kaydır veya sıkıştır'
+  }
 }
