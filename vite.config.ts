@@ -116,6 +116,73 @@ const mawCampaignOverridesPlugin = (): Plugin => ({
   }
 })
 
+// ─── World-patch write-back (dev only) ─────────────────────────────────
+// The in-game level editor exports its changes as a TypeScript module, and
+// this is what lets that export reach the repository instead of the
+// clipboard:
+//
+//   POST /__editor/save-world-patch  { source }
+//     → overwrites src/world/level/worldPatch.generated.ts
+//
+// A clipboard-only export is the trap dreamion documented the hard way: it
+// looks like it worked, and the work is still one missed paste from gone.
+// Writing the file means the change shows up in `git diff`, which is where
+// a world patch has to be if it is going to be reviewed and distributed.
+//
+// Dev only — a production build has no server to write with, and the editor
+// falls back to the clipboard when the endpoint is absent.
+const WORLD_PATCH_FILE = resolve(
+  fileURLToPath(new URL('./src/world/level/worldPatch.generated.ts', import.meta.url))
+)
+const WORLD_PATCH_REL = 'src/world/level/worldPatch.generated.ts'
+
+// Sanity gate on the payload. This endpoint writes into `src/`, so it accepts
+// only something already shaped like the module it is replacing — a truncated
+// POST or a stray request must not be able to leave the tree uncompilable.
+const looksLikeWorldPatch = (source: string): boolean =>
+  source.includes("import type { WorldPatch } from './worldPatch'") &&
+  source.includes('export const WORLD_PATCH: WorldPatch = {') &&
+  source.includes('removedScatter:') &&
+  source.length < 8_000_000
+
+const worldPatchPlugin = (): Plugin => ({
+  name: 'world-patch-writeback',
+  // Writing the patch must NOT reload the page.
+  //
+  // The file is imported by `World.ts`, so Vite's default response to it
+  // changing is a full reload — which fires a second after the export button is
+  // pressed, wipes the status message that says the export worked, and throws
+  // away the camera position and everything else the session was holding. The
+  // editor has already applied the change live; the file is for the *next* boot.
+  // Verified in the browser: without this the "Wrote src/..." confirmation is
+  // gone before it can be read, and the button reads as doing nothing.
+  handleHotUpdate(ctx) {
+    if (resolve(ctx.file) === WORLD_PATCH_FILE) {
+      return []
+    }
+    return undefined
+  },
+  configureServer(server) {
+    server.middlewares.use('/__editor/save-world-patch', async (req, res, next) => {
+      if (req.method !== 'POST') { next(); return }
+      res.setHeader('Content-Type', 'application/json')
+      try {
+        const body = JSON.parse(await readBody(req)) as { source?: unknown }
+        if (typeof body.source !== 'string' || !looksLikeWorldPatch(body.source)) {
+          res.statusCode = 400
+          res.end(JSON.stringify({ error: 'expected { source } holding a WorldPatch module' }))
+          return
+        }
+        writeFileSync(WORLD_PATCH_FILE, body.source, 'utf-8')
+        res.end(JSON.stringify({ ok: true, path: WORLD_PATCH_REL }))
+      } catch (e) {
+        res.statusCode = 400
+        res.end(JSON.stringify({ error: String((e as Error).message) }))
+      }
+    })
+  }
+})
+
 // Read the package version directly so APP_VERSION resolves regardless of
 // how vite is invoked. `process.env.npm_package_version` is only set when
 // vite runs via `pnpm run <script>` — running `pnpm vite` directly leaves
@@ -149,6 +216,11 @@ export default defineConfig(({ mode, command }) => {
   // Campaign-overrides plugin — virtual module + dev write endpoints so
   // editor saves persist to `data/campaign-overrides.json` in the repo.
   plugins.push(mawCampaignOverridesPlugin())
+
+  // World-patch write-back — lets the level editor's "Export to code" land in
+  // `src/` instead of the clipboard. `configureServer` only runs under `vite
+  // dev`, so this is inert in a build.
+  plugins.push(worldPatchPlugin())
 
   // Only push the obfuscator if both conditions are met
   if (isProduction && shouldObfuscate) {

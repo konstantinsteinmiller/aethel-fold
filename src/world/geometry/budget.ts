@@ -20,7 +20,17 @@ export const budgetLedger: { name: string; tris: number; budget: number }[] = []
 
 export const assertTriBudget = (geometry: BufferGeometry, budget: number, name: string): BufferGeometry => {
   const tris = triangleCount(geometry)
-  budgetLedger.push({ name, tris, budget })
+  // Replace rather than append. Assets are generated once, but grass tiers are
+  // *re*generated whenever the player changes the detail level (see
+  // `grass/GrassField.ts`), and an append-only ledger would grow a fresh set of
+  // six rows on every menu click — the panel would show a scrolling history of
+  // settings rather than the world as it currently is.
+  const existing = budgetLedger.findIndex(entry => entry.name === name)
+  if (existing >= 0) {
+    budgetLedger[existing] = { name, tris, budget }
+  } else {
+    budgetLedger.push({ name, tris, budget })
+  }
 
   if (tris > budget) {
     const message = `[world] ${name} is ${tris} tris, budget is ${budget} (GDD §4.1)`

@@ -16,6 +16,7 @@ import { createShardWallAsset, shardWallMetrics } from './shardWall'
 import { createSlabAsset, slabMetrics } from './slab'
 import { DESERT_STONE } from './stone'
 import { createTreeAsset, treeMetrics } from './tree'
+import { createWaterfallAsset, waterfallMetrics } from '../water/waterfall'
 
 /**
  * ─── The placeable catalogue ────────────────────────────────────────────────
@@ -78,8 +79,30 @@ const HOODOO_TALL_SEED = 167
 const SHARD_WALL_SEED = 173
 const SHARD_CLUSTER_SEED = 179
 const SHARD_DESERT_SEED = 181
+const FALL_SPLASH_SEED = 191
+const FALL_CURTAIN_SEED = 193
+const FALL_BROAD_SEED = 197
+const FALL_RIBBON_SEED = 199
+const FALL_STRANDS_SEED = 211
 
-const buildDefinitions = (): PlaceableDefinition[] => {
+/**
+ * One catalogue row, not yet built.
+ *
+ * The array below returns **factories rather than definitions** for one reason:
+ * generating all 34 placeables is ~500 ms of geometry, AO baking and tier
+ * assembly on this desktop and 2.4–4 s under a 4× CPU throttle, and an array
+ * literal evaluates every element before it returns. Deferring the work off boot
+ * only moved that block; it did not divide it. A factory per row is what lets
+ * `registerPlaceablesIncremental` stop partway and hand the frame back.
+ *
+ * The shared metrics and the two assets computed at the top of the function are
+ * deliberately left eager — they are ~6 % of the cost, several rows depend on
+ * each of them, and memoising them individually would buy a few milliseconds in
+ * exchange for making every row read through a lazy accessor.
+ */
+type DefinitionFactory = () => PlaceableDefinition
+
+const definitionFactories = (): DefinitionFactory[] => {
   const plateauWide = { seed: PLATEAU_WIDE_SEED, form: 'wide' as const }
   const plateauTall = { seed: PLATEAU_TALL_SEED, form: 'tall' as const }
   const cliffBare = { seed: CLIFF_BARE_SEED, grassCap: false }
@@ -175,8 +198,22 @@ const buildDefinitions = (): PlaceableDefinition[] => {
   const squatWaist = hoodooMetrics(hoodooSquat)
   const tallWaist = hoodooMetrics(hoodooTall)
 
+  // ── Waterfalls ───────────────────────────────────────────────────────────
+  //
+  // Falls are ordinary placeables; the flat water is not. A waterfall is a
+  // point with a yaw and a uniform scale, which is exactly what a `Placement`
+  // describes — while a sea is non-uniformly sized and a river is a polyline,
+  // which is why those live in their own editor (`world/water/WaterEditor.ts`)
+  // with their own schema. Splitting on that line rather than on "is it water"
+  // is what keeps both stores honest.
+  const fallSplash = { seed: FALL_SPLASH_SEED, form: 'splash' as const }
+  const fallCurtain = { seed: FALL_CURTAIN_SEED, form: 'curtain' as const }
+  const fallBroad = { seed: FALL_BROAD_SEED, form: 'broad' as const }
+  const fallRibbon = { seed: FALL_RIBBON_SEED, form: 'ribbon' as const }
+  const fallStrands = { seed: FALL_STRANDS_SEED, form: 'strands' as const }
+
   return [
-    {
+    () => ({
       id: 'plateau-wide',
       label: 'Plateau (wide)',
       category: 'platform',
@@ -188,8 +225,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.75, 1.35]
-    },
-    {
+    }),
+    () => ({
       id: 'plateau-tall',
       label: 'Plateau (tall)',
       category: 'platform',
@@ -199,8 +236,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.8, 1.3]
-    },
-    {
+    }),
+    () => ({
       id: 'cliff-spire',
       label: 'Sea stack (bare)',
       category: 'cliff',
@@ -212,8 +249,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.2,
       defaultScale: 1,
       scaleRange: [0.8, 1.4]
-    },
-    {
+    }),
+    () => ({
       id: 'cliff-crown',
       label: 'Sea stack (grass crown)',
       category: 'cliff',
@@ -223,8 +260,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.2,
       defaultScale: 1,
       scaleRange: [0.8, 1.4]
-    },
-    {
+    }),
+    () => ({
       id: 'basalt-cluster',
       label: 'Basalt columns',
       category: 'platform',
@@ -236,8 +273,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.85, 1.25]
-    },
-    {
+    }),
+    () => ({
       id: 'slab-block',
       label: 'Stratified block',
       category: 'platform',
@@ -247,8 +284,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.9, 1.2]
-    },
-    {
+    }),
+    () => ({
       id: 'slab-step',
       label: 'Stratified step',
       category: 'platform',
@@ -258,8 +295,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.85, 1.25]
-    },
-    {
+    }),
+    () => ({
       id: 'grass-rock',
       label: 'Grass-capped boulder',
       category: 'platform',
@@ -269,8 +306,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.8, 1.35]
-    },
-    {
+    }),
+    () => ({
       id: 'rock-boulder',
       label: 'Boulder',
       category: 'rock',
@@ -282,8 +319,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.12,
       defaultScale: 1,
       scaleRange: [0.8, 1.25]
-    },
-    {
+    }),
+    () => ({
       id: 'rock-stone',
       label: 'Stone',
       category: 'rock',
@@ -295,8 +332,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.06,
       defaultScale: 1,
       scaleRange: [0.7, 1.3]
-    },
-    {
+    }),
+    () => ({
       id: 'tree-oak',
       label: 'Broadleaf tree',
       category: 'flora',
@@ -308,8 +345,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.1,
       defaultScale: 1,
       scaleRange: [0.8, 1.3]
-    },
-    {
+    }),
+    () => ({
       id: 'tree-crown',
       label: 'Broadleaf tree (crown)',
       category: 'flora',
@@ -325,8 +362,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.1,
       defaultScale: 1,
       scaleRange: [0.8, 1.25]
-    },
-    {
+    }),
+    () => ({
       id: 'tree-pine',
       label: 'Pine (spruce)',
       category: 'flora',
@@ -339,8 +376,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.12,
       defaultScale: 1,
       scaleRange: [0.75, 1.35]
-    },
-    {
+    }),
+    () => ({
       id: 'tree-fir',
       label: 'Pine (fir)',
       category: 'flora',
@@ -350,8 +387,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.12,
       defaultScale: 1,
       scaleRange: [0.75, 1.35]
-    },
-    {
+    }),
+    () => ({
       id: 'tree-pine-snow',
       label: 'Pine (snow-laden)',
       category: 'flora',
@@ -364,8 +401,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.12,
       defaultScale: 1,
       scaleRange: [0.75, 1.35]
-    },
-    {
+    }),
+    () => ({
       id: 'tree-birch',
       label: 'Birch',
       category: 'flora',
@@ -378,8 +415,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.08,
       defaultScale: 1,
       scaleRange: [0.8, 1.3]
-    },
-    {
+    }),
+    () => ({
       id: 'tree-oak-ancient',
       label: 'Ancient oak',
       category: 'flora',
@@ -393,10 +430,10 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.15,
       defaultScale: 1,
       scaleRange: [0.85, 1.2]
-    },
+    }),
 
     // ── Platforms: the pale stone family ─────────────────────────────────────
-    {
+    () => ({
       id: 'mesa-wide',
       label: 'Mesa (grass top)',
       category: 'platform',
@@ -410,8 +447,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.8, 1.3]
-    },
-    {
+    }),
+    () => ({
       id: 'mesa-butte',
       label: 'Butte (grass top)',
       category: 'platform',
@@ -421,8 +458,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.85, 1.25]
-    },
-    {
+    }),
+    () => ({
       id: 'pillar-tower',
       label: 'Stacked pillar (tower)',
       category: 'platform',
@@ -432,8 +469,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.85, 1.25]
-    },
-    {
+    }),
+    () => ({
       id: 'pillar-step',
       label: 'Stacked pillar (step)',
       category: 'platform',
@@ -443,10 +480,10 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.8, 1.35]
-    },
+    }),
 
     // ── Cliffs: the fin walls ────────────────────────────────────────────────
-    {
+    () => ({
       id: 'shard-wall',
       label: 'Shard wall',
       category: 'cliff',
@@ -461,8 +498,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.15,
       defaultScale: 1,
       scaleRange: [0.8, 1.35]
-    },
-    {
+    }),
+    () => ({
       id: 'shard-cluster',
       label: 'Shard cluster',
       category: 'cliff',
@@ -477,10 +514,10 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.15,
       defaultScale: 1,
       scaleRange: [0.75, 1.4]
-    },
+    }),
 
     // ── Desert: the same shapes in sandstone ─────────────────────────────────
-    {
+    () => ({
       id: 'mesa-desert',
       label: 'Desert mesa',
       category: 'desert',
@@ -490,8 +527,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.8, 1.3]
-    },
-    {
+    }),
+    () => ({
       id: 'butte-desert',
       label: 'Desert butte',
       category: 'desert',
@@ -501,8 +538,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.85, 1.25]
-    },
-    {
+    }),
+    () => ({
       id: 'hoodoo-squat',
       label: 'Hoodoo (squat)',
       category: 'desert',
@@ -521,8 +558,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       // one generator covering that whole range is most of why the desert reads
       // as a formation rather than as a row of identical props.
       scaleRange: [0.55, 1.6]
-    },
-    {
+    }),
+    () => ({
       id: 'hoodoo-tall',
       label: 'Hoodoo (tall)',
       category: 'desert',
@@ -532,8 +569,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.12,
       defaultScale: 1,
       scaleRange: [0.75, 1.3]
-    },
-    {
+    }),
+    () => ({
       id: 'pillar-desert',
       label: 'Desert pillar stack',
       category: 'desert',
@@ -543,8 +580,8 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: 0,
       defaultScale: 1,
       scaleRange: [0.85, 1.25]
-    },
-    {
+    }),
+    () => ({
       id: 'shard-desert',
       label: 'Desert shard wall',
       category: 'desert',
@@ -559,20 +596,81 @@ const buildDefinitions = (): PlaceableDefinition[] => {
       groundOffset: -0.15,
       defaultScale: 1,
       scaleRange: [0.8, 1.35]
-    }
+    }),
+
+    // ── Water ────────────────────────────────────────────────────────────────
+    //
+    // Every fall carries `collider: { kind: 'none' }`, and that is a design call
+    // rather than an omission. Walking through a curtain and standing in the
+    // hollow behind it is a genre staple, and the alternative fails badly in
+    // both directions: a collider sized to the visible sheet is an invisible
+    // wall in front of a cave, and one sized to the stone behind it blocks
+    // nothing the terrain doesn't already block. The splash pool is ankle-deep
+    // and reads as ground the player should be able to stand in.
+    () => ({
+      id: 'fall-splash',
+      label: 'Waterfall (splash)',
+      category: 'water',
+      asset: createWaterfallAsset(fallSplash),
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: -0.05,
+      defaultScale: 1,
+      scaleRange: [0.6, 1.6]
+    }),
+    () => ({
+      id: 'fall-curtain',
+      label: 'Waterfall (curtain)',
+      category: 'water',
+      asset: createWaterfallAsset(fallCurtain),
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: -0.08,
+      defaultScale: 1,
+      scaleRange: [0.7, 1.5]
+    }),
+    () => ({
+      id: 'fall-broad',
+      label: 'Waterfall (broad)',
+      category: 'water',
+      asset: createWaterfallAsset(fallBroad),
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: -0.1,
+      defaultScale: 1,
+      scaleRange: [0.75, 1.4]
+    }),
+    () => ({
+      id: 'fall-ribbon',
+      label: 'Waterfall (tall ribbon)',
+      category: 'water',
+      asset: createWaterfallAsset(fallRibbon),
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: -0.1,
+      defaultScale: 1,
+      scaleRange: [0.7, 1.5]
+    }),
+    () => ({
+      id: 'fall-strands',
+      label: 'Waterfall (strands)',
+      category: 'water',
+      asset: createWaterfallAsset(fallStrands),
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: -0.08,
+      defaultScale: 1,
+      scaleRange: [0.65, 1.55]
+    })
   ]
 }
 
-let definitions: PlaceableDefinition[] | null = null
+let factories: DefinitionFactory[] | null = null
+let cursor = 0
+const definitions: PlaceableDefinition[] = []
 
 /**
- * Registers every placeable in the world. Safe to call more than once.
- *
- * Idempotency is per-definition rather than a module-level "already ran" flag,
- * because `clearPlaceables()` exists: a flag would leave the catalogue
- * permanently empty after a clear, while checking each id re-populates it. The
- * generated assets are cached either way, so a second call costs a map lookup
- * per prop and no geometry.
+ * Builds one row and publishes it.
  *
  * The finite check runs over **every tier of every placeable**, not only the
  * ones generated by the cliff family. The generators in `plateau.ts` and friends
@@ -581,6 +679,91 @@ let definitions: PlaceableDefinition[] | null = null
  * once. A NaN in any of them renders as a solid black prop, which the art
  * contract bans outright (GDD R4) — so it is caught here, at generation, rather
  * than in a screenshot.
+ */
+/**
+ * What each row cost to generate, in ms, newest last.
+ *
+ * The frame budget can only stop *between* placeables, so the worst single row
+ * is the floor on how long a slice can block — which makes "which asset is
+ * expensive to build" a number with consequences, not trivia. Kept always (not
+ * DEV-gated): it is 34 floats, and the perf panel is a shipping surface.
+ */
+export const placeableBuildTimes: { id: string; ms: number }[] = []
+
+const buildOne = (factory: DefinitionFactory): PlaceableDefinition => {
+  const startedAt = performance.now()
+  const definition = factory()
+  placeableBuildTimes.push({ id: definition.id, ms: Math.round((performance.now() - startedAt) * 10) / 10 })
+  for (const [tier, geometry] of definition.asset.tiers.entries()) {
+    assertFiniteGeometry(geometry, `${definition.id}/LOD${tier}`)
+  }
+  // Widen — never narrow — the published bounding radius to the mesh's actual
+  // reach. See `measuredRadius`: a generator derives this number from its shape
+  // description, which misses everything applied afterwards, and ten of the
+  // props here shipped a radius short of their own geometry (the worst by
+  // 27.7 %). Since the radius drives instanced frustum culling, that is a prop
+  // vanishing while a quarter of it is still on screen.
+  //
+  // Corrected here rather than in ten generators because this is the one place
+  // every prop in the world is in scope, and because a generator that
+  // *deliberately* publishes a larger radius — the plateau reports its bounding-
+  // box corner so a player standing on the rim can't cull it — must keep it.
+  // `Math.max` is what makes both true at once.
+  definition.asset.radius = Math.max(definition.asset.radius, measuredRadius(definition.asset.tiers))
+  definitions.push(definition)
+  // Guarded, because `registerPlaceable` throws on a duplicate id and the
+  // catalogue can outlive this module: Vite hot-swaps `assets/index.ts` with a
+  // fresh cursor while `level/catalog.ts` keeps its registry, so the drain
+  // replays ids that are already there. That threw on the first row and killed
+  // the rest of the drain — a dev-only path, but the pre-drain code checked
+  // this and dropping the check was a regression, not a simplification.
+  if (!getPlaceable(definition.id)) {
+    registerPlaceable(definition)
+  }
+  return definition
+}
+
+/** How many rows the catalogue has, without building any of them. */
+export const placeableTotal = (): number => (factories ??= definitionFactories()).length
+
+/** How many have been generated so far. */
+export const placeableProgress = (): number => cursor
+
+/**
+ * Generates catalogue rows until `budgetMs` is spent, and returns `true` once
+ * the whole catalogue exists.
+ *
+ * Checked *after* each row rather than before, so the budget is a stopping rule
+ * and not a permission slip: with a check up front a 1 ms budget could still
+ * start a 60 ms row, and with zero rows built per call the loop would never
+ * finish. One row is therefore always the minimum unit of progress — the
+ * granularity of this system is a placeable, and no budget can subdivide it.
+ */
+export const registerPlaceablesIncremental = (budgetMs: number): boolean => {
+  factories ??= definitionFactories()
+  const started = performance.now()
+  while (cursor < factories.length) {
+    buildOne(factories[cursor++]!)
+    if (performance.now() - started >= budgetMs) {
+      break
+    }
+  }
+  return cursor >= factories.length
+}
+
+/**
+ * Registers every placeable in the world, in one blocking pass. Safe to call
+ * more than once.
+ *
+ * Idempotency is per-definition rather than a module-level "already ran" flag,
+ * because `clearPlaceables()` exists: a flag would leave the catalogue
+ * permanently empty after a clear, while checking each id re-populates it. The
+ * generated assets are cached either way, so a second call costs a map lookup
+ * per prop and no geometry.
+ *
+ * Prefer `registerPlaceablesIncremental` anywhere a frame is being drawn; this
+ * blocking form is for tests, for tools, and for the tail of an incremental
+ * drain that something suddenly needs finished *now*.
  *
  * ── Registration is not optional ────────────────────────────────────────────
  *
@@ -592,27 +775,14 @@ let definitions: PlaceableDefinition[] | null = null
  * up until someone opens the editor and cannot find the thing.
  */
 export const registerAllPlaceables = (): PlaceableDefinition[] => {
-  if (!definitions) {
-    definitions = buildDefinitions()
-    for (const definition of definitions) {
-      for (const [tier, geometry] of definition.asset.tiers.entries()) {
-        assertFiniteGeometry(geometry, `${definition.id}/LOD${tier}`)
-      }
-      // Widen — never narrow — the published bounding radius to the mesh's
-      // actual reach. See `measuredRadius`: a generator derives this number from
-      // its shape description, which misses everything applied afterwards, and
-      // ten of the props here shipped a radius short of their own geometry (the
-      // worst by 27.7 %). Since the radius drives instanced frustum culling,
-      // that is a prop vanishing while a quarter of it is still on screen.
-      //
-      // Corrected here rather than in ten generators because this is the one
-      // place every prop in the world is in scope, and because a generator that
-      // *deliberately* publishes a larger radius — the plateau reports its
-      // bounding-box corner so a player standing on the rim can't cull it — must
-      // keep it. `Math.max` is what makes both true at once.
-      definition.asset.radius = Math.max(definition.asset.radius, measuredRadius(definition.asset.tiers))
-    }
-  }
+  // `Infinity` never satisfies the stopping rule, so this drains in one pass —
+  // and picks up wherever an incremental drain left off rather than restarting.
+  registerPlaceablesIncremental(Infinity)
+  // Re-registration after a `clearPlaceables()`. Idempotency is per-definition
+  // rather than a module-level "already ran" flag because a flag would leave the
+  // catalogue permanently empty after a clear, while checking each id
+  // re-populates it — and from the cache, so this costs a map lookup per prop
+  // and no geometry.
   for (const definition of definitions) {
     if (!getPlaceable(definition.id)) {
       registerPlaceable(definition)

@@ -113,6 +113,8 @@ export class PlayerCollisionWorld implements CollisionWorld {
 
   private readonly colliders: Collider[] = []
   private count = 0
+  /** Colliders appended past `count` for one frame — see `beginTransientColliders`. */
+  private transientCount = 0
 
   private source: (() => Placement[]) | null = null
   private lastSource: Placement[] | null = null
@@ -145,14 +147,68 @@ export class PlayerCollisionWorld implements CollisionWorld {
     this.dirty = true
   }
 
+  /**
+   * Opens a batch of world-space colliders for this frame.
+   *
+   * Scattered props — trees, boulders, stones — are not `Placement`s and there
+   * are tens of thousands of them, so they cannot go through the placement path:
+   * that resolves a catalogue entry and a trig pair per prop and rebuilds
+   * wholesale when anything changes. Instead the caller queries a spatial index
+   * around the player and pushes only the handful within reach, every frame.
+   *
+   * They share the placement pool, appended after `count`, so the hot loops stay
+   * one contiguous walk over one array rather than two loops over two.
+   *
+   * Call once per frame *before* moving the player. `sync()` runs first so
+   * `count` is settled before anything is appended past it.
+   */
+  beginTransientColliders(): void {
+    this.sync()
+    this.transientCount = 0
+  }
+
+  /**
+   * Adds one upright cylinder for this frame.
+   *
+   * Never walkable. A tree trunk is something to walk *around*; making it
+   * standable would let the player levitate on contact, and `groundHeightAt`
+   * skips non-walkable colliders entirely so this also keeps them out of the
+   * ground query.
+   */
+  addTransientCylinder(x: number, z: number, baseY: number, topY: number, radius: number): void {
+    const collider = this.at(this.count + this.transientCount)
+    collider.kind = KIND_CYLINDER
+    collider.x = x
+    collider.z = z
+    collider.baseY = baseY
+    collider.topY = topY
+    collider.radius = radius
+    collider.halfX = radius
+    collider.halfZ = radius
+    collider.cos = 1
+    collider.sin = 0
+    collider.bound = radius
+    collider.walkable = false
+    this.transientCount++
+  }
+
+
   /** Kept in sync with the controller so the vertical overlap test stays honest. */
   setPlayerMetrics(playerHeight: number, stepHeight: number): void {
     this.playerHeight = playerHeight
     this.stepHeight = stepHeight
   }
 
-  /** Live collider count. For the debug HUD and for tests. */
+  /**
+   * Live collider count — placements plus this frame's transients.
+   * For the debug HUD and for tests.
+   */
   get colliderCount(): number {
+    return this.count + this.transientCount
+  }
+
+  /** Placement colliders only, excluding scatter. */
+  get placementColliderCount(): number {
     return this.count
   }
 
@@ -172,7 +228,8 @@ export class PlayerCollisionWorld implements CollisionWorld {
 
     let best = this.heightAt(x, z)
 
-    for (let i = 0; i < this.count; i++) {
+    const total = this.count + this.transientCount
+    for (let i = 0; i < total; i++) {
       const collider = this.colliders[i]!
       // Cheapest rejects first: not standable, already lower than what we have,
       // or out of reach above the probe.
@@ -238,7 +295,8 @@ export class PlayerCollisionWorld implements CollisionWorld {
 
       for (let pass = 0; pass < RELAX_PASSES; pass++) {
         let touched = false
-        for (let i = 0; i < this.count; i++) {
+        const total = this.count + this.transientCount
+        for (let i = 0; i < total; i++) {
           const collider = this.colliders[i]!
           if (collider.topY <= stepTop || collider.baseY >= head) {
             continue

@@ -1,4 +1,5 @@
 import type { Object3D, WebGLRenderer } from 'three'
+import type { InstancedBufferGeometry } from 'three'
 import { InstancedMesh, Mesh } from 'three'
 import { GpuTimer } from './GpuTimer'
 
@@ -67,6 +68,57 @@ export interface FrameStats {
   frameMsMax: number
   /** Frames in the window that missed a 60 Hz budget (>16.7 ms). */
   jankFrames: number
+  /**
+   * Cost of the profiler's own scene walk, on the frames it runs. Exposed
+   * because an instrument that cannot report its own overhead is one you cannot
+   * trust when it matters.
+   */
+  profilerMs: number
+  /**
+   * CPU time inside `renderer.render()` — draw submission, uniform uploads and
+   * the shadow passes, not GPU time.
+   *
+   * Split out because the per-tag CPU table only covers the systems that wrap
+   * themselves in `beginCpu`/`endCpu`, and on a constrained device those added
+   * up to 12.8 ms of a 31.8 ms frame. The missing 19 ms had no owner, and
+   * "unattributed" is where the wrong optimisation gets chosen: the far-field
+   * instance loop was about to be rebuilt on the assumption that it was the
+   * problem, when the scatter fields together cost 6 ms.
+   */
+  renderMs: number
+  /**
+   * Longest gap between frames ever seen, in ms — **unfiltered**.
+   *
+   * The percentile window discards deltas over a second as tab-switches, which
+   * is right for percentiles and wrong for finding freezes: a genuine 2.4 s
+   * stall from deferred asset generation reported a `worst` of 165 ms, because
+   * the real number had been thrown away as noise. A filter that hides the worst
+   * thing that happened needs a companion that doesn't.
+   */
+  longestStallMs: number
+  /**
+   * ─── What the frame rate would be with vsync out of the way ───────────────
+   *
+   * `fps` is pinned to the display: a 6 ms scene and a 15 ms scene both read 60.
+   * That is the single most misleading number on the panel, and the reason this
+   * project's rules say to judge by GPU ms rather than fps. This is the same
+   * information as a rate — how fast frames *could* be presented if each one
+   * started the moment the last finished.
+   *
+   * `1000 / max(cpuMs, gpuMs)`, because the two are pipelined: the CPU builds
+   * frame N+1 while the GPU draws frame N, so the ceiling is set by whichever
+   * stage is slower, not by their sum. Which one that is, is the actionable half
+   * of the number — hence `uncappedBy`.
+   *
+   * **It is an upper bound, and an optimistic one.** `cpuMs` covers our own loop
+   * between `beginFrame` and `endFrame` and nothing else: browser compositing,
+   * event dispatch, GC and rAF overhead are all outside it. Treat a large gap
+   * between this and `fps` as "there is headroom here", never as a promise of
+   * that number on an unlocked display.
+   */
+  uncappedFps: number
+  /** Which stage sets the ceiling above. `none` = nothing measured yet. */
+  uncappedBy: 'cpu' | 'gpu' | 'none'
 }
 
 interface Root {
@@ -80,6 +132,12 @@ const PERCENTILE_WINDOW = 240
 const PERCENTILE_INTERVAL = 15
 const FRAME_BUDGET_MS = 1000 / 60
 
+/**
+ * Frames between per-tag stat collections. The panel samples at 8 Hz, so
+ * anything under ~7 is measuring more often than anyone reads.
+ */
+const TAG_STATS_INTERVAL = 6
+
 /** Frames to let the pipeline settle after toggling visibility. */
 const ABLATION_WARMUP = 8
 /** Frames sampled per step. Median of these is the measurement. */
@@ -88,6 +146,15 @@ const ABLATION_SAMPLES = 14
 type AblationPhase = 'idle' | 'baseline' | 'tag'
 
 export class Profiler {
+  /**
+   * Whether anything is reading the per-tag table.
+   *
+   * Set by the perf panel from its own visibility. The tag walk traverses the
+   * whole scene graph, and the ablation profiler overrides this while it runs,
+   * so turning it off costs nothing that anyone can see.
+   */
+  collectTags = true
+
   readonly frame: FrameStats = {
     fps: 0,
     cpuMs: 0,
@@ -102,7 +169,12 @@ export class Profiler {
     frameMsP95: 0,
     frameMsP99: 0,
     frameMsMax: 0,
-    jankFrames: 0
+    jankFrames: 0,
+    profilerMs: 0,
+    renderMs: 0,
+    longestStallMs: 0,
+    uncappedFps: 0,
+    uncappedBy: 'none'
   }
 
   /** Tag stats, rebuilt each frame. Stable object identity per tag. */
@@ -115,6 +187,8 @@ export class Profiler {
 
   private frameStart = 0
   private frameTimes: number[] = []
+  /** EMA behind `uncappedFps` — see `updateUncapped`. */
+  private smoothedCpuMs = 0
 
   // Ring buffer of frame *deltas*, plus a scratch copy for sorting. The buffers
   // are preallocated and the sort is amortised across PERCENTILE_INTERVAL
@@ -127,6 +201,7 @@ export class Profiler {
   private deltaFilled = 0
   private lastFrameTime = 0
   private percentileCountdown = 0
+  private tagCountdown = 0
 
   // ── Ablation state ───────────────────────────────────────────────────────
   private phase: AblationPhase = 'idle'
@@ -204,8 +279,59 @@ export class Profiler {
     }
 
     this.recordFrameDelta(now)
-    this.collectTagStats()
+    this.updateUncapped()
+
+    // Per-tag stats walk the *entire* scene graph. The panel reads them at 8 Hz,
+    // so collecting at 60 Hz was pure waste — and not cheap waste: under a 4×
+    // CPU throttle this traversal was a measurable slice of a frame in which the
+    // systems it measures cost 2.26 ms combined. A profiler that distorts the
+    // frame it is measuring is worse than no profiler.
+    //
+    // The ablation profiler needs them fresh, so it forces every frame while it
+    // runs.
+    //
+    // `collectTags` is the panel saying whether anyone is looking. Minimising
+    // the panel stops the walk outright rather than merely hiding its output —
+    // an instrument nobody is reading should cost nothing, and this one is
+    // expensive enough to have shown up in its own measurements.
+    if ((this.collectTags && --this.tagCountdown <= 0) || this.phase !== 'idle') {
+      this.tagCountdown = TAG_STATS_INTERVAL
+      const started = performance.now()
+      this.collectTagStats()
+      this.frame.profilerMs = Math.round((performance.now() - started) * 100) / 100
+    } else {
+      this.frame.profilerMs = 0
+    }
+
     this.stepAblation()
+  }
+
+  /**
+   * The vsync-free frame rate ceiling. See `FrameStats.uncappedFps`.
+   *
+   * `cpuMs` is smoothed here rather than at the source: the raw per-frame value
+   * is what the panel shows and what makes a single expensive frame visible,
+   * while a *rate* computed from it would swing by hundreds of fps frame to
+   * frame and be unreadable. The GPU side arrives already smoothed with the same
+   * 0.85/0.15 weighting, so the two halves of the comparison match.
+   *
+   * Without the timer extension `gpuMs` is 0 and this reports the CPU ceiling
+   * alone — correct as far as it goes, and flagged as `cpu` so the panel can say
+   * so rather than implying the GPU was checked and found faster.
+   */
+  private updateUncapped(): void {
+    this.smoothedCpuMs = this.smoothedCpuMs === 0 ? this.frame.cpuMs : this.smoothedCpuMs * 0.85 + this.frame.cpuMs * 0.15
+
+    const cpu = this.smoothedCpuMs
+    const gpu = this.frame.gpuMs
+    const slowest = Math.max(cpu, gpu)
+    if (slowest <= 0) {
+      this.frame.uncappedFps = 0
+      this.frame.uncappedBy = 'none'
+      return
+    }
+    this.frame.uncappedFps = Math.round(1000 / slowest)
+    this.frame.uncappedBy = gpu > cpu ? 'gpu' : 'cpu'
   }
 
   /**
@@ -217,6 +343,11 @@ export class Profiler {
   private recordFrameDelta(now: number): void {
     if (this.lastFrameTime > 0) {
       const delta = now - this.lastFrameTime
+      // Tracked before the tab-switch filter, so a real freeze is still visible
+      // even though it is (correctly) excluded from the percentiles.
+      if (delta > this.frame.longestStallMs) {
+        this.frame.longestStallMs = Math.round(delta * 10) / 10
+      }
       // Ignore tab-switch gaps; a 4-second delta is not a dropped frame, and
       // one of them would dominate the max for the next four seconds.
       if (delta < 1000) {
@@ -286,6 +417,22 @@ export class Profiler {
           stats.drawCalls += 1
           stats.instances += object.count
           stats.triangles += triangles * object.count
+        } else if ((geometry as InstancedBufferGeometry).isInstancedBufferGeometry) {
+          // A plain `Mesh` carrying an `InstancedBufferGeometry` still draws
+          // instanced — three decides that from the *geometry*, and only decides
+          // `USE_INSTANCING` from `isInstancedMesh`. Grass takes exactly that
+          // path (it wants its own 48-byte instance stream, not a 64-byte
+          // matrix), and without this branch it billed six draws and 1.8k
+          // triangles for six patches while `renderer.info` reported 39k — the
+          // ablation table would have ranked the largest triangle source in the
+          // scene as the cheapest thing in it.
+          const count = (geometry as InstancedBufferGeometry).instanceCount
+          if (!count) {
+            return
+          }
+          stats.drawCalls += 1
+          stats.instances += count
+          stats.triangles += triangles * count
         } else {
           stats.drawCalls += 1
           stats.instances += 1
@@ -310,6 +457,27 @@ export class Profiler {
    * Starts an ablation run over every registered tag. Takes
    * `(tags + 1) × 22` frames — under half a second at 60 fps.
    */
+  /**
+   * Forgets the frame-time window, keeping the freeze counter.
+   *
+   * For the end of a known one-off load: the window is 240 frames, so a burst of
+   * slow frames stays in it for four seconds after the cause is gone. That is
+   * correct for a *percentile* — it is a measure of recent history — but wrong
+   * as evidence about the machine, and `AdaptiveQuality` reads p95. Draining the
+   * placeable catalogue produced 33 slow frames and left the controller pinned
+   * at `minimum` long after the world was running at 60 fps.
+   *
+   * `longestStallMs` deliberately survives. It exists to answer "did this
+   * session ever freeze", and a reset that erased it would turn the one honest
+   * freeze counter into another thing that forgets.
+   */
+  resetFrameWindow(): void {
+    this.deltaFilled = 0
+    this.deltaCursor = 0
+    this.lastFrameTime = 0
+    this.frame.jankFrames = 0
+  }
+
   startAblation(): void {
     if (this.phase !== 'idle') {
       return

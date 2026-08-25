@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'Glissez pour regarder · WASD pour vous déplacer · molette ou pincement pour zoomer',
     'modeOrbit': 'Vue orbitale',
-    'modeFirstPerson': 'Marcher'
+    'modeFirstPerson': 'Marcher',
+    'settings': {
+      'title': 'Graphismes',
+      'open': 'Réglages graphiques',
+      'grass': 'Détail de l’herbe',
+      'grassHint': 'Herbe plus dense et visible de plus loin. Réduisez ce réglage si le jeu saccade.',
+      'grassAutoHint': 'L’herbe s’adapte aux capacités de votre appareil.',
+      'drawnPatches': '{n} touffes à l’écran · {tris}k triangles',
+      'detail': {
+        'auto': 'Automatique',
+        'ultra': 'Ultra',
+        'high': 'Élevé',
+        'medium': 'Moyen',
+        'low': 'Bas',
+        'minimum': 'Minimum',
+        'off': 'Désactivée'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'Crée ton personnage',
+    'hint': 'Fais glisser pour tourner · molette ou pincement pour zoomer',
+    'body': 'Morphologie',
+    'bodies': {
+      'male': 'Masculine',
+      'female': 'Féminine'
+    },
+    'head': 'Forme de la tête',
+    'heads': {
+      'round': 'Ronde',
+      'oval': 'Ovale',
+      'square': 'Carrée',
+      'heart': 'Cœur'
+    },
+    'hair': 'Cheveux',
+    'hairStyles': {
+      'bowl': 'Coupe au bol',
+      'short': 'Courts',
+      'ponytail': 'Queue-de-cheval',
+      'braids': 'Tresses',
+      'long': 'Longs',
+      'bald': 'Chauve',
+      'topknot': 'Chignon haut',
+      'buns': 'Macarons',
+      'bun': 'Chignon bas',
+      'plaits': 'Nattes écartées',
+      'flowing': 'Chevelure flottante',
+      'queue': 'Longue tresse',
+      'bob': 'Coupe au carré',
+      'tresses': 'Mèches sur les épaules',
+      'wild': 'Ébouriffé',
+      'swept': 'Balayé sur le côté',
+      'fringe': 'Frange épaisse',
+      'bearded': 'Barbu',
+      'mane': 'Crinière',
+      'coif': 'Coiffe',
+      'receding': 'Cheveux clairsemés'
+    },
+    'eyes': 'Yeux',
+    'eyeStyles': {
+      'bright': 'Éclatants',
+      'wide': 'Écartés',
+      'close': 'Rapprochés',
+      'tall': 'Hauts',
+      'small': 'Petits',
+      'almond': 'En amande',
+      'sleepy': 'Endormis',
+      'sharp': 'Perçants',
+      'soft': 'Doux',
+      'weary': 'Fatigués'
+    },
+    'mouth': 'Bouche',
+    'mouthStyles': {
+      'smile': 'Sourire',
+      'neutral': 'Neutre',
+      'frown': 'Boudeuse',
+      'grin': 'Grand sourire',
+      'open': 'Ouverte'
+    },
+    'skinTone': 'Couleur de peau',
+    'skinToneOption': 'Couleur de peau {n}',
+    'hairColour': 'Couleur des cheveux',
+    'hairColourOption': 'Couleur des cheveux {n}',
+    'tunicColour': 'Couleur de la tunique',
+    'tunicColourOption': 'Couleur de la tunique {n}',
+    'outfit': 'Tenue',
+    'outfitHint': 'Les couleurs dans lesquelles un vêtement est taillé. Chaque robe, justaucorps et coiffe a son propre jeu.',
+    'equipment': 'Équipement',
+    'items': {
+      'hat': 'Chapeau',
+      'torsoArmour': 'Armure',
+      'sword': 'Épée',
+      'shield': 'Bouclier'
+    },
+    'drawWeapon': 'Dégainer',
+    'spin': 'Rotation auto',
+    'randomise': 'Surprends-moi',
+    'reset': 'Recommencer',
+    'save': 'Enregistrer le personnage',
+    'saved': 'Enregistré',
+    'back': 'Retour au monde',
+    'roster': 'Personnage',
+    'newCharacter': 'Nouveau personnage',
+    'unnamed': 'Sans nom',
+    'search': 'Rechercher par nom ou ID',
+    'noMatches': 'Aucun personnage ne correspond.',
+    'empty': 'Aucun personnage enregistré pour l’instant. Créez-en un, nommez-le et appuyez sur Enregistrer.',
+    'name': 'Nom',
+    'namePlaceholder': 'Nommez votre personnage',
+    'copyName': 'Copie de {name}',
+    'id': 'ID',
+    'idPending': 'Attribué à l’enregistrement.',
+    'idFixed': 'Fixé à la création. Les sauvegardes et les quêtes s’y réfèrent : le renommage ne le change jamais.',
+    'duplicate': 'Dupliquer',
+    'delete': 'Supprimer',
+    'deleteConfirm': 'Supprimer {name} ? Cette action est irréversible.',
+    'unsavedChanges': 'Vous avez des modifications non enregistrées.',
+    'saveAndContinue': 'Enregistrer et continuer',
+    'discard': 'Abandonner'
   }
 }

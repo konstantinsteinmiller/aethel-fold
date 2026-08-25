@@ -11,6 +11,24 @@
     //- is typed and costs nothing while it's off.
     LevelEditorPanel
 
+    //- What the crosshair is on, floating over it. Same self-gate; its rAF
+    //- starts and stops with the mode, so it is free while the editor is off.
+    EditorFocusCard
+
+    //- Water: ponds, seas and spline rivers, top-right. Same code word and the
+    //- same self-gate as the others, and it positions itself — the three panels
+    //- claim different corners (props top-left, water top-right, sculpt
+    //- bottom-right) rather than being laid out from here.
+    WaterEditorPanel
+
+    //- Terrain sculpting, bottom-right. Same code word, same self-gate; the
+    //- prop palette holds the top-left and the water editor the top-right.
+    TerrainSculptPanel
+
+    //- Player-facing graphics settings, bottom-left. Unlike the perf panel this
+    //- ships — it is where the grass detail level lives.
+    WorldSettingsPanel(:world="world")
+
     //- Camera mode switch. Deliberately a plain button rather than a hotkey:
     //- every letter key is either camera movement or an editor binding, and
     //- pointer lock needs a real user gesture to be granted anyway.
@@ -46,8 +64,12 @@
 <script setup lang="ts">
 import { markRaw, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import EditorFocusCard from '@/components/organisms/EditorFocusCard.vue'
 import LevelEditorPanel from '@/components/organisms/LevelEditorPanel.vue'
+import TerrainSculptPanel from '@/components/organisms/TerrainSculptPanel.vue'
+import WaterEditorPanel from '@/components/organisms/WaterEditorPanel.vue'
 import WorldPerfPanel from '@/components/organisms/WorldPerfPanel.vue'
+import WorldSettingsPanel from '@/components/organisms/WorldSettingsPanel.vue'
 import { World } from '@/world/core/World'
 
 const { t } = useI18n()
@@ -82,9 +104,33 @@ onMounted(() => {
   // `?density=3` multiplies scatter density for benchmarking. Dev only — at
   // shipping density the frame is vsync-bound, so culling work is unmeasurable
   // without a way to load the scene up.
-  const density = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get('density')) : Number.NaN
+  const params = new URLSearchParams(location.search)
+  const devNumber = (name: string): number =>
+    import.meta.env.DEV ? Number(params.get(name)) : Number.NaN
+  const density = devNumber('density')
+  // `?cascades=2&shadowfar=180` — the shadow pass is the single most expensive
+  // thing in a constrained frame, and its cascade count is a shader define, so
+  // it can only be compared across page loads of one build.
+  const cascades = devNumber('cascades')
+  const shadowFar = devNumber('shadowfar')
+  // `?loadradius=130` — detailed terrain reach. Chunk count goes as its square,
+  // so this is the largest single lever on draw-call count.
+  const loadRadius = devNumber('loadradius')
+  // `?gearinst=0` — draw the crowd's hats and weapons per character instead of
+  // batching them. The A/B arm for the `GearInstancer` claim.
+  const gearInstancing = devNumber('gearinst')
+  // `?crowd=12` — how many NPC figures may stand at once. The lever the crowd's
+  // draw budget is actually set by; see `DEFAULT_CROWD_BUDGET`.
+  const crowd = devNumber('crowd')
   const instance = markRaw(
-    new World(canvasElement, Number.isFinite(density) && density > 0 ? { densityScale: density } : {})
+    new World(canvasElement, {
+      ...(Number.isFinite(density) && density > 0 ? { densityScale: density } : {}),
+      ...(Number.isFinite(cascades) && cascades > 0 ? { shadowCascades: cascades } : {}),
+      ...(Number.isFinite(shadowFar) && shadowFar > 0 ? { shadowMaxFar: shadowFar } : {}),
+      ...(Number.isFinite(loadRadius) && loadRadius > 0 ? { loadRadius } : {}),
+      ...(Number.isFinite(gearInstancing) ? { instanceGear: gearInstancing !== 0 } : {}),
+      ...(Number.isFinite(crowd) && crowd >= 0 ? { crowdBudget: crowd } : {})
+    })
   )
   instance.attach(canvasElement)
   world.value = instance
@@ -109,7 +155,34 @@ onMounted(() => {
   })
   observer.observe(hostElement)
   instance.setSize(hostElement.clientWidth, hostElement.clientHeight)
-  instance.start()
+
+  // ── Shader warmup ─────────────────────────────────────────────────────────
+  //
+  // Links every program into a 1×1 buffer before the loop presents anything, so
+  // the driver's compile lands behind the splash rather than on the player's
+  // first interactive frame. Measured, interleaved A/B within one build:
+  //
+  //   worst opening frame   984–1612 ms  →  5–10 ms
+  //   added time to appear   none        →  0.9–2.0 s (splash still up)
+  //
+  // It relocates the cost rather than removing it — a driver's shader compile
+  // cannot be sliced across frames the way asset generation could. `?warmup=0`
+  // turns it off so the two paths stay comparable inside one build.
+  //
+  // Deliberately not awaited: `onMounted` must not become async, or the unmount
+  // guard below stops being registered synchronously and a fast navigate-away
+  // leaks the world. If the component unmounted while we waited, `dispose()`
+  // has already run and there is nothing left to start.
+  const warmupOff = import.meta.env.DEV && new URLSearchParams(location.search).get('warmup') === '0'
+  if (warmupOff) {
+    instance.start()
+  } else {
+    void instance.warmUp().then(() => {
+      if (world.value === instance) {
+        instance.start()
+      }
+    })
+  }
 
   hintTimer = window.setTimeout(() => {
     showHint.value = false

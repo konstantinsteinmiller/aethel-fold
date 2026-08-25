@@ -1,6 +1,8 @@
 import type { ChunkRequest } from './chunkGeometry'
+import { buildDistantRing, type DistantRingRequest } from './distantRing'
 import { buildChunkBuffers } from './chunkGeometry'
 import type { HeightfieldParams } from './heightfieldCore'
+import type { SculptPatch } from './SculptField'
 import type { TerrainWorkerResult } from './terrainWorker'
 
 /**
@@ -91,6 +93,50 @@ export class ChunkWorkerPool {
       this.cursor++
       worker.postMessage({ type: 'build', id, requests })
     })
+  }
+
+  /**
+   * Queues a distant-ring build. Same lifecycle as `build`, same fallback.
+   *
+   * Separate from `build` because the ring is one mesh with a hole rather than
+   * four tiers of a square — see `distantRing.ts`. It shares the worker so the
+   * ring's ~17 ms of height sampling never lands on a frame.
+   */
+  buildRing(request: DistantRingRequest): Promise<TerrainWorkerResult> {
+    const id = this.nextId++
+
+    if (!this.usingWorkers) {
+      return Promise.resolve({
+        type: 'chunk',
+        id,
+        tiers: [buildDistantRing(request, this.params, this.palette)],
+        buildMs: 0
+      })
+    }
+
+    return new Promise<TerrainWorkerResult>(resolve => {
+      this.pending.set(id, { id, requests: [], resolve })
+      const worker = this.workers[this.cursor % this.workers.length]!
+      this.cursor++
+      worker.postMessage({ type: 'ring', id, request })
+    })
+  }
+
+  /**
+   * Broadcasts an editor sculpt patch to every worker.
+   *
+   * Ordering does the work here: `postMessage` is FIFO per worker, so any build
+   * queued after this call sees the new offsets, and any build queued before it
+   * lands with the old ones — which is why the sculptor pushes the patch first
+   * and only then asks `Terrain` to rebuild.
+   *
+   * The inline fallback needs nothing: it evaluates `this.params`, the very
+   * object the main thread's `SculptField` is attached to.
+   */
+  setSculptDelta(patch: SculptPatch): void {
+    for (const worker of this.workers) {
+      worker.postMessage({ type: 'sculpt', patch })
+    }
   }
 
   private buildInline(id: number, requests: ChunkRequest[]): TerrainWorkerResult {

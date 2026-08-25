@@ -27,6 +27,18 @@ export interface WorldAsset {
   /** Object-space bounding radius, used for instance frustum culling. */
   radius: number
   /**
+   * Whether this asset casts a shadow at all. Defaults to true when omitted.
+   *
+   * The one family that must say `false` is water. The shadow pass renders
+   * through three's own depth material, which knows nothing about the vertex
+   * displacement `WaterMaterial` applies — so a wave-displaced surface would
+   * cast the shape of its *undisplaced* sheet, and a waterfall curtain would
+   * cast a hard opaque rectangle. Both read as a bug rather than as a shadow,
+   * and neither is fixable by tuning: the depth pass would need its own copy of
+   * the wave function, which is a second program for a shadow nobody wants.
+   */
+  castsShadow?: boolean
+  /**
    * Multiplies the global LOD distance table (GDD §4.2).
    *
    * LOD distance has to scale with object size or it's meaningless: a 5 m tree

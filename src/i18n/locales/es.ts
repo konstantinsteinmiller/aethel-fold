@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'Arrastra para mirar · WASD para moverte · rueda o pellizca para acercar',
     'modeOrbit': 'Vista orbital',
-    'modeFirstPerson': 'Caminar'
+    'modeFirstPerson': 'Caminar',
+    'settings': {
+      'title': 'Gráficos',
+      'open': 'Ajustes gráficos',
+      'grass': 'Detalle de hierba',
+      'grassHint': 'Hierba más densa y visible desde más lejos. Baja esto si el juego se entrecorta.',
+      'grassAutoHint': 'La hierba se ajusta a lo que tu dispositivo puede mover.',
+      'drawnPatches': '{n} matas en pantalla · {tris}k triángulos',
+      'detail': {
+        'auto': 'Automático',
+        'ultra': 'Ultra',
+        'high': 'Alto',
+        'medium': 'Medio',
+        'low': 'Bajo',
+        'minimum': 'Mínimo',
+        'off': 'Desactivada'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'Crea tu personaje',
+    'hint': 'Arrastra para girar · desplaza o pellizca para acercar',
+    'body': 'Tipo de cuerpo',
+    'bodies': {
+      'male': 'Masculino',
+      'female': 'Femenino'
+    },
+    'head': 'Forma de la cabeza',
+    'heads': {
+      'round': 'Redonda',
+      'oval': 'Ovalada',
+      'square': 'Cuadrada',
+      'heart': 'Corazón'
+    },
+    'hair': 'Pelo',
+    'hairStyles': {
+      'bowl': 'Corte tazón',
+      'short': 'Corto',
+      'ponytail': 'Coleta',
+      'braids': 'Trenzas',
+      'long': 'Largo',
+      'bald': 'Calvo',
+      'topknot': 'Moño alto',
+      'buns': 'Rodetes laterales',
+      'bun': 'Moño bajo',
+      'plaits': 'Trenzas salientes',
+      'flowing': 'Melena larga',
+      'queue': 'Trenza larga',
+      'bob': 'Corte paje',
+      'tresses': 'Mechones al frente',
+      'wild': 'Despeinado',
+      'swept': 'Peinado de lado',
+      'fringe': 'Flequillo grueso',
+      'bearded': 'Con barba',
+      'mane': 'Melena abundante',
+      'coif': 'Cofia',
+      'receding': 'Entradas'
+    },
+    'eyes': 'Ojos',
+    'eyeStyles': {
+      'bright': 'Brillantes',
+      'wide': 'Separados',
+      'close': 'Juntos',
+      'tall': 'Altos',
+      'small': 'Pequeños',
+      'almond': 'Almendrados',
+      'sleepy': 'Soñolientos',
+      'sharp': 'Afilados',
+      'soft': 'Suaves',
+      'weary': 'Cansados'
+    },
+    'mouth': 'Boca',
+    'mouthStyles': {
+      'smile': 'Sonrisa',
+      'neutral': 'Neutral',
+      'frown': 'Triste',
+      'grin': 'Sonrisa amplia',
+      'open': 'Abierta'
+    },
+    'skinTone': 'Tono de piel',
+    'skinToneOption': 'Tono de piel {n}',
+    'hairColour': 'Color de pelo',
+    'hairColourOption': 'Color de pelo {n}',
+    'tunicColour': 'Color de túnica',
+    'tunicColourOption': 'Color de túnica {n}',
+    'outfit': 'Atuendo',
+    'outfitHint': 'De qué colores está cortada una prenda. Cada túnica, jubón y gorra tiene su propio juego.',
+    'equipment': 'Equipo',
+    'items': {
+      'hat': 'Sombrero',
+      'torsoArmour': 'Armadura',
+      'sword': 'Espada',
+      'shield': 'Escudo'
+    },
+    'drawWeapon': 'Desenvainar',
+    'spin': 'Giro automático',
+    'randomise': 'Sorpréndeme',
+    'reset': 'Empezar de nuevo',
+    'save': 'Guardar personaje',
+    'saved': 'Guardado',
+    'back': 'Volver al mundo',
+    'roster': 'Personaje',
+    'newCharacter': 'Nuevo personaje',
+    'unnamed': 'Sin nombre',
+    'search': 'Buscar por nombre o ID',
+    'noMatches': 'Ningún personaje coincide.',
+    'empty': 'Aún no hay personajes guardados. Diseña uno, ponle nombre y pulsa Guardar.',
+    'name': 'Nombre',
+    'namePlaceholder': 'Nombra a tu personaje',
+    'copyName': 'Copia de {name}',
+    'id': 'ID',
+    'idPending': 'Se asigna al guardar.',
+    'idFixed': 'Se fija al crearlo. Las partidas y las misiones lo usan, así que cambiar el nombre nunca lo altera.',
+    'duplicate': 'Duplicar',
+    'delete': 'Eliminar',
+    'deleteConfirm': '¿Eliminar {name}? Esto no se puede deshacer.',
+    'unsavedChanges': 'Tienes cambios sin guardar.',
+    'saveAndContinue': 'Guardar y continuar',
+    'discard': 'Descartar'
   }
 }

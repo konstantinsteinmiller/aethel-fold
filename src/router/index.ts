@@ -11,6 +11,13 @@ const routes: RouteRecordRaw[] = [
   // Design bench for the monster art direction. Lazy, so it costs a player who
   // never visits it nothing.
   { path: '/monsters', name: 'monsters', component: () => import('@/views/MonsterLab.vue') },
+  // Bench for the water system: one island carrying a pond, a river, a sea and
+  // three waterfalls. Lazy, for the same reason /monsters is.
+  { path: '/water', name: 'water', component: () => import('@/views/WaterLabView.vue') },
+  // Character creation. Lazy for the same reason the benches are — it pulls in
+  // the chibi builder and a second three.js scene, and a player who never opens
+  // it should not pay for either.
+  { path: '/characters', name: 'characters', component: () => import('@/views/CharacterCreator.vue') },
   // Kept so existing links and docs that pointed at /world still resolve.
   { path: '/world', redirect: '/' },
   { path: '/:pathMatch(.*)*', redirect: '/' }

@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'Ziehen zum Umsehen · WASD zum Bewegen · Scrollen oder Pinchen zum Zoomen',
     'modeOrbit': 'Orbit-Ansicht',
-    'modeFirstPerson': 'Gehen'
+    'modeFirstPerson': 'Gehen',
+    'settings': {
+      'title': 'Grafik',
+      'open': 'Grafikeinstellungen',
+      'grass': 'Grasdetails',
+      'grassHint': 'Dichteres Gras, das weiter reicht. Reduziere dies, wenn das Spiel ruckelt.',
+      'grassAutoHint': 'Das Gras richtet sich nach der Leistung deines Geräts.',
+      'drawnPatches': '{n} Büschel im Bild · {tris}k Dreiecke',
+      'detail': {
+        'auto': 'Automatisch',
+        'ultra': 'Ultra',
+        'high': 'Hoch',
+        'medium': 'Mittel',
+        'low': 'Niedrig',
+        'minimum': 'Minimum',
+        'off': 'Aus'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'Erstelle deinen Charakter',
+    'hint': 'Ziehen zum Drehen · Scrollen oder Pinchen zum Zoomen',
+    'body': 'Körperbau',
+    'bodies': {
+      'male': 'Maskulin',
+      'female': 'Feminin'
+    },
+    'head': 'Kopfform',
+    'heads': {
+      'round': 'Rund',
+      'oval': 'Oval',
+      'square': 'Eckig',
+      'heart': 'Herzförmig'
+    },
+    'hair': 'Haare',
+    'hairStyles': {
+      'bowl': 'Topfschnitt',
+      'short': 'Kurz',
+      'ponytail': 'Pferdeschwanz',
+      'braids': 'Zöpfe',
+      'long': 'Lang',
+      'bald': 'Glatze',
+      'topknot': 'Haarknoten oben',
+      'buns': 'Seitliche Schnecken',
+      'bun': 'Tiefer Knoten',
+      'plaits': 'Abstehende Zöpfe',
+      'flowing': 'Wallendes Haar',
+      'queue': 'Langer Zopf',
+      'bob': 'Pagenschnitt',
+      'tresses': 'Vordere Strähnen',
+      'wild': 'Zerzaust',
+      'swept': 'Seitlich gescheitelt',
+      'fringe': 'Dichter Pony',
+      'bearded': 'Bärtig',
+      'mane': 'Mähne',
+      'coif': 'Leinenhaube',
+      'receding': 'Geheimratsecken'
+    },
+    'eyes': 'Augen',
+    'eyeStyles': {
+      'bright': 'Strahlend',
+      'wide': 'Weit auseinander',
+      'close': 'Eng zusammen',
+      'tall': 'Hoch',
+      'small': 'Klein',
+      'almond': 'Mandelförmig',
+      'sleepy': 'Verschlafen',
+      'sharp': 'Scharf',
+      'soft': 'Sanft',
+      'weary': 'Müde'
+    },
+    'mouth': 'Mund',
+    'mouthStyles': {
+      'smile': 'Lächeln',
+      'neutral': 'Neutral',
+      'frown': 'Mürrisch',
+      'grin': 'Grinsen',
+      'open': 'Offen'
+    },
+    'skinTone': 'Hautton',
+    'skinToneOption': 'Hautton {n}',
+    'hairColour': 'Haarfarbe',
+    'hairColourOption': 'Haarfarbe {n}',
+    'tunicColour': 'Tunikafarbe',
+    'tunicColourOption': 'Tunikafarbe {n}',
+    'outfit': 'Kleidung',
+    'outfitHint': 'Aus welchen Farben ein Kleidungsstück geschnitten ist. Jede Robe, Weste und Kappe hat ihren eigenen Satz.',
+    'equipment': 'Ausrüstung',
+    'items': {
+      'hat': 'Hut',
+      'torsoArmour': 'Rüstung',
+      'sword': 'Schwert',
+      'shield': 'Schild'
+    },
+    'drawWeapon': 'Waffe ziehen',
+    'spin': 'Drehteller',
+    'randomise': 'Überrasch mich',
+    'reset': 'Von vorn',
+    'save': 'Charakter speichern',
+    'saved': 'Gespeichert',
+    'back': 'Zurück zur Welt',
+    'roster': 'Charakter',
+    'newCharacter': 'Neuer Charakter',
+    'unnamed': 'Namenlos',
+    'search': 'Nach Name oder ID suchen',
+    'noMatches': 'Keine Charaktere gefunden.',
+    'empty': 'Noch keine Charaktere gespeichert. Gestalte einen, gib ihm einen Namen und drücke Speichern.',
+    'name': 'Name',
+    'namePlaceholder': 'Benenne deinen Charakter',
+    'copyName': '{name} Kopie',
+    'id': 'ID',
+    'idPending': 'Wird beim Speichern vergeben.',
+    'idFixed': 'Wird bei der Erstellung festgelegt. Spielstände und Quests verweisen darauf, ein Umbenennen ändert sie nie.',
+    'duplicate': 'Duplizieren',
+    'delete': 'Löschen',
+    'deleteConfirm': '{name} löschen? Das lässt sich nicht rückgängig machen.',
+    'unsavedChanges': 'Du hast ungespeicherte Änderungen.',
+    'saveAndContinue': 'Speichern und fortfahren',
+    'discard': 'Verwerfen'
   }
 }

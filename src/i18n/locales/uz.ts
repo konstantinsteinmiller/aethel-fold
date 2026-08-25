@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'Atrofga qarash uchun suring · WASD — harakat · gʻildirak yoki chimdish — masshtab',
     'modeOrbit': 'Aylanma koʻrinish',
-    'modeFirstPerson': 'Yurish'
+    'modeFirstPerson': 'Yurish',
+    'settings': {
+      'title': 'Grafika',
+      'open': 'Grafika sozlamalari',
+      'grass': 'Oʻt tafsiloti',
+      'grassHint': 'Quyuqroq va uzoqroqqacha chiziladigan oʻt. Oʻyin sekinlashsa, buni kamaytiring.',
+      'grassAutoHint': 'Oʻt qurilmangiz imkoniyatiga moslashadi.',
+      'drawnPatches': 'Ekranda {n} tup · {tris}k uchburchak',
+      'detail': {
+        'auto': 'Avto',
+        'ultra': 'Ultra',
+        'high': 'Yuqori',
+        'medium': 'Oʻrta',
+        'low': 'Past',
+        'minimum': 'Eng past',
+        'off': 'Oʻchiq'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'Qahramoningni yarat',
+    'hint': 'Aylantirish uchun torting · masshtab uchun aylantiring yoki chimdilang',
+    'body': 'Tana tuzilishi',
+    'bodies': {
+      'male': 'Erkakcha',
+      'female': 'Ayolcha'
+    },
+    'head': 'Bosh shakli',
+    'heads': {
+      'round': 'Dumaloq',
+      'oval': 'Oval',
+      'square': 'Kvadrat',
+      'heart': 'Yurak shaklida'
+    },
+    'hair': 'Soch',
+    'hairStyles': {
+      'bowl': 'Kosasimon',
+      'short': 'Kalta',
+      'ponytail': 'Ot dumi',
+      'braids': 'Oʻrim',
+      'long': 'Uzun',
+      'bald': 'Kal',
+      'topknot': 'Tepa tugun',
+      'buns': 'Yon tugunlar',
+      'bun': 'Past tugun',
+      'plaits': 'Turtib chiqqan oʻrimlar',
+      'flowing': 'Yoyilgan uzun soch',
+      'queue': 'Uzun oʻrim',
+      'bob': 'Kare soch',
+      'tresses': 'Old tolalar',
+      'wild': 'Toʻzgʻigan soch',
+      'swept': 'Yonga tarangan',
+      'fringe': 'Qalin kokil',
+      'bearded': 'Soqolli',
+      'mane': 'Qalin soch',
+      'coif': 'Bosh roʻmol',
+      'receding': 'Siyrak soch'
+    },
+    'eyes': 'Koʻzlar',
+    'eyeStyles': {
+      'bright': 'Yorqin',
+      'wide': 'Uzoq joylashgan',
+      'close': 'Yaqin joylashgan',
+      'tall': 'Choʻziq',
+      'small': 'Kichik',
+      'almond': 'Bodomsimon',
+      'sleepy': 'Uyquli',
+      'sharp': 'Oʻtkir',
+      'soft': 'Muloyim',
+      'weary': 'Charchagan'
+    },
+    'mouth': 'Ogʻiz',
+    'mouthStyles': {
+      'smile': 'Tabassum',
+      'neutral': 'Betaraf',
+      'frown': 'Tumshaygan',
+      'grin': 'Keng tabassum',
+      'open': 'Ochiq'
+    },
+    'skinTone': 'Teri rangi',
+    'skinToneOption': 'Teri rangi {n}',
+    'hairColour': 'Soch rangi',
+    'hairColourOption': 'Soch rangi {n}',
+    'tunicColour': 'Kamzul rangi',
+    'tunicColourOption': 'Kamzul rangi {n}',
+    'outfit': 'Kiyim',
+    'outfitHint': 'Kiyim qaysi ranglardan bichilgan. Har bir libos, kamzul va bosh kiyimning oʻz toʻplami bor.',
+    'equipment': 'Jihoz',
+    'items': {
+      'hat': 'Shlyapa',
+      'torsoArmour': 'Sovut',
+      'sword': 'Qilich',
+      'shield': 'Qalqon'
+    },
+    'drawWeapon': 'Qurolni sugʻurish',
+    'spin': 'Avtomatik aylanish',
+    'randomise': 'Meni hayratlantir',
+    'reset': 'Qaytadan boshlash',
+    'save': 'Qahramonni saqlash',
+    'saved': 'Saqlandi',
+    'back': 'Dunyoga qaytish',
+    'roster': 'Qahramon',
+    'newCharacter': 'Yangi qahramon',
+    'unnamed': 'Nomsiz',
+    'search': 'Ism yoki ID bo‘yicha qidirish',
+    'noMatches': 'Mos keladigan personaj yo‘q.',
+    'empty': 'Hali saqlangan qahramon yo‘q. Bittasini yarating, nom bering va «Saqlash»ni bosing.',
+    'name': 'Ism',
+    'namePlaceholder': 'Qahramoningizga nom bering',
+    'copyName': '{name} nusxasi',
+    'id': 'ID',
+    'idPending': 'Saqlaganingizda beriladi.',
+    'idFixed': 'Yaratilganda belgilanadi. Saqlovlar va topshiriqlar unga murojaat qiladi, shuning uchun nomni o‘zgartirish uni o‘zgartirmaydi.',
+    'duplicate': 'Nusxalash',
+    'delete': 'O‘chirish',
+    'deleteConfirm': '{name} o‘chirilsinmi? Buni ortga qaytarib bo‘lmaydi.',
+    'unsavedChanges': 'Saqlanmagan o‘zgarishlar bor.',
+    'saveAndContinue': 'Saqlab, davom etish',
+    'discard': 'Bekor qilish'
   }
 }

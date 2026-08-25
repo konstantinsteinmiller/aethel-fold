@@ -24,9 +24,16 @@ export type ColliderShape =
   | { kind: 'box'; halfX: number; halfZ: number; height: number }
   | { kind: 'cylinder'; radius: number; height: number }
 
-export type PlaceableCategory = 'platform' | 'cliff' | 'desert' | 'rock' | 'flora'
+export type PlaceableCategory = 'platform' | 'cliff' | 'desert' | 'rock' | 'flora' | 'water'
 
-export const PLACEABLE_CATEGORY_ORDER: PlaceableCategory[] = ['platform', 'cliff', 'desert', 'rock', 'flora']
+export const PLACEABLE_CATEGORY_ORDER: PlaceableCategory[] = [
+  'platform',
+  'cliff',
+  'desert',
+  'rock',
+  'flora',
+  'water'
+]
 
 /**
  * `desert` is a **stone family**, not a shape family — a hoodoo is the same
@@ -40,7 +47,11 @@ export const PLACEABLE_CATEGORY_LABELS: Record<PlaceableCategory, string> = {
   cliff: 'Cliffs & spires',
   desert: 'Desert rock',
   rock: 'Rocks',
-  flora: 'Flora'
+  flora: 'Flora',
+  // Waterfalls only. Ponds, rivers and seas are *not* placeables — they are not
+  // point-with-a-uniform-scale objects, so they have their own editor and their
+  // own store (`world/water/WaterEditor.ts`). A fall is a prop like any other.
+  water: 'Water'
 }
 
 export interface PlaceableDefinition {

@@ -129,6 +129,17 @@ multiplied to 22 % and shifted cool — **never** `#000`. Outlines render on
 Every LOD switch is a **dithered crossfade** across a transition band, not a
 swap. See §4. This is a hard requirement, not a polish item.
 
+> **Grass is the one exception, and it is stronger rather than weaker.** A
+> crossfade *hides* a discontinuity; grass has none to hide. Its tiers differ in
+> blade **population**, not in tessellation, and the blade count a patch draws is
+> a continuous function of distance that evaluates to the same number on both
+> sides of every tier boundary — so the swap changes nothing visible at all.
+> Dithering it was tried first and looks worse: the blades a coarse tier lacks
+> are drawn by the fine tier alone at 50 % coverage, reconstructed by nothing, and
+> a half-tone on geometry three pixels wide is a comb rather than a fade. It is
+> also free where a crossfade costs 21–29 % double-drawn instances. See
+> [`grass.md`](./grass.md) §4.3.
+
 ---
 
 ## 3. Palette
@@ -143,6 +154,7 @@ anywhere else.
 | Bounce fill (hemi bottom) | `#c9b98e` | warm ground bounce, keeps shadows alive |
 | Shadow tint | `#6b7bb5` | mixed 35 % into band 0 |
 | Rim tint | `#dff1ff` | |
+| Grass tip warm | `#30371f` | **added**, not mixed, into a blade tip by t² |
 | Sky zenith | `#5fa8d8` | |
 | Sky horizon | `#dceef7` | |
 | Fog | `#cfe4f0` | exp² fog, density **0.0085** |
@@ -218,11 +230,71 @@ Every world object ships **exactly four LOD tiers**, plus a cull distance.
 | Shard wall | 260 | 150 | 78 | 30 | 252 / 144 / 72 / 24 |
 | Hoodoo | 250 | 145 | 80 | 36 | 240 / 120 / 72 / 36 |
 | Terrain chunk (48 m) | 1400 | 400 | 128 | 24 | 1344 / 384 / 120 / 18 |
+| Grass patch (4 m) *(6 tiers)* | 6300 | 2800 | 720 | 110 / 44 / 20 | exact |
 | *(future)* Monster | 900 | 420 | 180 | 40 | — |
-| *(future)* Chibi human | 700 | 340 | 150 | 36 | — |
+| Chibi human | 1060 | 510 | 225 | 52 | 896–1016 / — / — / — |
 
 Generators call `assertTriBudget(geometry, budget, name)` and **throw** in dev if
 they exceed it. The budget is a ceiling, not a target.
+
+**The chibi human row was raised from 700 to 850 to pay for customisation, and
+from 850 to 1060 to pay for hands.** Almost none of *customisation* costs
+triangles and that has not changed: head shape (four shapes) is a warp of the
+head that already exists, sex is two torso radii and a cross-section, and skin,
+hair, tunic and brow colour are albedo. What costs triangles is geometry that
+changes the silhouette, and there are now three kinds of it.
+
+**Hair that breaks the outline**, which is the only kind worth modelling on a
+figure read at 10–40 m: four spikes (120), an all-round mane (112), a pair of
+braids or two locks over the shoulders (80), coiled templers (72), a long mass
+(64), a ponytail or a topknot (60). Nine of the twenty-one carry **no mesh at
+all** — `bowl`, `short`, `bald`, `coif`, `receding` are the head's own colour ramp
+slid to a different height, because 10 mm of hair thickness on a 0.5 m head is
+half a screen pixel at 20 m and a shell for it would be 50 triangles of nothing.
+
+**A body that has hands, ears and brows**, which is where the 210 went:
+
+| feature | tris | note |
+|---|---:|---|
+| hands | 192 | 96 a side: palm, index finger, thumb |
+| ears | 60 | 30 a side, on every style that does not cover them |
+| brows | 12 | 6 a side, in the character's hair colour |
+
+The split matters more than the total, because a city pays for it per
+townsperson. **Hands are 192 of the 210 and 19 % of the figure** — a lot for two
+objects that are 30 px at 3 m and 3 px at 20 m, and the first thing a coarse tier
+should attack: LOD1 wants the mitten back. They are spent because a character in
+this game holds a sword, and the hand is where the player's eye goes the moment
+one is drawn. **Ears were not new** — they were already 30 a side, but as a
+*hairstyle's* geometry, so the game's default character (`bowl`) had none. They
+belong to the body now and a haircut may only cover them; eleven styles do.
+**Brows are 12** and are the only thing on the figure that puts the character's
+hair colour on their face — they read to about 3 m and nothing past it, which is
+the same range the mouth's five styles and the eye's lid slant work at.
+
+So the ceiling covers 896 (`coif`, the one style that is painted *and* covers the
+ears) through 1016 (`wild`, `ponytail` and `topknot` tie), and leaves 44 — a
+little under one face's worth — of headroom. The coarse tiers are scaled by the
+same factors as before (0.48 / 0.21 / 0.05 of LOD0), so the row's shape is
+unchanged; the tiers themselves are still owed, as noted in §6 Phase C.
+
+**A torso or leg garment does not add to this row.** Both *replace* body parts
+rather than covering them — the torso's 96 triangles and the legs' 144 are never
+built — so a dressed figure is `body − replaced + garment`, and the garment's own
+allowance comes from `EQUIPMENT_BUDGET` rather than from here.
+
+**The grass patch is budgeted per *patch*, not per blade, and ships six tiers.**
+That row is the only one in this table where the budget is met exactly rather
+than undercut, because the geometry is generated *to* it: a patch is `N` blades
+of `2s−1` triangles and both numbers are the design. It is also the only asset
+whose tiers differ in population rather than tessellation — which is what buys
+the six tiers and what removes the crossfade (R7).
+
+The table is **front-loaded 45× from the near field to the horizon**, because
+grass covers *area*: LOD0's disc is ~6 drawn patches while LOD5's ring is ~224, so
+a blade spent on LOD0 is drawn six times and the same blade spent on LOD5 is drawn
+two hundred times. At `ultra` a patch is 900 blades over 16 m² — **56 blades/m²**
+underfoot against 1.3 at 115 m. See [`grass.md`](./grass.md).
 
 **The cliff family sits above the boulder, and that is a placement decision
 rather than an art one.** A boulder is scatter — thousands of them, so its
@@ -378,7 +450,28 @@ this is invisible because tier silhouettes are matched by design (R1).
   compiled program; variation comes from uniforms and vertex colours. Shader
   compilation stalls are the #1 cause of first-play jank.
 * **No textures for props.** Colour is vertex colour. The only textures in the
-  scene are the 1×N gradient ramp and the shadow map.
+  scene are the 1×N gradient ramp, the shadow map, and the **water atlas**.
+
+> **The water exception, and why it is not a crack in the rule.** The rule exists
+> so that detail comes from silhouette, authored normals and baked vertex data
+> rather than from art assets — it is a budget on *download and memory*, and a
+> discipline about where detail comes from. Water is the one surface that cannot
+> pay it. Its detail is **high-frequency and animated**: caustics on a sandy
+> bottom, cellular churn travelling down a river, blotchy foam sliding down a
+> curtain. Vertex colour cannot carry any of that, because water's vertices are
+> spent resolving the wave and the shoreline band, and there is no per-vertex
+> budget left at the frequency the eye is reading.
+>
+> The alternative — evaluating it per-fragment — was costed and rejected: layered
+> cellular noise is ~18 samples per pixel over a surface that routinely covers
+> half the screen, on a mid-range Android target where water is already the
+> heaviest overdraw in the frame.
+>
+> So water samples **one small tiling atlas that is generated procedurally at
+> boot** (`world/water/waterTextures.ts`), exactly as the gradient ramp is. No
+> art asset is authored, shipped or downloaded, so the budget the rule protects
+> is untouched. What changed is only the claim that the ramp is the *only*
+> generated texture — that was a statement about a world with no water in it.
 
 ### 5.2b Streaming and hierarchical culling
 
@@ -505,17 +598,34 @@ scatter fields, perf HUD with ablation profiling.
 ### Phase B — World
 Biomes (meadow, pine highland, red canyon), water with toon foam line, wind
 system driving foliage, day/night with a ramp that re-tints rather than dims,
-grass field, cliffs, props (fences, crates, ruins).
+~~grass field~~ **(built — `src/world/grass/`, six tiers, 6 draw calls, five
+player-selectable detail levels; see [`grass.md`](./grass.md))**, cliffs, props
+(fences, crates, ruins).
 
-### Phase C — Characters
-* **Chibi humans** — 3-head proportions, cel-shaded, ~700 tris, hand-painted
+### Phase C — Characters *(started)*
+* **Chibi humans** — 3-head proportions, cel-shaded, ~1000 tris, hand-painted
   vertex colours, face as a separate normal-flattened cap so toon bands never
   cut across the face.
+  **Built** (`src/world/characters/`): 896–1016 tris, 19 bones, skinned body and
+  skinned outline hull sharing one skeleton, walk/run/idle. The face cap exists —
+  eyes, a mouth and hair-coloured brows pressed onto the skull's *built* surface
+  by ray-cast, plus hands, ears, twenty-one hairstyles and four head shapes.
 * **Monsters** — the animation bar is the point: correct weight-shift walk and
   run cycles (contact / down / pass / up, no floaty interpolation), and attacks
   with real anticipation → strike → recovery timing and hit-stop.
+  Walk and run cycles exist and are asserted against that bar; attacks do not.
 * Skeletal animation via glTF; LOD tiers share one skeleton, so LOD switching
   never re-binds a skin.
+  **Departed from, deliberately:** the mesh and the cycles are procedural, like
+  every other asset here — there are no character files to load. The engine path
+  is unchanged (`SkinnedMesh` + `Skeleton`), so an imported glTF character drops
+  into the same pipeline. **LOD tiers are still owed**: characters ship one tier
+  where every other object ships four (R7). See `AAA-graphics.md` §10b.
+
+> **Skinning costs programs.** `USE_SKINNING` forks every program a skinned mesh
+> touches — toon, outline and shadow depth — taking the scene from 7 to **11**
+> against the ≤13 ceiling in §5. That is a fixed cost for the whole character
+> family, but a second skinned material family would not fit.
 
 ### Phase D — Game layer
 Traversal, combat, the existing save/platform/i18n pipeline from the 2D game
@@ -532,6 +642,7 @@ src/world/
   geometry/                 rng, normals, bevel, vertex AO, budget assertions
   shading/                  toon material family, ramp, dither, wind, outline
   lod/                      DitheredLod, InstancedLodField
+  grass/                    patch-instanced meadow, 6 tiers  →  grass.md
   assets/                   tree.ts, stone.ts, boulder.ts (procedural, 4 LODs)
   terrain/                  heightfield, chunked terrain with 4 tiers
   perf/                     profiler, GPU timer, ablation

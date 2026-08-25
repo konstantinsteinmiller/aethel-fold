@@ -6,8 +6,11 @@ import { DitheredLod } from '../lod/DitheredLod'
 import type { ChunkRequest } from './chunkGeometry'
 import { vertexCountFor } from './chunkGeometry'
 import { ChunkWorkerPool } from './ChunkWorkerPool'
+import { DistantTerrain } from './DistantTerrain'
 import type { Heightfield } from './heightfield'
 import { TERRAIN_PALETTE_SLOTS } from './heightfieldCore'
+import type { SculptPatch } from './SculptField'
+import type { TerrainWorkerResult } from './terrainWorker'
 import { TerrainMaterial } from './TerrainMaterial'
 
 /**
@@ -89,8 +92,45 @@ export class Terrain {
   readonly group = new Group()
   readonly field: Heightfield
 
+  /**
+   * The ground past the streamer's reach — one coarse mesh, one draw call.
+   *
+   * Owned here rather than by `World` because it needs the same heightfield
+   * params, the same palette and the same material instance as the streamed
+   * chunks. A second copy of any of those is a visible seam at the hole edge.
+   */
+  readonly distant: DistantTerrain
+
   /** Live chunks. Kept as an array too, because `update` walks it every frame. */
   readonly chunks: DitheredLod[] = []
+
+  /**
+   * Cold (non-recycled) chunk nodes allowed per frame.
+   *
+   * `Infinity` is the original behaviour and the default: the upload budget
+   * alone decides, and because it can only stop *between* units a single cold
+   * node overruns it. A small number rations the expensive unit while recycled
+   * nodes keep filling the budget.
+   *
+   * ── Measured, and left off ──────────────────────────────────────────────────
+   *
+   * Setting it to 1 does exactly what it claims to its own metric — worst upload
+   * frame **9.8 → 7.6 ms**, the same work spread over 32 frames instead of 20 —
+   * and **does not move frame time at all**. Four interleaved rounds inside one
+   * build, with the cold path re-armed each round by emptying the pool and
+   * teleporting to virgin terrain: p95 identical, worst frame ~50 ms in both.
+   *
+   * The reason is the useful part. A cold node costs ~3.7 ms against a 2 ms
+   * budget, so rationing can only ever save single-digit milliseconds — while
+   * the frames it was meant to rescue are 50–100 ms, of which `renderMs` (draw
+   * submission) is **83 %**. Terrain upload peaks at 13.4 ms and scatter
+   * population at 5.1 ms; neither is what makes those frames slow.
+   *
+   * Kept as a live knob rather than deleted, because the mechanism is real and
+   * a device where upload dominates would benefit. Default unchanged, since a
+   * slower fill is a real cost and the benefit was not observable.
+   */
+  coldNodeLimit = Number.POSITIVE_INFINITY
 
   /** Diagnostics for the perf panel. */
   readonly streamStats = {
@@ -117,6 +157,12 @@ export class Terrain {
   private readonly requested = new Set<string>()
   private readonly ready: { key: string; cx: number; cz: number; tiers: TierData[] }[] = []
   private readonly nodePool: PooledNode[] = []
+  /** Chunks with a sculpt rebuild in flight, so a held brush can't queue a
+   *  hundred builds for the same chunk. */
+  private readonly rebuilding = new Set<string>()
+  /** Chunks that changed again while their rebuild was in flight; the value is
+   *  whether that follow-up pass also owes a scatter refresh. */
+  private readonly rebuildQueue = new Map<string, boolean>()
   private readonly materialTemplate: TerrainMaterial
   private disposed = false
 
@@ -178,6 +224,47 @@ export class Terrain {
 
     this.pool = new ChunkWorkerPool(field.params, palette, workerCount)
     this.streamStats.usingWorkers = this.pool.usingWorkers
+
+    this.distant = new DistantTerrain(this.pool, this.materialTemplate, {
+      // The hole must stay inside the streamer's reach or the two surfaces leave
+      // a gap; `loadRadius` is the number that decides it.
+      holeRadius: loadRadius * 0.9
+    })
+    this.group.add(this.distant.group)
+  }
+
+  /**
+   * Drops every pooled node so the next fill takes the cold path.
+   *
+   * Exists for the `coldNodeLimit` A/B: pool growth is a once-per-session event,
+   * so without a way to re-arm it the expensive path can be measured exactly
+   * once and never compared against itself.
+   *
+   * **Deliberately does not dispose.** `DitheredLod.dispose()` releases the tier
+   * materials, and those are clones of one shared template — disposing a pooled
+   * node therefore reaches into every *live* chunk's shading. Doing that here
+   * degraded the terrain after the first call and stopped streaming altogether
+   * two rounds later, which looked exactly like a result until the streaming
+   * counters showed zero chunk loads. Dropping the references is enough to force
+   * the cold path; the handful of orphaned geometries is a fair price in a
+   * measurement helper, and nothing calls this in normal play.
+   */
+  dropPooledNodes(): number {
+    const dropped = this.nodePool.length
+    this.nodePool.length = 0
+    this.streamStats.pooled = 0
+    return dropped
+  }
+
+  /**
+   * Keys of the chunks currently resident.
+   *
+   * For the editor, which has to rebuild scatter across everything loaded when
+   * an override changes globally. Returns a fresh array — this is an editor
+   * action, not a frame path.
+   */
+  liveChunkKeys(): string[] {
+    return [...this.live.keys()]
   }
 
   heightAt(x: number, z: number): number {
@@ -192,6 +279,7 @@ export class Terrain {
    * at whatever tier it was pooled with.
    */
   update(camera: PerspectiveCamera, cameraPosition: Vector3): void {
+    this.distant.update(cameraPosition)
     this.stream(cameraPosition)
 
     _viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
@@ -280,8 +368,9 @@ export class Terrain {
     }
   }
 
-  private async dispatch(key: string, cx: number, cz: number, originX: number, originZ: number): Promise<void> {
-    const requests: ChunkRequest[] = TIER_SEGMENTS.map((segments, tier) => ({
+  /** All four tier requests for one chunk. Shared by the load and rebuild paths. */
+  private tierRequests(originX: number, originZ: number): ChunkRequest[] {
+    return TIER_SEGMENTS.map((segments, tier) => ({
       originX,
       originZ,
       size: this.chunkSize,
@@ -289,6 +378,102 @@ export class Terrain {
       skirtDepth: this.skirtDepth,
       withSkirt: tier < SKIRT_TIERS
     }))
+  }
+
+  // ── editor sculpting ──────────────────────────────────────────────────────
+
+  /**
+   * Hands an editor sculpt patch to the chunk workers. Call this **before**
+   * `invalidateRegion`, or the rebuilt chunks are built from the old offsets.
+   */
+  setSculptDelta(patch: SculptPatch): void {
+    this.pool.setSculptDelta(patch)
+  }
+
+  /**
+   * Rebuilds every live chunk overlapping a world-space rectangle.
+   *
+   * Deliberately **not** an unload/reload: those go through the pool and the
+   * node recycler, so the ground under the brush would blink out for however
+   * many frames the round trip takes. The node stays exactly where it is, its
+   * geometry is refilled in place by `writeTier`, and until the new buffers
+   * land the player keeps walking on the old mesh — which is a couple of
+   * millimetres out of date rather than absent.
+   *
+   * `rescatter` replays the chunk lifecycle hooks so trees and rocks re-seat on
+   * the new surface. It is off during a drag (re-placing a forest 30 times a
+   * second is pure churn) and on when the stroke ends.
+   */
+  invalidateRegion(minX: number, minZ: number, maxX: number, maxZ: number, rescatter = false): number {
+    // The ring samples the same heightfield, sculpt delta and all, but only
+    // rebuilds on a snap boundary — so without this an edited hill would be
+    // missing from the horizon until the player walked 192 m away from it.
+    this.distant.invalidate()
+    let count = 0
+    for (const [key, node] of this.live) {
+      const originX = node.cx * this.chunkSize
+      const originZ = node.cz * this.chunkSize
+      if (originX > maxX || originX + this.chunkSize < minX) {
+        continue
+      }
+      if (originZ > maxZ || originZ + this.chunkSize < minZ) {
+        continue
+      }
+      if (this.rebuilding.has(key)) {
+        // Already in flight. Queued rather than dropped: a held brush issues a
+        // request every few frames, and dropping the last one loses the final
+        // dab of the stroke — permanently, since nothing else will ask again.
+        this.rebuildQueue.set(key, (this.rebuildQueue.get(key) ?? false) || rescatter)
+        continue
+      }
+      this.rebuilding.add(key)
+      void this.rebuildChunk(key, originX, originZ, rescatter)
+      count++
+    }
+    return count
+  }
+
+  private async rebuildChunk(key: string, originX: number, originZ: number, rescatter: boolean): Promise<void> {
+    let result: TerrainWorkerResult | null = null
+    try {
+      result = await this.pool.build(this.tierRequests(originX, originZ))
+    } finally {
+      this.rebuilding.delete(key)
+    }
+    if (this.disposed) {
+      this.rebuildQueue.delete(key)
+      return
+    }
+
+    // The chunk may have been unloaded while the worker was busy — a rebuild is
+    // not a reason to keep a chunk the player has walked away from.
+    const node = this.live.get(key)
+    if (node && result) {
+      for (let tier = 0; tier < result.tiers.length; tier++) {
+        const geometry = node.asset.tiers[tier]
+        const data = result.tiers[tier]
+        if (geometry && data) {
+          writeTier(geometry, data)
+        }
+      }
+      if (rescatter) {
+        this.onChunkUnload?.(key)
+        this.onChunkLoad?.(key, originX, originZ, this.chunkSize)
+      }
+    }
+
+    const queued = this.rebuildQueue.get(key)
+    if (queued === undefined || !node) {
+      this.rebuildQueue.delete(key)
+      return
+    }
+    this.rebuildQueue.delete(key)
+    this.rebuilding.add(key)
+    void this.rebuildChunk(key, originX, originZ, queued)
+  }
+
+  private async dispatch(key: string, cx: number, cz: number, originX: number, originZ: number): Promise<void> {
+    const requests = this.tierRequests(originX, originZ)
 
     const result = await this.pool.build(requests)
     if (this.disposed) {
@@ -310,19 +495,37 @@ export class Terrain {
     const started = performance.now()
     let spent = 0
 
+    let coldThisFrame = 0
+
     while (this.ready.length > 0) {
       const entry = this.ready.shift()!
       this.requested.delete(entry.key)
-      this.instantiate(entry.key, entry.cx, entry.cz, entry.tiers)
+      if (this.instantiate(entry.key, entry.cx, entry.cz, entry.tiers)) {
+        coldThisFrame++
+      }
       spent = performance.now() - started
-      if (spent >= this.uploadBudgetMs) {
+      // ── Two units, two costs ────────────────────────────────────────────────
+      //
+      // A recycled node copies into buffers that already exist; a **cold** one
+      // allocates four `BufferGeometry` objects, a `DitheredLod` with its tier
+      // meshes and outline hull, and fresh GPU buffers. One cold node exceeds
+      // this budget on its own, and a budget can only stop *between* units — the
+      // same shape of problem as the placeable drain.
+      //
+      // `coldNodeLimit` rations the expensive unit while letting recycled nodes
+      // keep filling the budget. It is a live setting rather than a constant so
+      // the two behaviours can be compared **inside one build** (rule 9): the
+      // first attempt at this was judged across commits against a single
+      // baseline sample, which is not a measurement.
+      if (spent >= this.uploadBudgetMs || coldThisFrame >= this.coldNodeLimit) {
         break
       }
     }
     this.streamStats.uploadMsLastFrame = Math.round(spent * 100) / 100
   }
 
-  private instantiate(key: string, cx: number, cz: number, tiers: TierData[]): void {
+  /** True when the node had to be built from scratch — see `drainReady`. */
+  private instantiate(key: string, cx: number, cz: number, tiers: TierData[]): boolean {
     const originX = cx * this.chunkSize
     const originZ = cz * this.chunkSize
     const pooled = this.nodePool.pop()
@@ -358,13 +561,20 @@ export class Terrain {
         radius: this.chunkRadius,
         // A 48 m chunk is orders of magnitude larger than a pebble, so it holds
         // detail correspondingly further out.
-        distanceScale: 3.2
+        distanceScale: 3.2,
+        // Chunks are the biggest receivers in the scene and never cast — a hill
+        // shadowing another hill is not worth the shadow draws.
+        //
+        // Declared on the *asset*, not by assigning `mesh.castShadow = false`
+        // below. That is how this was written and it did nothing: `DitheredLod`
+        // re-assigns `castShadow` from `asset.castsShadow ?? true` on every
+        // frame as tiers cross fade thresholds, so the constructor's intent was
+        // overwritten one frame later and 20 chunks were casting into every
+        // cascade — 16.3k of the 20.9k caster triangles in the scene.
+        castsShadow: false
       }
       const lod = new DitheredLod(asset)
       for (const mesh of lod.tierMeshes) {
-        // Chunks are the biggest receivers in the scene and never cast — a hill
-        // shadowing another hill isn't worth the extra shadow draws.
-        mesh.castShadow = false
         mesh.receiveShadow = true
       }
       node = {
@@ -385,6 +595,7 @@ export class Terrain {
     this.live.set(key, node)
     this.chunks.push(node.lod)
     this.onChunkLoad?.(key, originX, originZ, this.chunkSize)
+    return !pooled
   }
 
   private unloadDistant(cameraPosition: Vector3): void {
@@ -423,6 +634,8 @@ export class Terrain {
       }
     }
     this.live.clear()
+    this.rebuilding.clear()
+    this.rebuildQueue.clear()
     this.nodePool.length = 0
     this.chunks.length = 0
     this.ready.length = 0

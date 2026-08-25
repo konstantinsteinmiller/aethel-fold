@@ -17,12 +17,30 @@ import { fbm2D, valueNoise2D } from '../geometry/rng'
  * arrays instead of being returned.
  */
 
+/**
+ * Editor sculpt layer, if one is installed.
+ *
+ * Deliberately an interface with one method rather than the data itself: the
+ * main thread and the worker each hold their **own** live `SculptField` (see
+ * `terrain/SculptField.ts`) and the worker's is fed by patch messages, because
+ * a class instance does not survive structured clone as anything callable.
+ */
+export interface DeltaSampler {
+  /** Height offset at a world position, in metres. Exactly 0 where unsculpted. */
+  sample(x: number, z: number): number
+}
+
 /** Everything the shape of the terrain depends on. Structured-cloneable. */
 export interface HeightfieldParams {
   seed: number
   amplitude: number
   featureSize: number
   plainRadius: number
+  /**
+   * Editor sculpt offsets, or absent. **Not** part of the cloneable contract —
+   * each thread attaches its own; see `DeltaSampler`.
+   */
+  delta?: DeltaSampler | null
 }
 
 export const DEFAULT_HEIGHTFIELD_PARAMS: HeightfieldParams = {
@@ -63,6 +81,21 @@ export const heightAtCore = (x: number, z: number, params: HeightfieldParams): n
   if (distance < plainRadius * 2) {
     const t = Math.min(1, Math.max(0, (distance - plainRadius) / plainRadius))
     height *= 0.35 + 0.65 * (t * t * (3 - 2 * t))
+  }
+
+  // Last, and after the spawn damping on purpose: a sculpted mound inside the
+  // starting plain would otherwise be scaled to a third of what was painted,
+  // and the editor would appear to ignore two out of every three metres.
+  //
+  // The zero test is not a micro-optimisation — it is what makes a query away
+  // from any edit **bit-identical** to the field before sculpting existed, so
+  // installing the editor can never shift terrain nobody touched.
+  const delta = params.delta
+  if (delta) {
+    const offset = delta.sample(x, z)
+    if (offset !== 0) {
+      return height + offset
+    }
   }
 
   return height

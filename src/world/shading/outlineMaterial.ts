@@ -1,4 +1,5 @@
-import { BackSide, Color, ShaderMaterial, UniformsLib, UniformsUtils } from 'three'
+import { BackSide, ShaderMaterial, UniformsLib, UniformsUtils } from 'three'
+import { OUTLINE_COOL, OUTLINE_COOL_MIX, OUTLINE_DARKEN } from '../art/palette'
 import { worldUniforms } from './globals'
 import { WIND_PARS_VERTEX_GLSL, WIND_VERTEX_GLSL } from './glsl'
 
@@ -52,6 +53,24 @@ ${WIND_PARS_VERTEX_GLSL}
 
 #include <common>
 #include <fog_pars_vertex>
+// ── Skinning ────────────────────────────────────────────────────────────────
+//
+// An inverted hull has to deform with the body or it stays in bind pose while
+// the character walks out of it — the outline detaches completely, which is the
+// most visible possible failure.
+//
+// This is a hand-written ShaderMaterial, so none of it comes for free the way
+// it does for ToonMaterial (which inherits MeshToonMaterial). It works because
+// three decides skinning from the *object*, not the material —
+// skinning: object.isSkinnedMesh === true — so USE_SKINNING is defined and
+// bindMatrix, bindMatrixInverse and boneTexture are uploaded for any material
+// on a SkinnedMesh. skinIndex/skinWeight are declared by three's vertex prefix
+// under the same define. Every chunk below is #ifdef-guarded, so nothing
+// changes for the props and no extra program is compiled for them.
+//
+// NB: no backticks in this comment — it lives inside a template literal, and
+// one would close the string and take the whole module out with it.
+#include <skinning_pars_vertex>
 
 void main() {
   vColorRaw = color;
@@ -66,6 +85,15 @@ void main() {
 
   vec3 transformed = position;
   vec3 objectNormal = normal;
+
+  // Order is load-bearing: skinbase builds the four bone matrices that the
+  // other two read, and the normal must be skinned as well as the position —
+  // the hull is extruded *along the normal*, so an unskinned normal would push
+  // a correctly-posed vertex in the bind-pose direction and the outline would
+  // fatten and thin as the limb rotated.
+  #include <skinbase_vertex>
+  #include <skinnormal_vertex>
+  #include <skinning_vertex>
 
   ${WIND_VERTEX_GLSL}
 
@@ -142,9 +170,12 @@ export class OutlineMaterial extends ShaderMaterial {
           uPixelWidth: { value: pixelWidth },
           uUnitsPerPixel: { value: 0.002 },
           uFade: { value: 1 },
-          uCool: { value: new Color(0x2a3348) },
-          uDarken: { value: 0.22 },
-          uCoolMix: { value: 0.35 },
+          // From the palette, not literals: the level editor restores these
+          // exact values after highlighting a focused prop, and a second copy
+          // of the number here is a prop that quietly keeps the wrong outline.
+          uCool: { value: OUTLINE_COOL.clone() },
+          uDarken: { value: OUTLINE_DARKEN },
+          uCoolMix: { value: OUTLINE_COOL_MIX },
           uWindStrength: { value: windStrength },
           uTime: { value: 0 },
           uWindDir: { value: worldUniforms.uWindDir.value.clone() },

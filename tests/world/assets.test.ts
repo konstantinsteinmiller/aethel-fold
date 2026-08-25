@@ -64,10 +64,34 @@ describe('placeable catalogue', () => {
     }
   })
 
-  it('outlines LOD0 and LOD1 only (GDD R6)', () => {
+  /**
+   * GDD R6 is "outlines are LOD0 and LOD1 only", not "everything outlines".
+   * Water is the one family that opts out: an inverted hull around a
+   * translucent sheet reads as a decal, and R6's own colour rule (base × 0.22
+   * shifted cool) lands a near-black line around bright cyan. The opt-out is
+   * asserted rather than tolerated — if a *rock* ever arrives with no outline
+   * that is a bug, so the exemption is pinned to the category.
+   */
+  it('outlines LOD0 and LOD1 only, and only water opts out (GDD R6)', () => {
     for (const definition of definitions) {
-      expect(definition.asset.outline).not.toBeNull()
-      expect(definition.asset.outlineMaxTier).toBe(1)
+      if (definition.asset.outline === null) {
+        expect(definition.category, `${definition.id} has no outline`).toBe('water')
+        expect(definition.asset.outlineMaxTier).toBe(0)
+        continue
+      }
+      expect(definition.asset.outlineMaxTier, `${definition.id}`).toBe(1)
+    }
+  })
+
+  /**
+   * Only water may skip the shadow pass, and it must — three's depth material
+   * cannot see `WaterMaterial`'s vertex displacement, so a fall would cast the
+   * undisplaced rectangle of its own sheet.
+   */
+  it('casts shadows everywhere except water', () => {
+    for (const definition of definitions) {
+      const casts = definition.asset.castsShadow ?? true
+      expect(casts, `${definition.id}`).toBe(definition.category !== 'water')
     }
   })
 

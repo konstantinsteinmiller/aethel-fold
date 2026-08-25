@@ -1,5 +1,7 @@
 import { buildChunkBuffers, type ChunkRequest } from './chunkGeometry'
+import { buildDistantRing, type DistantRingRequest } from './distantRing'
 import { DEFAULT_HEIGHTFIELD_PARAMS, type HeightfieldParams } from './heightfieldCore'
+import { SculptField, type SculptPatch } from './SculptField'
 
 /**
  * ─── Terrain chunk worker ───────────────────────────────────────────────────
@@ -30,7 +32,32 @@ interface BuildMessage {
   requests: ChunkRequest[]
 }
 
-export type TerrainWorkerMessage = InitMessage | BuildMessage
+/**
+ * A slice of the editor's terrain sculpt. Tiles are plain `Float32Array`s, so
+ * this structured-clones without walking an object graph — and only the tiles
+ * that actually changed are ever sent.
+ */
+interface SculptMessage {
+  type: 'sculpt'
+  patch: SculptPatch
+}
+
+/**
+ * The distant ring (`distantRing.ts`).
+ *
+ * Its own message rather than a `ChunkRequest`, because the ring is one mesh
+ * with a hole rather than four LOD tiers of a square. It rides the same worker
+ * for the same reason chunks do: building it on the main thread cost **17.4 ms
+ * on a desktop** — roughly 70 ms under a 4× CPU throttle — every time the viewer
+ * crossed a snap boundary, which is a hitch every 192 m of travel.
+ */
+interface RingMessage {
+  type: 'ring'
+  id: number
+  request: DistantRingRequest
+}
+
+export type TerrainWorkerMessage = InitMessage | BuildMessage | SculptMessage | RingMessage
 
 /**
  * Buffers as they cross the wire. Typed loosely on the buffer parameter because
@@ -61,18 +88,41 @@ let params: HeightfieldParams = DEFAULT_HEIGHTFIELD_PARAMS
 // Annotated, not inferred: the initialiser would narrow this to
 // `Float32Array<ArrayBuffer>` and then reject the transferred array on init.
 let palette: Float32Array<ArrayBufferLike> = new Float32Array(18)
+/**
+ * This worker's own copy of the editor sculpt. It is never allocated until the
+ * first patch arrives, so a session that never opens the editor pays nothing.
+ */
+let delta: SculptField | null = null
 
 self.onmessage = (event: MessageEvent<TerrainWorkerMessage>): void => {
   const message = event.data
 
   if (message.type === 'init') {
-    params = message.params
+    // `delta` is re-attached rather than taken from the message: a
+    // `SculptField` crossing the wire arrives as inert data with no `sample`,
+    // so whatever `params.delta` a clone may carry has to be replaced by the
+    // live local one or `heightAtCore` would call a method that isn't there.
+    params = { ...message.params, delta }
     palette = message.palette
     return
   }
 
+  if (message.type === 'sculpt') {
+    if (!delta) {
+      delta = new SculptField(message.patch.cellSize, message.patch.tileCells)
+      params = { ...params, delta }
+    }
+    delta.applyPatch(message.patch)
+    return
+  }
+
   const started = performance.now()
-  const tiers = message.requests.map(request => buildChunkBuffers(request, params, palette))
+  // The ring returns a single mesh; it rides in the `tiers` array so the result
+  // shape — and the pool's pending-request bookkeeping — stays one thing.
+  const tiers =
+    message.type === 'ring'
+      ? [buildDistantRing(message.request, params, palette)]
+      : message.requests.map(request => buildChunkBuffers(request, params, palette))
   const result: TerrainWorkerResult = {
     type: 'chunk',
     id: message.id,

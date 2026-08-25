@@ -1,4 +1,4 @@
-import type { Material, Object3D, PerspectiveCamera, WebGLProgramParametersWithUniforms } from 'three'
+import type { Color, Material, Object3D, PerspectiveCamera, WebGLProgramParametersWithUniforms } from 'three'
 import { ShaderChunk, Vector3 } from 'three'
 import { CSM } from 'three/examples/jsm/csm/CSM.js'
 import type { CSMShader as CsmShaderChunks } from 'three/examples/jsm/csm/CSMShader.js'
@@ -180,6 +180,42 @@ export class ShadowCascades {
 
   setDirection(direction: Vector3): void {
     this.csm.lightDirection.copy(direction).negate().normalize()
+  }
+
+  /** Sun colour. Warm at the horizon, neutral at noon — see `dayCycle.ts`. */
+  setColor(color: Color): void {
+    for (const light of this.csm.lights) {
+      light.color.copy(color)
+    }
+  }
+
+  /**
+   * Sun intensity, shared across every cascade.
+   *
+   * CSM splits one light into N, and they must stay identical: a cascade left
+   * at a different intensity shows up as a hard brightness step at that
+   * cascade's boundary, sweeping across the world as the camera moves.
+   */
+  setIntensity(value: number): void {
+    for (const light of this.csm.lights) {
+      light.intensity = value
+    }
+  }
+
+  /**
+   * Turns the shadow pass on or off.
+   *
+   * The single biggest saving the day cycle buys. Shadows are two thirds of
+   * this scene's draw calls (§12.3), and for half of every cycle the only
+   * light casting them is a moon dim enough that the result is below what the
+   * toon ramp can band. Switching `castShadow` off skips the depth render for
+   * every cascade; three keeps the maps allocated, so coming back at sunrise
+   * costs nothing.
+   */
+  setShadowsEnabled(enabled: boolean): void {
+    for (const light of this.csm.lights) {
+      light.castShadow = enabled
+    }
   }
 
   dispose(): void {

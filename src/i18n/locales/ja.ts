@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'ドラッグで見回す · WASDで移動 · スクロールまたはピンチでズーム',
     'modeOrbit': '周回視点',
-    'modeFirstPerson': '歩く'
+    'modeFirstPerson': '歩く',
+    'settings': {
+      'title': 'グラフィック',
+      'open': 'グラフィック設定',
+      'grass': '草の描画',
+      'grassHint': '草が密になり、遠くまで描かれます。動作が重い場合は下げてください。',
+      'grassAutoHint': '端末の性能に合わせて草を調整します。',
+      'drawnPatches': '画面内 {n} 株 · {tris}k 三角形',
+      'detail': {
+        'auto': '自動',
+        'ultra': 'ウルトラ',
+        'high': '高',
+        'medium': '中',
+        'low': '低',
+        'minimum': '最低',
+        'off': 'オフ'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'キャラクターを作る',
+    'hint': 'ドラッグで回転 · スクロールまたはピンチでズーム',
+    'body': '体型',
+    'bodies': {
+      'male': '男性的',
+      'female': '女性的'
+    },
+    'head': '頭の形',
+    'heads': {
+      'round': '丸型',
+      'oval': '卵型',
+      'square': '四角',
+      'heart': 'ハート型'
+    },
+    'hair': '髪型',
+    'hairStyles': {
+      'bowl': 'おかっぱ',
+      'short': 'ショート',
+      'ponytail': 'ポニーテール',
+      'braids': '三つ編み',
+      'long': 'ロング',
+      'bald': '坊主',
+      'topknot': '頭頂のまげ',
+      'buns': '耳もとのお団子',
+      'bun': '低めのお団子',
+      'plaits': 'はねた三つ編み',
+      'flowing': '流れる長髪',
+      'queue': '長い三つ編み',
+      'bob': 'ボブカット',
+      'tresses': '前に垂らした髪',
+      'wild': 'ぼさぼさ',
+      'swept': '横に流した髪',
+      'fringe': '厚い前髪',
+      'bearded': 'ひげ面',
+      'mane': 'たてがみ',
+      'coif': '頭巾',
+      'receding': '後退した生え際'
+    },
+    'eyes': '目',
+    'eyeStyles': {
+      'bright': 'ぱっちり',
+      'wide': '離れ目',
+      'close': '寄り目',
+      'tall': '縦長',
+      'small': '小さめ',
+      'almond': 'アーモンド',
+      'sleepy': '眠そう',
+      'sharp': 'きつめ',
+      'soft': 'やさしい',
+      'weary': '疲れ目'
+    },
+    'mouth': '口',
+    'mouthStyles': {
+      'smile': '微笑み',
+      'neutral': 'ふつう',
+      'frown': 'への字',
+      'grin': 'にっこり',
+      'open': '開いた口'
+    },
+    'skinTone': '肌の色',
+    'skinToneOption': '肌の色 {n}',
+    'hairColour': '髪の色',
+    'hairColourOption': '髪の色 {n}',
+    'tunicColour': '衣装の色',
+    'tunicColourOption': '衣装の色 {n}',
+    'outfit': '衣装',
+    'outfitHint': '衣服が仕立てられる色。ローブ、ジャーキン、帽子ごとに独自の組み合わせがあります。',
+    'equipment': '装備',
+    'items': {
+      'hat': '帽子',
+      'torsoArmour': '鎧',
+      'sword': '剣',
+      'shield': '盾'
+    },
+    'drawWeapon': '武器を構える',
+    'spin': '自動回転',
+    'randomise': 'おまかせ',
+    'reset': 'やり直す',
+    'save': 'キャラクターを保存',
+    'saved': '保存しました',
+    'back': 'ワールドに戻る',
+    'roster': 'キャラクター',
+    'newCharacter': '新しいキャラクター',
+    'unnamed': '名前なし',
+    'search': '名前またはIDで検索',
+    'noMatches': '一致するキャラクターがありません。',
+    'empty': '保存されたキャラクターはまだありません。作って名前を付け、保存を押してください。',
+    'name': '名前',
+    'namePlaceholder': 'キャラクターの名前を入力',
+    'copyName': '{name} のコピー',
+    'id': 'ID',
+    'idPending': '保存時に割り当てられます。',
+    'idFixed': '作成時に確定します。セーブやクエストが参照するため、名前を変えても変わりません。',
+    'duplicate': '複製',
+    'delete': '削除',
+    'deleteConfirm': '{name} を削除しますか？元に戻せません。',
+    'unsavedChanges': '保存していない変更があります。',
+    'saveAndContinue': '保存して続ける',
+    'discard': '破棄'
   }
 }

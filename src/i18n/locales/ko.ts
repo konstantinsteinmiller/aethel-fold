@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': '드래그로 둘러보기 · WASD로 이동 · 스크롤 또는 핀치로 확대·축소',
     'modeOrbit': '궤도 시점',
-    'modeFirstPerson': '걷기'
+    'modeFirstPerson': '걷기',
+    'settings': {
+      'title': '그래픽',
+      'open': '그래픽 설정',
+      'grass': '풀 디테일',
+      'grassHint': '풀이 더 빽빽해지고 더 멀리까지 그려집니다. 게임이 끊기면 낮추세요.',
+      'grassAutoHint': '기기 성능에 맞춰 풀이 조절됩니다.',
+      'drawnPatches': '화면에 {n}포기 · 삼각형 {tris}k',
+      'detail': {
+        'auto': '자동',
+        'ultra': '울트라',
+        'high': '높음',
+        'medium': '보통',
+        'low': '낮음',
+        'minimum': '최저',
+        'off': '끄기'
+      }
+    }
+  },
+
+  'characters': {
+    'title': '캐릭터 만들기',
+    'hint': '드래그해서 돌리기 · 스크롤 또는 핀치로 확대',
+    'body': '체형',
+    'bodies': {
+      'male': '남성형',
+      'female': '여성형'
+    },
+    'head': '머리 모양',
+    'heads': {
+      'round': '둥근형',
+      'oval': '계란형',
+      'square': '각진형',
+      'heart': '하트형'
+    },
+    'hair': '머리 스타일',
+    'hairStyles': {
+      'bowl': '바가지 머리',
+      'short': '짧은 머리',
+      'ponytail': '포니테일',
+      'braids': '땋은 머리',
+      'long': '긴 머리',
+      'bald': '민머리',
+      'topknot': '상투',
+      'buns': '양갈래 쪽머리',
+      'bun': '낮은 쪽머리',
+      'plaits': '뻗은 땋은 머리',
+      'flowing': '흘러내린 장발',
+      'queue': '긴 땋은 머리',
+      'bob': '단발머리',
+      'tresses': '앞으로 늘어뜨린 머리',
+      'wild': '헝클어진 머리',
+      'swept': '옆으로 넘긴 머리',
+      'fringe': '두꺼운 앞머리',
+      'bearded': '수염',
+      'mane': '풍성한 머리',
+      'coif': '두건',
+      'receding': '벗겨진 이마'
+    },
+    'eyes': '눈',
+    'eyeStyles': {
+      'bright': '또렷함',
+      'wide': '먼 간격',
+      'close': '좁은 간격',
+      'tall': '세로로 긴',
+      'small': '작은 눈',
+      'almond': '아몬드형',
+      'sleepy': '졸린 눈',
+      'sharp': '날카로운',
+      'soft': '부드러운',
+      'weary': '지친 눈'
+    },
+    'mouth': '입',
+    'mouthStyles': {
+      'smile': '미소',
+      'neutral': '무표정',
+      'frown': '찡그림',
+      'grin': '활짝 웃음',
+      'open': '벌린 입'
+    },
+    'skinTone': '피부색',
+    'skinToneOption': '피부색 {n}',
+    'hairColour': '머리 색',
+    'hairColourOption': '머리 색 {n}',
+    'tunicColour': '옷 색',
+    'tunicColourOption': '옷 색 {n}',
+    'outfit': '복장',
+    'outfitHint': '의복이 어떤 색으로 재단되었는지. 로브, 저킨, 모자마다 고유한 세트가 있습니다.',
+    'equipment': '장비',
+    'items': {
+      'hat': '모자',
+      'torsoArmour': '갑옷',
+      'sword': '검',
+      'shield': '방패'
+    },
+    'drawWeapon': '무기 뽑기',
+    'spin': '자동 회전',
+    'randomise': '무작위로',
+    'reset': '처음부터',
+    'save': '캐릭터 저장',
+    'saved': '저장됨',
+    'back': '월드로 돌아가기',
+    'roster': '캐릭터',
+    'newCharacter': '새 캐릭터',
+    'unnamed': '이름 없음',
+    'search': '이름 또는 ID로 검색',
+    'noMatches': '일치하는 캐릭터가 없습니다.',
+    'empty': '저장된 캐릭터가 아직 없습니다. 하나 만들고 이름을 지은 뒤 저장을 누르세요.',
+    'name': '이름',
+    'namePlaceholder': '캐릭터 이름을 입력하세요',
+    'copyName': '{name} 사본',
+    'id': 'ID',
+    'idPending': '저장할 때 부여됩니다.',
+    'idFixed': '생성 시 고정됩니다. 세이브와 퀘스트가 이를 참조하므로 이름을 바꿔도 변하지 않습니다.',
+    'duplicate': '복제',
+    'delete': '삭제',
+    'deleteConfirm': '{name}을(를) 삭제할까요? 되돌릴 수 없습니다.',
+    'unsavedChanges': '저장하지 않은 변경 사항이 있습니다.',
+    'saveAndContinue': '저장하고 계속',
+    'discard': '버리기'
   }
 }

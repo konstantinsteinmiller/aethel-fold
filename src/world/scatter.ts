@@ -140,9 +140,29 @@ export const addChunkScatter = (
   originX: number,
   originZ: number,
   chunkSize: number,
-  scratch: InstanceTransform[]
+  scratch: InstanceTransform[],
+  /**
+   * Drops instances the editor has deleted.
+   *
+   * Applied here, between generation and the field, so a tombstoned prop never
+   * reaches the renderer, the collider index or the save file — one filter
+   * instead of three places that have to agree. Filtering in place keeps the
+   * chunk-load path allocation-free (GDD §5.2).
+   */
+  reject?: (transform: InstanceTransform) => boolean
 ): number => {
   scatterChunk(heightfield, options, originX, originZ, chunkSize, scratch)
+  if (reject && scratch.length > 0) {
+    let kept = 0
+    for (let i = 0; i < scratch.length; i++) {
+      const transform = scratch[i]!
+      if (reject(transform)) {
+        continue
+      }
+      scratch[kept++] = transform
+    }
+    scratch.length = kept
+  }
   if (scratch.length === 0) {
     return 0
   }

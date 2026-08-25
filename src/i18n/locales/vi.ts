@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'Kéo để nhìn quanh · WASD để di chuyển · cuộn hoặc chụm để thu phóng',
     'modeOrbit': 'Chế độ xoay quanh',
-    'modeFirstPerson': 'Đi bộ'
+    'modeFirstPerson': 'Đi bộ',
+    'settings': {
+      'title': 'Đồ họa',
+      'open': 'Cài đặt đồ họa',
+      'grass': 'Chi tiết cỏ',
+      'grassHint': 'Cỏ dày hơn và hiện xa hơn. Hãy giảm nếu game bị giật.',
+      'grassAutoHint': 'Cỏ tự điều chỉnh theo khả năng thiết bị của bạn.',
+      'drawnPatches': '{n} khóm trên màn hình · {tris}k tam giác',
+      'detail': {
+        'auto': 'Tự động',
+        'ultra': 'Siêu cao',
+        'high': 'Cao',
+        'medium': 'Trung bình',
+        'low': 'Thấp',
+        'minimum': 'Tối thiểu',
+        'off': 'Tắt'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'Tạo nhân vật của bạn',
+    'hint': 'Kéo để xoay · cuộn hoặc chụm để thu phóng',
+    'body': 'Dáng người',
+    'bodies': {
+      'male': 'Nam tính',
+      'female': 'Nữ tính'
+    },
+    'head': 'Dáng đầu',
+    'heads': {
+      'round': 'Tròn',
+      'oval': 'Trái xoan',
+      'square': 'Vuông',
+      'heart': 'Trái tim'
+    },
+    'hair': 'Tóc',
+    'hairStyles': {
+      'bowl': 'Tóc úp nồi',
+      'short': 'Tóc ngắn',
+      'ponytail': 'Tóc đuôi ngựa',
+      'braids': 'Tóc tết',
+      'long': 'Tóc dài',
+      'bald': 'Đầu trọc',
+      'topknot': 'Búi tóc đỉnh đầu',
+      'buns': 'Búi tóc hai bên',
+      'bun': 'Búi tóc thấp',
+      'plaits': 'Bím tóc vểnh',
+      'flowing': 'Tóc dài buông',
+      'queue': 'Bím tóc dài',
+      'bob': 'Tóc bob',
+      'tresses': 'Lọn tóc trước vai',
+      'wild': 'Tóc bù xù',
+      'swept': 'Tóc vuốt lệch',
+      'fringe': 'Tóc mái dày',
+      'bearded': 'Có râu',
+      'mane': 'Tóc bồng',
+      'coif': 'Khăn trùm đầu',
+      'receding': 'Tóc hói trán'
+    },
+    'eyes': 'Mắt',
+    'eyeStyles': {
+      'bright': 'Sáng',
+      'wide': 'Xa nhau',
+      'close': 'Gần nhau',
+      'tall': 'Cao',
+      'small': 'Nhỏ',
+      'almond': 'Hạnh nhân',
+      'sleepy': 'Buồn ngủ',
+      'sharp': 'Sắc',
+      'soft': 'Dịu',
+      'weary': 'Mệt mỏi'
+    },
+    'mouth': 'Miệng',
+    'mouthStyles': {
+      'smile': 'Mỉm cười',
+      'neutral': 'Bình thường',
+      'frown': 'Cau có',
+      'grin': 'Cười tươi',
+      'open': 'Mở'
+    },
+    'skinTone': 'Màu da',
+    'skinToneOption': 'Màu da {n}',
+    'hairColour': 'Màu tóc',
+    'hairColourOption': 'Màu tóc {n}',
+    'tunicColour': 'Màu áo',
+    'tunicColourOption': 'Màu áo {n}',
+    'outfit': 'Trang phục',
+    'outfitHint': 'Trang phục được cắt từ những màu nào. Mỗi áo choàng, áo chẽn và mũ có bộ riêng.',
+    'equipment': 'Trang bị',
+    'items': {
+      'hat': 'Mũ',
+      'torsoArmour': 'Giáp',
+      'sword': 'Kiếm',
+      'shield': 'Khiên'
+    },
+    'drawWeapon': 'Rút vũ khí',
+    'spin': 'Tự xoay',
+    'randomise': 'Ngẫu nhiên',
+    'reset': 'Làm lại',
+    'save': 'Lưu nhân vật',
+    'saved': 'Đã lưu',
+    'back': 'Quay lại thế giới',
+    'roster': 'Nhân vật',
+    'newCharacter': 'Nhân vật mới',
+    'unnamed': 'Chưa đặt tên',
+    'search': 'Tìm theo tên hoặc ID',
+    'noMatches': 'Không có nhân vật nào khớp.',
+    'empty': 'Chưa có nhân vật nào được lưu. Hãy tạo một nhân vật, đặt tên và nhấn Lưu.',
+    'name': 'Tên',
+    'namePlaceholder': 'Đặt tên cho nhân vật của bạn',
+    'copyName': 'Bản sao của {name}',
+    'id': 'ID',
+    'idPending': 'Được cấp khi bạn lưu.',
+    'idFixed': 'Cố định khi tạo. Bản lưu và nhiệm vụ tham chiếu tới nó, nên đổi tên không bao giờ làm nó thay đổi.',
+    'duplicate': 'Nhân bản',
+    'delete': 'Xoá',
+    'deleteConfirm': 'Xoá {name}? Không thể hoàn tác.',
+    'unsavedChanges': 'Bạn có thay đổi chưa lưu.',
+    'saveAndContinue': 'Lưu và tiếp tục',
+    'discard': 'Bỏ qua'
   }
 }

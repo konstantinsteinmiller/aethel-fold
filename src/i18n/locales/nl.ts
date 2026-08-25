@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'Sleep om rond te kijken · WASD om te bewegen · scroll of knijp om te zoomen',
     'modeOrbit': 'Orbitweergave',
-    'modeFirstPerson': 'Lopen'
+    'modeFirstPerson': 'Lopen',
+    'settings': {
+      'title': 'Graphics',
+      'open': 'Grafische instellingen',
+      'grass': 'Grasdetail',
+      'grassHint': 'Dichter gras dat verder reikt. Zet dit lager als het spel hapert.',
+      'grassAutoHint': 'Het gras past zich aan wat je apparaat aankan.',
+      'drawnPatches': '{n} plukken in beeld · {tris}k driehoeken',
+      'detail': {
+        'auto': 'Automatisch',
+        'ultra': 'Ultra',
+        'high': 'Hoog',
+        'medium': 'Gemiddeld',
+        'low': 'Laag',
+        'minimum': 'Minimaal',
+        'off': 'Uit'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'Maak je personage',
+    'hint': 'Sleep om te draaien · scroll of knijp om te zoomen',
+    'body': 'Lichaamsbouw',
+    'bodies': {
+      'male': 'Mannelijk',
+      'female': 'Vrouwelijk'
+    },
+    'head': 'Hoofdvorm',
+    'heads': {
+      'round': 'Rond',
+      'oval': 'Ovaal',
+      'square': 'Hoekig',
+      'heart': 'Hartvormig'
+    },
+    'hair': 'Haar',
+    'hairStyles': {
+      'bowl': 'Pagekapsel',
+      'short': 'Kort',
+      'ponytail': 'Paardenstaart',
+      'braids': 'Vlechten',
+      'long': 'Lang',
+      'bald': 'Kaal',
+      'topknot': 'Hoge knot',
+      'buns': 'Zijknotten',
+      'bun': 'Lage knot',
+      'plaits': 'Uitstekende vlechten',
+      'flowing': 'Golvend haar',
+      'queue': 'Lange vlecht',
+      'bob': 'Bobkapsel',
+      'tresses': 'Lokken naar voren',
+      'wild': 'Verwilderd',
+      'swept': 'Opzij gekamd',
+      'fringe': 'Dikke pony',
+      'bearded': 'Met baard',
+      'mane': 'Manen',
+      'coif': 'Kap',
+      'receding': 'Wijkende haargrens'
+    },
+    'eyes': 'Ogen',
+    'eyeStyles': {
+      'bright': 'Helder',
+      'wide': 'Ver uit elkaar',
+      'close': 'Dicht bij elkaar',
+      'tall': 'Hoog',
+      'small': 'Klein',
+      'almond': 'Amandelvormig',
+      'sleepy': 'Slaperig',
+      'sharp': 'Scherp',
+      'soft': 'Zacht',
+      'weary': 'Vermoeid'
+    },
+    'mouth': 'Mond',
+    'mouthStyles': {
+      'smile': 'Glimlach',
+      'neutral': 'Neutraal',
+      'frown': 'Chagrijnig',
+      'grin': 'Brede grijns',
+      'open': 'Open'
+    },
+    'skinTone': 'Huidskleur',
+    'skinToneOption': 'Huidskleur {n}',
+    'hairColour': 'Haarkleur',
+    'hairColourOption': 'Haarkleur {n}',
+    'tunicColour': 'Tuniekkleur',
+    'tunicColourOption': 'Tuniekkleur {n}',
+    'outfit': 'Kleding',
+    'outfitHint': 'Uit welke kleuren een kledingstuk is gesneden. Elk gewaad, wambuis en kapje heeft een eigen set.',
+    'equipment': 'Uitrusting',
+    'items': {
+      'hat': 'Hoed',
+      'torsoArmour': 'Harnas',
+      'sword': 'Zwaard',
+      'shield': 'Schild'
+    },
+    'drawWeapon': 'Wapen trekken',
+    'spin': 'Draaischijf',
+    'randomise': 'Verras me',
+    'reset': 'Opnieuw beginnen',
+    'save': 'Personage opslaan',
+    'saved': 'Opgeslagen',
+    'back': 'Terug naar de wereld',
+    'roster': 'Personage',
+    'newCharacter': 'Nieuw personage',
+    'unnamed': 'Naamloos',
+    'search': 'Zoeken op naam of ID',
+    'noMatches': 'Geen personages gevonden.',
+    'empty': 'Nog geen personages opgeslagen. Ontwerp er een, geef het een naam en druk op Opslaan.',
+    'name': 'Naam',
+    'namePlaceholder': 'Geef je personage een naam',
+    'copyName': 'Kopie van {name}',
+    'id': 'ID',
+    'idPending': 'Wordt toegekend bij het opslaan.',
+    'idFixed': 'Ligt vast bij het aanmaken. Opgeslagen spellen en quests verwijzen ernaar, dus hernoemen verandert hem nooit.',
+    'duplicate': 'Dupliceren',
+    'delete': 'Verwijderen',
+    'deleteConfirm': '{name} verwijderen? Dit kan niet ongedaan worden gemaakt.',
+    'unsavedChanges': 'Je hebt niet-opgeslagen wijzigingen.',
+    'saveAndContinue': 'Opslaan en doorgaan',
+    'discard': 'Weggooien'
   }
 }

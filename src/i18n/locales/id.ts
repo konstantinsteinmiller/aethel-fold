@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'Seret untuk melihat sekeliling · WASD untuk bergerak · gulir atau cubit untuk zoom',
     'modeOrbit': 'Tampilan orbit',
-    'modeFirstPerson': 'Berjalan'
+    'modeFirstPerson': 'Berjalan',
+    'settings': {
+      'title': 'Grafik',
+      'open': 'Pengaturan grafik',
+      'grass': 'Detail rumput',
+      'grassHint': 'Rumput lebih rapat dan terlihat lebih jauh. Turunkan jika game tersendat.',
+      'grassAutoHint': 'Rumput menyesuaikan kemampuan perangkatmu.',
+      'drawnPatches': '{n} rumpun di layar · {tris}k segitiga',
+      'detail': {
+        'auto': 'Otomatis',
+        'ultra': 'Ultra',
+        'high': 'Tinggi',
+        'medium': 'Sedang',
+        'low': 'Rendah',
+        'minimum': 'Minimum',
+        'off': 'Mati'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'Buat karaktermu',
+    'hint': 'Seret untuk memutar · gulir atau cubit untuk memperbesar',
+    'body': 'Tipe tubuh',
+    'bodies': {
+      'male': 'Maskulin',
+      'female': 'Feminin'
+    },
+    'head': 'Bentuk kepala',
+    'heads': {
+      'round': 'Bulat',
+      'oval': 'Lonjong',
+      'square': 'Kotak',
+      'heart': 'Hati'
+    },
+    'hair': 'Rambut',
+    'hairStyles': {
+      'bowl': 'Potongan mangkuk',
+      'short': 'Pendek',
+      'ponytail': 'Ekor kuda',
+      'braids': 'Kepang',
+      'long': 'Panjang',
+      'bald': 'Botak',
+      'topknot': 'Sanggul atas',
+      'buns': 'Sanggul samping',
+      'bun': 'Sanggul rendah',
+      'plaits': 'Kepang mencuat',
+      'flowing': 'Rambut terurai',
+      'queue': 'Kepang panjang',
+      'bob': 'Potongan pageboy',
+      'tresses': 'Untaian depan',
+      'wild': 'Acak-acakan',
+      'swept': 'Disisir ke samping',
+      'fringe': 'Poni tebal',
+      'bearded': 'Berjenggot',
+      'mane': 'Rambut lebat',
+      'coif': 'Tudung linen',
+      'receding': 'Rambut menipis'
+    },
+    'eyes': 'Mata',
+    'eyeStyles': {
+      'bright': 'Cerah',
+      'wide': 'Berjauhan',
+      'close': 'Berdekatan',
+      'tall': 'Tinggi',
+      'small': 'Kecil',
+      'almond': 'Almond',
+      'sleepy': 'Mengantuk',
+      'sharp': 'Tajam',
+      'soft': 'Lembut',
+      'weary': 'Lelah'
+    },
+    'mouth': 'Mulut',
+    'mouthStyles': {
+      'smile': 'Senyum',
+      'neutral': 'Netral',
+      'frown': 'Cemberut',
+      'grin': 'Cengiran',
+      'open': 'Terbuka'
+    },
+    'skinTone': 'Warna kulit',
+    'skinToneOption': 'Warna kulit {n}',
+    'hairColour': 'Warna rambut',
+    'hairColourOption': 'Warna rambut {n}',
+    'tunicColour': 'Warna tunik',
+    'tunicColourOption': 'Warna tunik {n}',
+    'outfit': 'Busana',
+    'outfitHint': 'Warna-warna asal sebuah pakaian. Setiap jubah, rompi, dan topi punya set sendiri.',
+    'equipment': 'Perlengkapan',
+    'items': {
+      'hat': 'Topi',
+      'torsoArmour': 'Zirah',
+      'sword': 'Pedang',
+      'shield': 'Perisai'
+    },
+    'drawWeapon': 'Hunus senjata',
+    'spin': 'Putar otomatis',
+    'randomise': 'Kejutkan aku',
+    'reset': 'Mulai lagi',
+    'save': 'Simpan karakter',
+    'saved': 'Tersimpan',
+    'back': 'Kembali ke dunia',
+    'roster': 'Karakter',
+    'newCharacter': 'Karakter baru',
+    'unnamed': 'Tanpa nama',
+    'search': 'Cari berdasarkan nama atau ID',
+    'noMatches': 'Tidak ada karakter yang cocok.',
+    'empty': 'Belum ada karakter tersimpan. Rancang satu, beri nama, lalu tekan Simpan.',
+    'name': 'Nama',
+    'namePlaceholder': 'Beri nama karaktermu',
+    'copyName': 'Salinan {name}',
+    'id': 'ID',
+    'idPending': 'Dibuat saat kamu menyimpan.',
+    'idFixed': 'Ditetapkan saat dibuat. Simpanan dan misi merujuk padanya, jadi mengganti nama tidak pernah mengubahnya.',
+    'duplicate': 'Duplikat',
+    'delete': 'Hapus',
+    'deleteConfirm': 'Hapus {name}? Tindakan ini tidak bisa dibatalkan.',
+    'unsavedChanges': 'Ada perubahan yang belum disimpan.',
+    'saveAndContinue': 'Simpan dan lanjutkan',
+    'discard': 'Buang'
   }
 }

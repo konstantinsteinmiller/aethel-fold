@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'Przeciągnij, aby się rozejrzeć · WASD, aby się poruszać · kółko lub szczypnięcie, aby przybliżyć',
     'modeOrbit': 'Widok orbitalny',
-    'modeFirstPerson': 'Chodź'
+    'modeFirstPerson': 'Chodź',
+    'settings': {
+      'title': 'Grafika',
+      'open': 'Ustawienia grafiki',
+      'grass': 'Szczegółowość trawy',
+      'grassHint': 'Gęstsza trawa widoczna dalej. Zmniejsz to ustawienie, jeśli gra się zacina.',
+      'grassAutoHint': 'Trawa dostosowuje się do możliwości twojego urządzenia.',
+      'drawnPatches': '{n} kęp na ekranie · {tris}k trójkątów',
+      'detail': {
+        'auto': 'Automatycznie',
+        'ultra': 'Ultra',
+        'high': 'Wysoka',
+        'medium': 'Średnia',
+        'low': 'Niska',
+        'minimum': 'Minimalna',
+        'off': 'Wyłączona'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'Stwórz swoją postać',
+    'hint': 'Przeciągnij, aby obrócić · przewiń lub uszczypnij, aby przybliżyć',
+    'body': 'Budowa ciała',
+    'bodies': {
+      'male': 'Męska',
+      'female': 'Kobieca'
+    },
+    'head': 'Kształt głowy',
+    'heads': {
+      'round': 'Okrągła',
+      'oval': 'Owalna',
+      'square': 'Kanciasta',
+      'heart': 'Serce'
+    },
+    'hair': 'Włosy',
+    'hairStyles': {
+      'bowl': 'Na garnek',
+      'short': 'Krótkie',
+      'ponytail': 'Kucyk',
+      'braids': 'Warkocze',
+      'long': 'Długie',
+      'bald': 'Łysina',
+      'topknot': 'Kok na czubku',
+      'buns': 'Koki po bokach',
+      'bun': 'Niski kok',
+      'plaits': 'Odstające warkocze',
+      'flowing': 'Rozpuszczone włosy',
+      'queue': 'Długi warkocz',
+      'bob': 'Fryzura na pazia',
+      'tresses': 'Pasma z przodu',
+      'wild': 'Rozczochrane',
+      'swept': 'Zaczesane na bok',
+      'fringe': 'Gęsta grzywka',
+      'bearded': 'Brodaty',
+      'mane': 'Bujna czupryna',
+      'coif': 'Czepiec',
+      'receding': 'Zakola'
+    },
+    'eyes': 'Oczy',
+    'eyeStyles': {
+      'bright': 'Błyszczące',
+      'wide': 'Szeroko rozstawione',
+      'close': 'Blisko siebie',
+      'tall': 'Wysokie',
+      'small': 'Małe',
+      'almond': 'Migdałowe',
+      'sleepy': 'Senne',
+      'sharp': 'Ostre',
+      'soft': 'Łagodne',
+      'weary': 'Zmęczone'
+    },
+    'mouth': 'Usta',
+    'mouthStyles': {
+      'smile': 'Uśmiech',
+      'neutral': 'Neutralne',
+      'frown': 'Naburmuszone',
+      'grin': 'Szeroki uśmiech',
+      'open': 'Otwarte'
+    },
+    'skinTone': 'Odcień skóry',
+    'skinToneOption': 'Odcień skóry {n}',
+    'hairColour': 'Kolor włosów',
+    'hairColourOption': 'Kolor włosów {n}',
+    'tunicColour': 'Kolor tuniki',
+    'tunicColourOption': 'Kolor tuniki {n}',
+    'outfit': 'Strój',
+    'outfitHint': 'Z jakich barw uszyto odzież. Każda szata, kaftan i czapka ma własny zestaw.',
+    'equipment': 'Ekwipunek',
+    'items': {
+      'hat': 'Kapelusz',
+      'torsoArmour': 'Zbroja',
+      'sword': 'Miecz',
+      'shield': 'Tarcza'
+    },
+    'drawWeapon': 'Dobądź broni',
+    'spin': 'Obrót',
+    'randomise': 'Zaskocz mnie',
+    'reset': 'Zacznij od nowa',
+    'save': 'Zapisz postać',
+    'saved': 'Zapisano',
+    'back': 'Powrót do świata',
+    'roster': 'Postać',
+    'newCharacter': 'Nowa postać',
+    'unnamed': 'Bez imienia',
+    'search': 'Szukaj po imieniu lub ID',
+    'noMatches': 'Brak pasujących postaci.',
+    'empty': 'Nie zapisano jeszcze żadnej postaci. Stwórz jedną, nadaj jej imię i naciśnij Zapisz.',
+    'name': 'Imię',
+    'namePlaceholder': 'Nazwij swoją postać',
+    'copyName': 'Kopia {name}',
+    'id': 'ID',
+    'idPending': 'Zostanie nadany przy zapisie.',
+    'idFixed': 'Ustalany przy tworzeniu. Zapisy i zadania odwołują się do niego, więc zmiana imienia nigdy go nie zmienia.',
+    'duplicate': 'Duplikuj',
+    'delete': 'Usuń',
+    'deleteConfirm': 'Usunąć {name}? Tej operacji nie można cofnąć.',
+    'unsavedChanges': 'Masz niezapisane zmiany.',
+    'saveAndContinue': 'Zapisz i kontynuuj',
+    'discard': 'Odrzuć'
   }
 }

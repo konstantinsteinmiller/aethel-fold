@@ -2,6 +2,7 @@ import type { Object3D, PerspectiveCamera } from 'three'
 import { Group, Vector3 } from 'three'
 import type { CollisionWorld, Placement } from '../level/types'
 import { createCapsuleMesh, type PlayerCapsule } from './capsuleMesh'
+import { createChibiBody, type PlayerBody } from './chibiBody'
 import { type ColliderDefinition, createCollisionWorld, type PlayerCollisionWorld } from './collision'
 import { lookDirection, PlayerController } from './PlayerController'
 
@@ -55,8 +56,17 @@ export interface CreatePlayerOptions {
   yaw?: number
   /** Start disabled when the orbit camera owns the frame. */
   enabled?: boolean
-  /** Build the placeholder capsule. Off saves two draw calls and a geometry. */
+  /** Build a visible body. Off saves two draw calls and a geometry. */
   mesh?: boolean
+  /**
+   * Which body to build.
+   *
+   * `chibi` is the same rig the NPCs use and is the default. `capsule` keeps
+   * the old placeholder, which is still the better view for collision work:
+   * it *is* the collision shape, so any disagreement between what you see
+   * and what you hit is visible rather than hidden inside a silhouette.
+   */
+  body?: 'chibi' | 'capsule'
   /** Third-person boom length, in metres. */
   thirdPersonDistance?: number
 }
@@ -103,6 +113,7 @@ export const createPlayer = (options: CreatePlayerOptions): Player => {
     spawn = { x: 0, z: 0 },
     enabled = true,
     mesh = true,
+    body = 'chibi',
     thirdPersonDistance = 4.2
   } = options
 
@@ -142,10 +153,17 @@ export const createPlayer = (options: CreatePlayerOptions): Player => {
     controller.setLook(options.yaw, 0)
   }
 
-  const capsule: PlayerCapsule | null = mesh ? createCapsuleMesh({ radius, height }) : null
+  // One of the two is built, never both. `capsule` stays typed as itself so the
+  // existing third-person/visibility plumbing is unchanged; `chibi` goes through
+  // the same small interface.
+  const capsule: PlayerCapsule | null = mesh && body === 'capsule' ? createCapsuleMesh({ radius, height }) : null
+  const chibi: PlayerBody | null = mesh && body === 'chibi' ? createChibiBody({ height }) : null
   // `mesh: false` still gets a root, so the caller's scene.add / registerRoot
   // wiring is identical either way and never has to null-check.
-  const object: Object3D = capsule ? capsule.group : new Group()
+  const object: Object3D = capsule ? capsule.group : chibi ? chibi.object : new Group()
+  /** Whichever body exists, behind the two calls the visibility paths need. */
+  const visibleBody: { setVisible(v: boolean): void; setFirstPerson(a: boolean): void } | null =
+    capsule ?? chibi
   if (!capsule) {
     object.name = 'player'
     object.userData.perfTag = 'player'
@@ -158,13 +176,40 @@ export const createPlayer = (options: CreatePlayerOptions): Player => {
 
   let thirdPerson = false
 
+  /**
+   * Seconds since the last body sync.
+   *
+   * The chibi needs a real `dt` — its gait phase advances with distance and its
+   * speed is measured from the position delta. Passing a fixed step would make
+   * the cadence wrong at every frame rate but one.
+   */
+  let lastSync = 0
+  let wasGrounded = true
+
   const syncMesh = (): void => {
-    if (!capsule || !thirdPerson) {
+    // Runs in first person too. The body stays in the scene there — invisible to
+    // the camera inside it, but still casting a shadow — so it has to keep
+    // following the controller or the shadow detaches and walks off on its own.
+    if (capsule) {
+      capsule.group.position.copy(controller.position)
+      // Yaw only. Pitching the body with the head would tip the capsule over.
+      capsule.group.rotation.y = controller.lookYaw
       return
     }
-    capsule.group.position.copy(controller.position)
-    // Yaw only. Pitching the body with the head would tip the capsule over.
-    capsule.group.rotation.y = controller.lookYaw
+    if (!chibi) {
+      return
+    }
+    const now = performance.now()
+    const dt = lastSync === 0 ? 1 / 60 : Math.min(0.05, (now - lastSync) / 1000)
+    lastSync = now
+    chibi.sync(controller.position, controller.lookYaw, dt)
+    // Jump on the leaving-the-ground edge, not on the key: the controller owns
+    // when a jump actually happens, and buffering means the two can differ.
+    const grounded = controller.isGrounded
+    if (wasGrounded && !grounded) {
+      chibi.jump()
+    }
+    wasGrounded = grounded
   }
 
   const applyBoom = (): void => {
@@ -207,13 +252,40 @@ export const createPlayer = (options: CreatePlayerOptions): Player => {
     },
     attach: (element: HTMLElement): void => controller.attach(element),
     detach: (): void => controller.detach(),
-    setEnabled: (next: boolean): void => controller.setEnabled(next),
+    /**
+     * Enables the controller **and puts the body in the world**.
+     *
+     * The two were separate, and the body was never turned on: `setThirdPerson`
+     * was the only thing that showed it and nothing called it. The result was a
+     * player who walked around casting no shadow and leaving no trace — which is
+     * why the character looked, reasonably, like it was not there at all.
+     */
+    setEnabled: (next: boolean): void => {
+      controller.setEnabled(next)
+      if (!visibleBody) {
+        return
+      }
+      if (!next) {
+        visibleBody?.setVisible(false)
+        return
+      }
+      if (thirdPerson) {
+        visibleBody?.setVisible(true)
+      } else {
+        visibleBody?.setFirstPerson(true)
+      }
+      syncMesh()
+    },
     setThirdPerson: (active: boolean): void => {
       thirdPerson = active
-      capsule?.setVisible(active)
       if (active) {
-        syncMesh()
+        visibleBody?.setVisible(true)
+      } else {
+        // Not hidden — switched to the first-person body, which keeps the
+        // shadow and drops only the outline.
+        visibleBody?.setFirstPerson(true)
       }
+      syncMesh()
     },
     setColliderSource: (source: (() => Placement[]) | null): void => {
       propCollision?.setColliderSource(source)

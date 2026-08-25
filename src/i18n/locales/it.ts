@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'Trascina per guardarti intorno · WASD per muoverti · rotella o pizzico per lo zoom',
     'modeOrbit': 'Vista orbitale',
-    'modeFirstPerson': 'Cammina'
+    'modeFirstPerson': 'Cammina',
+    'settings': {
+      'title': 'Grafica',
+      'open': 'Impostazioni grafiche',
+      'grass': 'Dettaglio erba',
+      'grassHint': 'Erba più fitta e visibile più lontano. Abbassa questa voce se il gioco scatta.',
+      'grassAutoHint': 'L’erba si adatta a ciò che il tuo dispositivo riesce a gestire.',
+      'drawnPatches': '{n} ciuffi a schermo · {tris}k triangoli',
+      'detail': {
+        'auto': 'Automatico',
+        'ultra': 'Ultra',
+        'high': 'Alto',
+        'medium': 'Medio',
+        'low': 'Basso',
+        'minimum': 'Minimo',
+        'off': 'Disattivata'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'Crea il tuo personaggio',
+    'hint': 'Trascina per ruotare · scorri o pizzica per lo zoom',
+    'body': 'Corporatura',
+    'bodies': {
+      'male': 'Maschile',
+      'female': 'Femminile'
+    },
+    'head': 'Forma della testa',
+    'heads': {
+      'round': 'Tonda',
+      'oval': 'Ovale',
+      'square': 'Squadrata',
+      'heart': 'A cuore'
+    },
+    'hair': 'Capelli',
+    'hairStyles': {
+      'bowl': 'Taglio a scodella',
+      'short': 'Corti',
+      'ponytail': 'Coda di cavallo',
+      'braids': 'Trecce',
+      'long': 'Lunghi',
+      'bald': 'Calvo',
+      'topknot': 'Nodo alto',
+      'buns': 'Chiocciole laterali',
+      'bun': 'Chignon basso',
+      'plaits': 'Trecce sporgenti',
+      'flowing': 'Chioma fluente',
+      'queue': 'Treccia lunga',
+      'bob': 'Taglio a caschetto',
+      'tresses': 'Ciocche sul davanti',
+      'wild': 'Arruffato',
+      'swept': 'Ciuffo laterale',
+      'fringe': 'Frangia folta',
+      'bearded': 'Barbuto',
+      'mane': 'Criniera',
+      'coif': 'Cuffia',
+      'receding': 'Stempiato'
+    },
+    'eyes': 'Occhi',
+    'eyeStyles': {
+      'bright': 'Luminosi',
+      'wide': 'Distanziati',
+      'close': 'Ravvicinati',
+      'tall': 'Alti',
+      'small': 'Piccoli',
+      'almond': 'A mandorla',
+      'sleepy': 'Assonnati',
+      'sharp': 'Affilati',
+      'soft': 'Dolci',
+      'weary': 'Stanchi'
+    },
+    'mouth': 'Bocca',
+    'mouthStyles': {
+      'smile': 'Sorriso',
+      'neutral': 'Neutra',
+      'frown': 'Imbronciata',
+      'grin': 'Sorrisone',
+      'open': 'Aperta'
+    },
+    'skinTone': 'Tono della pelle',
+    'skinToneOption': 'Tono della pelle {n}',
+    'hairColour': 'Colore dei capelli',
+    'hairColourOption': 'Colore dei capelli {n}',
+    'tunicColour': 'Colore della tunica',
+    'tunicColourOption': 'Colore della tunica {n}',
+    'outfit': 'Abito',
+    'outfitHint': 'Da quali colori è tagliato un capo. Ogni tunica, farsetto e berretto ha il suo insieme.',
+    'equipment': 'Equipaggiamento',
+    'items': {
+      'hat': 'Cappello',
+      'torsoArmour': 'Armatura',
+      'sword': 'Spada',
+      'shield': 'Scudo'
+    },
+    'drawWeapon': 'Sguaina arma',
+    'spin': 'Rotazione automatica',
+    'randomise': 'Sorprendimi',
+    'reset': 'Ricomincia',
+    'save': 'Salva personaggio',
+    'saved': 'Salvato',
+    'back': 'Torna al mondo',
+    'roster': 'Personaggio',
+    'newCharacter': 'Nuovo personaggio',
+    'unnamed': 'Senza nome',
+    'search': 'Cerca per nome o ID',
+    'noMatches': 'Nessun personaggio corrisponde.',
+    'empty': 'Nessun personaggio salvato. Creane uno, dagli un nome e premi Salva.',
+    'name': 'Nome',
+    'namePlaceholder': 'Dai un nome al personaggio',
+    'copyName': 'Copia di {name}',
+    'id': 'ID',
+    'idPending': 'Assegnato al salvataggio.',
+    'idFixed': 'Fissato alla creazione. Salvataggi e missioni vi fanno riferimento, quindi rinominare non lo cambia mai.',
+    'duplicate': 'Duplica',
+    'delete': 'Elimina',
+    'deleteConfirm': 'Eliminare {name}? L’operazione è irreversibile.',
+    'unsavedChanges': 'Hai modifiche non salvate.',
+    'saveAndContinue': 'Salva e continua',
+    'discard': 'Scarta'
   }
 }

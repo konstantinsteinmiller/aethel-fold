@@ -35,6 +35,51 @@ export const setLodBias = (value: number): void => {
 export const getLodBias = (): number => lodBias
 
 /**
+ * ─── Quality bias: degrade the horizon, not what's underfoot ────────────────
+ *
+ * `quality` runs 1 (full) down to ~0.4. It is applied to each tier boundary
+ * raised to a **different exponent**, so lowering it pulls the far boundaries in
+ * hard while barely moving the near one.
+ *
+ * A single uniform multiplier would be the obvious implementation and the wrong
+ * one: at quality 0.5 it would move LOD0's boundary from 18 m to 9 m, so the
+ * first thing a struggling machine loses is the detail on the object the player
+ * is standing next to — the one thing that is *never* worth trading. With these
+ * exponents the same 0.5 leaves LOD0 at ~15 m and cuts LOD3 nearly in half.
+ *
+ * | quality | LOD0 | LOD1 | LOD2 | LOD3 |
+ * |---|---|---|---|---|
+ * | 1.00 | ×1.00 | ×1.00 | ×1.00 | ×1.00 |
+ * | 0.70 | ×0.91 | ×0.81 | ×0.70 | ×0.65 |
+ * | 0.50 | ×0.84 | ×0.66 | ×0.50 | ×0.44 |
+ */
+const TIER_QUALITY_EXPONENT = [0.25, 0.6, 1.0, 1.2] as const
+
+let quality = 1
+
+export const setLodQuality = (value: number): void => {
+  quality = Math.max(0.35, Math.min(1, value))
+}
+
+export const getLodQuality = (): number => quality
+
+/**
+ * Crossfade band width multiplier.
+ *
+ * Instances inside a band are drawn by two tiers, measured at 21–29 % of the
+ * field. Narrowing the bands is therefore a direct, near-field-safe saving under
+ * load — the transition gets more abrupt, which is a far better trade than
+ * coarsening what the player is looking at.
+ */
+let bandScale = 1
+
+export const setLodBandScale = (value: number): void => {
+  bandScale = Math.max(0.25, Math.min(1, value))
+}
+
+export const getLodBandScale = (): number => bandScale
+
+/**
  * Derives the bias from the current framebuffer and FOV, normalised against a
  * 1080p / 55° reference.
  */
@@ -67,12 +112,18 @@ export const coverageAt = (distance: number, distanceScale: number, out: Float32
   let mask = 0
 
   for (let i = 0; i < TIER_COUNT; i++) {
-    const end = LOD_DISTANCES[i]! * scale
-    const outBand = LOD_BANDS[i]! * scale
+    const tierScale = scale * quality ** TIER_QUALITY_EXPONENT[i]!
+    const end = LOD_DISTANCES[i]! * tierScale
+    const outBand = LOD_BANDS[i]! * tierScale * bandScale
 
     // Fading in across the previous tier's band. Tier 0 has no near boundary.
+    const previousScale = i === 0 ? scale : scale * quality ** TIER_QUALITY_EXPONENT[i - 1]!
     const fadeIn =
-      i === 0 ? 1 : clamp01((distance - LOD_DISTANCES[i - 1]! * scale) / (LOD_BANDS[i - 1]! * scale))
+      i === 0
+        ? 1
+        : clamp01(
+            (distance - LOD_DISTANCES[i - 1]! * previousScale) / (LOD_BANDS[i - 1]! * previousScale * bandScale)
+          )
     const fadeOut = 1 - clamp01((distance - end) / outBand)
 
     // Incoming tiers are stored negated. The shader keeps `ign >= 1 + vFade`,
@@ -91,6 +142,6 @@ export const coverageAt = (distance: number, distanceScale: number, out: Float32
 
 /** Distance past which an object of this scale is dropped entirely. */
 export const cullDistanceFor = (distanceScale: number): number => {
-  const scale = distanceScale * lodBias
+  const scale = distanceScale * lodBias * quality ** TIER_QUALITY_EXPONENT[TIER_COUNT - 1]!
   return Math.min(MAX_CULL_DISTANCE, (LOD_DISTANCES[TIER_COUNT - 1]! + LOD_BANDS[TIER_COUNT - 1]!) * scale)
 }

@@ -33,6 +33,7 @@ export class DitheredLod extends Object3D {
   private readonly materials: ToonMaterial[] = []
   private readonly outlineMaterials: (OutlineMaterial | null)[] = []
   private readonly cullDistance: number
+  private readonly castsShadow: boolean
 
   /** Set false to freeze the current tier — used by the ablation profiler. */
   autoUpdate = true
@@ -40,6 +41,7 @@ export class DitheredLod extends Object3D {
   constructor(asset: WorldAsset) {
     super()
     this.asset = asset
+    this.castsShadow = asset.castsShadow ?? true
     this.name = `lod:${asset.name}`
     this.userData.perfTag = asset.perfTag
     this.cullDistance = cullDistanceFor(asset.distanceScale)
@@ -52,7 +54,10 @@ export class DitheredLod extends Object3D {
       // would test each tier separately against a bounding sphere we already
       // know is identical, so it's turned off and handled once here.
       mesh.frustumCulled = false
-      mesh.castShadow = tier <= 1
+      // `castsShadow` defaults on; water opts out because the shadow pass uses
+      // three's depth material, which cannot see its vertex displacement (see
+      // the field's note in `assets/types.ts`).
+      mesh.castShadow = this.castsShadow && tier <= 1
       mesh.receiveShadow = true
       mesh.visible = false
       mesh.userData.perfTag = asset.perfTag
@@ -111,7 +116,7 @@ export class DitheredLod extends Object3D {
       this.outlineMaterials[tier]?.setFade(coverage)
       // Only the dominant tier casts, so a crossfade can't double-darken the
       // shadow map (GDD §4.3).
-      mesh.castShadow = tier <= 1 && Math.abs(coverage) >= 0.5
+      mesh.castShadow = this.castsShadow && tier <= 1 && Math.abs(coverage) >= 0.5
     }
   }
 

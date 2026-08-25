@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': '拖动环顾四周 · WASD 移动 · 滚轮或双指缩放',
     'modeOrbit': '环绕视角',
-    'modeFirstPerson': '行走'
+    'modeFirstPerson': '行走',
+    'settings': {
+      'title': '画面',
+      'open': '画面设置',
+      'grass': '草地细节',
+      'grassHint': '草更密集、可见距离更远。若游戏卡顿请调低。',
+      'grassAutoHint': '草地会根据你的设备性能自动调整。',
+      'drawnPatches': '屏幕内 {n} 丛 · {tris}k 三角形',
+      'detail': {
+        'auto': '自动',
+        'ultra': '极高',
+        'high': '高',
+        'medium': '中',
+        'low': '低',
+        'minimum': '最低',
+        'off': '关闭'
+      }
+    }
+  },
+
+  'characters': {
+    'title': '创建你的角色',
+    'hint': '拖动旋转 · 滚动或双指缩放',
+    'body': '体型',
+    'bodies': {
+      'male': '男性',
+      'female': '女性'
+    },
+    'head': '头型',
+    'heads': {
+      'round': '圆形',
+      'oval': '鹅蛋形',
+      'square': '方形',
+      'heart': '心形'
+    },
+    'hair': '发型',
+    'hairStyles': {
+      'bowl': '锅盖头',
+      'short': '短发',
+      'ponytail': '马尾',
+      'braids': '辫子',
+      'long': '长发',
+      'bald': '光头',
+      'topknot': '头顶发髻',
+      'buns': '双耳发髻',
+      'bun': '低发髻',
+      'plaits': '外翘辫子',
+      'flowing': '及腰长发',
+      'queue': '长辫',
+      'bob': '齐耳短发',
+      'tresses': '前垂发绺',
+      'wild': '蓬乱',
+      'swept': '侧分偏发',
+      'fringe': '厚刘海',
+      'bearded': '络腮胡',
+      'mane': '蓬松鬃发',
+      'coif': '亚麻头巾',
+      'receding': '发际线后移'
+    },
+    'eyes': '眼睛',
+    'eyeStyles': {
+      'bright': '明亮',
+      'wide': '眼距宽',
+      'close': '眼距窄',
+      'tall': '细长',
+      'small': '小巧',
+      'almond': '杏眼',
+      'sleepy': '睡眼',
+      'sharp': '锐利',
+      'soft': '温柔',
+      'weary': '疲惫'
+    },
+    'mouth': '嘴巴',
+    'mouthStyles': {
+      'smile': '微笑',
+      'neutral': '平静',
+      'frown': '撇嘴',
+      'grin': '咧嘴笑',
+      'open': '张嘴'
+    },
+    'skinTone': '肤色',
+    'skinToneOption': '肤色 {n}',
+    'hairColour': '发色',
+    'hairColourOption': '发色 {n}',
+    'tunicColour': '服装颜色',
+    'tunicColourOption': '服装颜色 {n}',
+    'outfit': '服装',
+    'outfitHint': '服装由哪几种颜色裁成。每件长袍、短衣和帽子都有自己的一组。',
+    'equipment': '装备',
+    'items': {
+      'hat': '帽子',
+      'torsoArmour': '护甲',
+      'sword': '剑',
+      'shield': '盾牌'
+    },
+    'drawWeapon': '拔出武器',
+    'spin': '自动旋转',
+    'randomise': '随机一个',
+    'reset': '重新开始',
+    'save': '保存角色',
+    'saved': '已保存',
+    'back': '返回世界',
+    'roster': '角色',
+    'newCharacter': '新角色',
+    'unnamed': '未命名',
+    'search': '按名称或 ID 搜索',
+    'noMatches': '没有匹配的角色。',
+    'empty': '还没有保存的角色。设计一个，取个名字，然后点击保存。',
+    'name': '名字',
+    'namePlaceholder': '给角色取个名字',
+    'copyName': '{name} 副本',
+    'id': 'ID',
+    'idPending': '保存时自动生成。',
+    'idFixed': '创建时确定。存档和任务都以它为准，因此改名不会改变它。',
+    'duplicate': '复制',
+    'delete': '删除',
+    'deleteConfirm': '删除 {name}？此操作无法撤销。',
+    'unsavedChanges': '有未保存的修改。',
+    'saveAndContinue': '保存并继续',
+    'discard': '放弃'
   }
 }

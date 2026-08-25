@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'Etrafa bakmak için sürükle · Hareket için WASD · Yakınlaştırmak için kaydır veya sıkıştır',
     'modeOrbit': 'Yörünge görünümü',
-    'modeFirstPerson': 'Yürü'
+    'modeFirstPerson': 'Yürü',
+    'settings': {
+      'title': 'Grafikler',
+      'open': 'Grafik ayarları',
+      'grass': 'Çim detayı',
+      'grassHint': 'Daha sık ve daha uzağa çizilen çim. Oyun takılıyorsa bunu düşür.',
+      'grassAutoHint': 'Çim, cihazının kaldırabildiğine göre ayarlanır.',
+      'drawnPatches': 'Ekranda {n} öbek · {tris}k üçgen',
+      'detail': {
+        'auto': 'Otomatik',
+        'ultra': 'Ultra',
+        'high': 'Yüksek',
+        'medium': 'Orta',
+        'low': 'Düşük',
+        'minimum': 'En düşük',
+        'off': 'Kapalı'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'Karakterini oluştur',
+    'hint': 'Döndürmek için sürükle · yakınlaştırmak için kaydır veya kıstır',
+    'body': 'Vücut tipi',
+    'bodies': {
+      'male': 'Erkeksi',
+      'female': 'Kadınsı'
+    },
+    'head': 'Kafa şekli',
+    'heads': {
+      'round': 'Yuvarlak',
+      'oval': 'Oval',
+      'square': 'Köşeli',
+      'heart': 'Kalp'
+    },
+    'hair': 'Saç',
+    'hairStyles': {
+      'bowl': 'Kâse kesim',
+      'short': 'Kısa',
+      'ponytail': 'At kuyruğu',
+      'braids': 'Örgü',
+      'long': 'Uzun',
+      'bald': 'Kel',
+      'topknot': 'Tepe topuzu',
+      'buns': 'Yan topuzlar',
+      'bun': 'Alçak topuz',
+      'plaits': 'Dik örgüler',
+      'flowing': 'Dökülen saç',
+      'queue': 'Uzun örgü',
+      'bob': 'Küt kesim',
+      'tresses': 'Öne dökülen tutamlar',
+      'wild': 'Dağınık',
+      'swept': 'Yana taranmış',
+      'fringe': 'Kalın kâkül',
+      'bearded': 'Sakallı',
+      'mane': 'Gür saç',
+      'coif': 'Keten başlık',
+      'receding': 'Açılmış saç çizgisi'
+    },
+    'eyes': 'Gözler',
+    'eyeStyles': {
+      'bright': 'Parlak',
+      'wide': 'Aralıklı',
+      'close': 'Yakın',
+      'tall': 'Uzun',
+      'small': 'Küçük',
+      'almond': 'Badem',
+      'sleepy': 'Uykulu',
+      'sharp': 'Keskin',
+      'soft': 'Yumuşak',
+      'weary': 'Yorgun'
+    },
+    'mouth': 'Ağız',
+    'mouthStyles': {
+      'smile': 'Gülümseme',
+      'neutral': 'Nötr',
+      'frown': 'Somurtkan',
+      'grin': 'Sırıtış',
+      'open': 'Açık'
+    },
+    'skinTone': 'Ten rengi',
+    'skinToneOption': 'Ten rengi {n}',
+    'hairColour': 'Saç rengi',
+    'hairColourOption': 'Saç rengi {n}',
+    'tunicColour': 'Tunik rengi',
+    'tunicColourOption': 'Tunik rengi {n}',
+    'outfit': 'Kıyafet',
+    'outfitHint': 'Bir giysinin hangi renklerden biçildiği. Her cüppe, yelek ve başlığın kendi takımı vardır.',
+    'equipment': 'Teçhizat',
+    'items': {
+      'hat': 'Şapka',
+      'torsoArmour': 'Zırh',
+      'sword': 'Kılıç',
+      'shield': 'Kalkan'
+    },
+    'drawWeapon': 'Silahı çek',
+    'spin': 'Otomatik döndür',
+    'randomise': 'Şaşırt beni',
+    'reset': 'Baştan başla',
+    'save': 'Karakteri kaydet',
+    'saved': 'Kaydedildi',
+    'back': 'Dünyaya dön',
+    'roster': 'Karakter',
+    'newCharacter': 'Yeni karakter',
+    'unnamed': 'İsimsiz',
+    'search': 'Ada veya kimliğe göre ara',
+    'noMatches': 'Eşleşen karakter yok.',
+    'empty': 'Henüz kayıtlı karakter yok. Bir tane tasarla, ad ver ve Kaydet’e bas.',
+    'name': 'Ad',
+    'namePlaceholder': 'Karakterine bir ad ver',
+    'copyName': '{name} kopyası',
+    'id': 'ID',
+    'idPending': 'Kaydettiğinde atanır.',
+    'idFixed': 'Oluşturulurken sabitlenir. Kayıtlar ve görevler buna başvurur, bu yüzden ad değiştirmek onu değiştirmez.',
+    'duplicate': 'Çoğalt',
+    'delete': 'Sil',
+    'deleteConfirm': '{name} silinsin mi? Bu geri alınamaz.',
+    'unsavedChanges': 'Kaydedilmemiş değişikliklerin var.',
+    'saveAndContinue': 'Kaydet ve devam et',
+    'discard': 'Vazgeç'
   }
 }

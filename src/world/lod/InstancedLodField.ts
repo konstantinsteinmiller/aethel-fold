@@ -13,6 +13,7 @@ import {
 import type { WorldAsset } from '../assets/types'
 import type { OutlineMaterial } from '../shading/outlineMaterial'
 import type { ToonMaterial } from '../shading/toonMaterial'
+import type { TerrainOcclusion } from '../perf/TerrainOcclusion'
 import { coverageAt, cullDistanceFor, TIER_COUNT } from './config'
 
 /**
@@ -125,6 +126,21 @@ interface Cell {
   slots: Int32Array
   count: number
   /**
+   * Terrain-occlusion cache. `version` of 0 means "not yet tested since the
+   * camera last moved", which is treated as **visible** — see the notes in
+   * `TerrainOcclusion`, unknown must never mean hidden.
+   */
+  occluded: boolean
+  occludedVersion: number
+  /**
+   * Height of the tallest instance in the cell, and the cell's *horizontal*
+   * half-extent. Kept apart from `radius` because occlusion needs to probe just
+   * over the treetops, and a bounding-sphere radius is dominated by horizontal
+   * spread — see `TerrainOcclusion.isRegionOccluded`.
+   */
+  topY: number
+  spread: number
+  /**
    * True while every instance in the cell is already masked off. Lets a cell
    * that is off-screen and *stays* off-screen cost literally nothing — without
    * it, hiding a cell would still mean walking its instances every frame just
@@ -184,6 +200,10 @@ export class InstancedLodField {
   /** Bounding-sphere offset of the asset above its origin (a canopy is high). */
   private readonly sphereOffsetY: number
   private readonly sphereRadius: number
+  /** Object-space top of the asset, for the occlusion probe height. */
+  private readonly assetTopLocal: number = 0
+  /** Object-space horizontal reach, added to a cell's spread. */
+  private readonly assetReach: number = 0
 
   /** Per-tier visible instance counts, for the perf panel. */
   readonly tierCounts = new Int32Array(TIER_COUNT)
@@ -201,7 +221,14 @@ export class InstancedLodField {
   private dirtyAll = false
 
   /** Cells touched last frame, split by classification — diagnostics only. */
-  readonly cellStats = { total: 0, outside: 0, inside: 0, partial: 0, instancesTested: 0 }
+  readonly cellStats = { total: 0, outside: 0, inside: 0, partial: 0, instancesTested: 0, occluded: 0 }
+
+  /**
+   * Terrain horizon culling. Applied *after* the frustum test, because a cell
+   * that is already off-screen shouldn't spend a ray march to also learn it is
+   * behind a hill.
+   */
+  private occlusion: TerrainOcclusion | null = null
 
   constructor(asset: WorldAsset, capacity: number, options: InstancedLodFieldOptions = {}) {
     this.asset = asset
@@ -270,6 +297,9 @@ export class InstancedLodField {
     this.sphereOffsetY = (lowest + highest) / 2
     const halfHeight = (highest - lowest) / 2
     this.sphereRadius = Math.sqrt(reach * reach + halfHeight * halfHeight)
+    // Object-space top and horizontal reach, kept for the occlusion probe.
+    this.assetTopLocal = Number.isFinite(highest) ? highest : asset.radius
+    this.assetReach = reach > 0 ? reach : asset.radius
 
     for (let tier = 0; tier < asset.tiers.length; tier++) {
       this.tiers.push(this.createTier(asset, tier, capacity))
@@ -394,6 +424,8 @@ export class InstancedLodField {
     const centerY = sumY / count + this.sphereOffsetY
     const centerZ = sumZ / count
     let extent = 0
+    let horizontalExtent = 0
+    let topY = Number.NEGATIVE_INFINITY
     for (let n = 0; n < count; n++) {
       const slot = slots[n]!
       const dx = this.sourcePositions[slot * 3]! - centerX
@@ -402,6 +434,17 @@ export class InstancedLodField {
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz)
       if (distance > extent) {
         extent = distance
+      }
+      const horizontal = Math.sqrt(dx * dx + dz * dz)
+      if (horizontal > horizontalExtent) {
+        horizontalExtent = horizontal
+      }
+      // Instance scale is uniform by contract, so the asset's object-space top
+      // scales with the radius already stored for this slot.
+      const scale = this.sphereRadius > 0 ? this.sourceRadii[slot]! / this.sphereRadius : 1
+      const instanceTop = this.sourcePositions[slot * 3 + 1]! + this.assetTopLocal * scale
+      if (instanceTop > topY) {
+        topY = instanceTop
       }
     }
 
@@ -413,6 +456,10 @@ export class InstancedLodField {
       radius: extent + maxRadius,
       slots,
       count,
+      occluded: false,
+      occludedVersion: 0,
+      topY: Number.isFinite(topY) ? topY : centerY,
+      spread: horizontalExtent + this.assetReach,
       dormant: false
     }
     this.cells.push(cell)
@@ -480,6 +527,7 @@ export class InstancedLodField {
     stats.inside = 0
     stats.partial = 0
     stats.instancesTested = 0
+    stats.occluded = 0
 
     // ── Pass 1: walk cells, then only the instances a cell can't answer for ─
     //
@@ -506,6 +554,29 @@ export class InstancedLodField {
         classification = OUTSIDE
       } else if (this.options.frustumCullInstances) {
         classification = classifySphere(_frustum, cell.centerX, cell.centerY, cell.centerZ, cell.radius)
+      }
+
+      // Behind a ridge counts as outside. Tested only for cells that survived
+      // the frustum, and only while the occluder's per-frame budget lasts —
+      // anything untested this frame keeps its previous answer, which starts at
+      // "visible" whenever the camera has moved.
+      const occlusion = this.occlusion
+      if (occlusion && !occlusion.enabled) {
+        // Disabled: drop any cached verdict rather than letting it keep culling.
+        cell.occluded = false
+      } else if (classification !== OUTSIDE && occlusion) {
+        if (cell.occludedVersion !== occlusion.version) {
+          if (occlusion.canTest()) {
+            cell.occluded = occlusion.isRegionOccluded(cell.centerX, cell.topY, cell.centerZ, cell.spread)
+            cell.occludedVersion = occlusion.version
+          } else {
+            cell.occluded = false
+          }
+        }
+        if (cell.occluded) {
+          classification = OUTSIDE
+          stats.occluded++
+        }
       }
 
       if (classification === OUTSIDE) {
@@ -668,6 +739,10 @@ export class InstancedLodField {
     for (const cell of this.cells) {
       cell.dormant = false
     }
+  }
+
+  setOcclusion(occlusion: TerrainOcclusion | null): void {
+    this.occlusion = occlusion
   }
 
   setFrustumCullInstances(enabled: boolean): void {

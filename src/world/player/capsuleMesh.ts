@@ -47,6 +47,20 @@ export interface PlayerCapsule {
   readonly mesh: Mesh
   readonly perfTag: string
   setVisible(visible: boolean): void
+  /**
+   * Shows the body but hides its outline, for first person.
+   *
+   * The capsule's own material is `FrontSide`, so from a camera *inside* it the
+   * near faces are culled and nothing is drawn: the body is simply not in the
+   * way. The outline is `BackSide` by construction, which is what makes it a
+   * silhouette, and so from inside it is the one thing that *would* be drawn —
+   * filling the entire view with flat outline colour.
+   *
+   * Splitting the two is what lets the player cast a real shadow while in first
+   * person. Before this the whole group was hidden and the player was a ghost:
+   * no body, no shadow, no evidence of standing anywhere.
+   */
+  setFirstPerson(active: boolean): void
   dispose(): void
 }
 
@@ -86,9 +100,12 @@ export const createCapsuleMesh = (options: CapsuleMeshOptions = {}): PlayerCapsu
   mesh.userData.perfTag = perfTag
 
   let outlineMaterial: OutlineMaterial | null = null
+  // Hoisted: `setFirstPerson` has to reach it, and a `const` inside the branch
+  // below is invisible to the returned object.
+  let outlineMesh: Mesh | null = null
   if (outline) {
     outlineMaterial = createOutlineMaterial({ name: 'player-capsule-outline' })
-    const outlineMesh = new Mesh(geometry, outlineMaterial)
+    outlineMesh = new Mesh(geometry, outlineMaterial)
     outlineMesh.name = 'player/capsule/outline'
     outlineMesh.castShadow = false
     outlineMesh.receiveShadow = false
@@ -111,6 +128,15 @@ export const createCapsuleMesh = (options: CapsuleMeshOptions = {}): PlayerCapsu
     perfTag,
     setVisible: (next: boolean): void => {
       group.visible = next
+      if (outlineMesh) {
+        outlineMesh.visible = true
+      }
+    },
+    setFirstPerson: (active: boolean): void => {
+      group.visible = true
+      if (outlineMesh) {
+        outlineMesh.visible = !active
+      }
     },
     dispose: (): void => {
       geometry.dispose()

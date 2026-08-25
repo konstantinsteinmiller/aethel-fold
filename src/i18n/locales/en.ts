@@ -387,10 +387,140 @@ export default {
   },
   'license': {
     'denied': 'Access Denied: Please purchase a license.'
-  },
+  }
+,
   'world': {
     'controlsHint': 'Drag to look around · WASD to move · scroll or pinch to zoom',
     'modeOrbit': 'Orbit view',
-    'modeFirstPerson': 'Walk'
+    'modeFirstPerson': 'Walk',
+    'settings': {
+      'title': 'Graphics',
+      'open': 'Graphics settings',
+      'grass': 'Grass detail',
+      'grassHint': 'Thicker grass, drawn further away. Lower this if the game stutters.',
+      'grassAutoHint': 'Grass follows what your device can handle.',
+      'drawnPatches': '{n} patches on screen · {tris}k triangles',
+      'detail': {
+        'auto': 'Auto',
+        'ultra': 'Ultra',
+        'high': 'High',
+        'medium': 'Medium',
+        'low': 'Low',
+        'minimum': 'Minimum',
+        'off': 'Off'
+      }
+    }
+  },
+
+  // ─── Character creation (/characters) ─────────────────────────────────────
+  // Player-facing, unlike the editor overlays — so every string here is
+  // translated into all 21 locales. A missing key ships as a raw key string.
+  'characters': {
+    'title': 'Create your character',
+    'hint': 'Drag to turn · scroll or pinch to zoom',
+    'body': 'Body type',
+    'bodies': {
+      'male': 'Masculine',
+      'female': 'Feminine'
+    },
+    'head': 'Head shape',
+    'heads': {
+      'round': 'Round',
+      'oval': 'Oval',
+      'square': 'Square',
+      'heart': 'Heart'
+    },
+    'hair': 'Hair',
+    'hairStyles': {
+      'bowl': 'Bowl cut',
+      'short': 'Short',
+      'ponytail': 'Ponytail',
+      'braids': 'Braids',
+      'long': 'Long',
+      'bald': 'Bald',
+      'topknot': 'Topknot',
+      'buns': 'Coiled buns',
+      'bun': 'Low bun',
+      'plaits': 'Plaits',
+      'flowing': 'Flowing',
+      'queue': 'Long braid',
+      'bob': 'Page cut',
+      'tresses': 'Tresses',
+      'wild': 'Unkempt',
+      'swept': 'Swept aside',
+      'fringe': 'Heavy fringe',
+      'bearded': 'Bearded',
+      'mane': 'Mane',
+      'coif': 'Coif',
+      'receding': 'Receding'
+    },
+    'eyes': 'Eyes',
+    'eyeStyles': {
+      'bright': 'Bright',
+      'wide': 'Wide-set',
+      'close': 'Close-set',
+      'tall': 'Tall',
+      'small': 'Small',
+      'almond': 'Almond',
+      'sleepy': 'Sleepy',
+      'sharp': 'Sharp',
+      'soft': 'Soft',
+      'weary': 'Weary'
+    },
+    'mouth': 'Mouth',
+    'mouthStyles': {
+      'smile': 'Smile',
+      'neutral': 'Neutral',
+      'frown': 'Frown',
+      'grin': 'Grin',
+      'open': 'Open'
+    },
+    'skinTone': 'Skin tone',
+    'skinToneOption': 'Skin tone {n}',
+    'hairColour': 'Hair colour',
+    'hairColourOption': 'Hair colour {n}',
+    'tunicColour': 'Tunic colour',
+    'tunicColourOption': 'Tunic colour {n}',
+    'outfit': 'Outfit',
+    'outfitHint': 'Which colours a garment is cut from. Every robe, jerkin and cap has its own set.',
+    'equipment': 'Equipment',
+    'items': {
+      'hat': 'Hat',
+      'torsoArmour': 'Armour',
+      'sword': 'Sword',
+      'shield': 'Shield'
+    },
+    'drawWeapon': 'Draw weapon',
+    'spin': 'Turntable',
+    'randomise': 'Surprise me',
+    'reset': 'Start over',
+    'save': 'Save character',
+    'saved': 'Saved',
+    'back': 'Back to the world',
+    // ── The roster: several saved characters, one open at a time ────────────
+    // `id` is shown and never editable — a save file, a quest and a spawn table
+    // all refer to a character by it, so an editable id is a rename that breaks
+    // every one of those references silently. `idFixed` is where that is said.
+    'roster': 'Character',
+    'newCharacter': 'New character',
+    'unnamed': 'Unnamed',
+    // The roster list is searchable because it holds up to 64 characters and a
+    // city wants a named one out of it fast. Name *and* id are matched — the id
+    // is what a quest or spawn table calls a character, so it has to be findable.
+    'search': 'Search by name or ID',
+    'noMatches': 'No characters match.',
+    'empty': 'No characters saved yet. Design one, give it a name and press Save.',
+    'name': 'Name',
+    'namePlaceholder': 'Name your character',
+    'copyName': '{name} copy',
+    'id': 'ID',
+    'idPending': 'Assigned when you save.',
+    'idFixed': 'Fixed at creation. Saves and quests refer to it, so renaming never changes it.',
+    'duplicate': 'Duplicate',
+    'delete': 'Delete',
+    'deleteConfirm': 'Delete {name}? This cannot be undone.',
+    'unsavedChanges': 'You have unsaved changes.',
+    'saveAndContinue': 'Save and continue',
+    'discard': 'Discard'
   }
 }

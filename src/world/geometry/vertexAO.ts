@@ -26,6 +26,15 @@ export interface VertexAOOptions {
   strength?: number
   /** Contrast curve on the result. >1 keeps more of the surface bright. */
   power?: number
+  /**
+   * Tests every triangle for every ray, skipping the reachability cull.
+   *
+   * Exists so the fast path can be checked against the naive one rather than
+   * against a second copy of the sampler written in a test — an "equivalent"
+   * reference implementation that drifts is worse than no test. Slower by
+   * design; nothing in the app sets it.
+   */
+  bruteForce?: boolean
 }
 
 /** Branchless orthonormal basis from a unit vector (Duff et al. 2017). */
@@ -44,11 +53,23 @@ const onb = (nx: number, ny: number, nz: number, out: Float32Array): void => {
 const _basis = new Float32Array(6)
 
 /**
+ * Cumulative bake cost and work done, for attributing catalogue build time.
+ *
+ * The placeable drain's floor is its most expensive single asset, so "what is
+ * slow to generate" is a number with consequences. This is the obvious suspect —
+ * `vertices × samples × triangles` ray-triangle tests — but suspicion is not
+ * measurement, and this project has already spent a session learning what
+ * unmeasured suspicion costs.
+ */
+export const aoStats = { ms: 0, bakes: 0, rayTriangleTests: 0, rayTriangleTestsBrute: 0 }
+
+/**
  * Returns per-vertex accessibility in [0,1] — 1 = fully open, 0 = fully buried.
  * Does not touch the geometry; feed the result to `applyVertexAO`.
  */
 export const bakeVertexAO = (geometry: BufferGeometry, options: VertexAOOptions = {}): Float32Array => {
-  const { samples = 16, maxDistance = 1, bias = 1e-3, strength = 1, power = 1 } = options
+  const { samples = 16, maxDistance = 1, bias = 1e-3, strength = 1, power = 1, bruteForce = false } = options
+  const startedAt = performance.now()
 
   const positionAttr = geometry.getAttribute('position')
   const normalAttr = geometry.getAttribute('normal')
@@ -75,8 +96,39 @@ export const bakeVertexAO = (geometry: BufferGeometry, options: VertexAOOptions 
     }
   }
 
+  // ── Per-triangle bounding spheres, for the reachability cull below ─────────
+  //
+  // Centroid plus the distance to its furthest corner. Cheap to build (one pass
+  // over the soup) and it is what lets a vertex skip the triangles it provably
+  // cannot reach.
+  const centroid = new Float32Array(triCount * 3)
+  const triRadius = new Float32Array(triCount)
+  for (let f = 0; f < triCount; f++) {
+    const o = f * 9
+    const cx = (tri[o]! + tri[o + 3]! + tri[o + 6]!) / 3
+    const cy = (tri[o + 1]! + tri[o + 4]! + tri[o + 7]!) / 3
+    const cz = (tri[o + 2]! + tri[o + 5]! + tri[o + 8]!) / 3
+    centroid[f * 3] = cx
+    centroid[f * 3 + 1] = cy
+    centroid[f * 3 + 2] = cz
+    let worst = 0
+    for (let corner = 0; corner < 3; corner++) {
+      const ex = tri[o + corner * 3]! - cx
+      const ey = tri[o + corner * 3 + 1]! - cy
+      const ez = tri[o + corner * 3 + 2]! - cz
+      const d2 = ex * ex + ey * ey + ez * ez
+      if (d2 > worst) {
+        worst = d2
+      }
+    }
+    triRadius[f] = Math.sqrt(worst)
+  }
+
+  const candidates = new Int32Array(triCount)
+
   const ao = new Float32Array(vertexCount)
   const invSamples = 1 / samples
+  let tests = 0
 
   for (let v = 0; v < vertexCount; v++) {
     const nx = nor[v * 3]!
@@ -85,6 +137,32 @@ export const bakeVertexAO = (geometry: BufferGeometry, options: VertexAOOptions 
     const ox = pos[v * 3]! + nx * bias
     const oy = pos[v * 3 + 1]! + ny * bias
     const oz = pos[v * 3 + 2]! + nz * bias
+
+    // ── Reachability cull ────────────────────────────────────────────────────
+    //
+    // Every ray from this vertex stops at `maxDistance` — `nearest` starts there
+    // and only shrinks — so a triangle whose bounding sphere lies further than
+    // that from the origin cannot be hit by *any* of this vertex's rays. Testing
+    // it once per vertex replaces testing it once per vertex **per sample**.
+    //
+    // The output is bit-identical: this removes only triangles that could not
+    // have produced a hit, and the surviving order is unchanged (the loop takes
+    // a minimum, so order would not matter anyway).
+    let candidateCount = 0
+    for (let f = 0; f < triCount; f++) {
+      if (bruteForce) {
+        candidates[candidateCount++] = f
+        continue
+      }
+      const cx = ox - centroid[f * 3]!
+      const cy = oy - centroid[f * 3 + 1]!
+      const cz = oz - centroid[f * 3 + 2]!
+      const reach = maxDistance + triRadius[f]!
+      if (cx * cx + cy * cy + cz * cz <= reach * reach) {
+        candidates[candidateCount++] = f
+      }
+    }
+    tests += candidateCount * samples
 
     onb(nx, ny, nz, _basis)
 
@@ -118,8 +196,8 @@ export const bakeVertexAO = (geometry: BufferGeometry, options: VertexAOOptions 
 
       // Nearest hit along this ray, so falloff uses the closest blocker.
       let nearest = maxDistance
-      for (let f = 0; f < triCount; f++) {
-        const o = f * 9
+      for (let c = 0; c < candidateCount; c++) {
+        const o = candidates[c]! * 9
         const ax = tri[o]!
         const ay = tri[o + 1]!
         const az = tri[o + 2]!
@@ -173,6 +251,11 @@ export const bakeVertexAO = (geometry: BufferGeometry, options: VertexAOOptions 
     }
     ao[v] = value < 0 ? 0 : value > 1 ? 1 : value
   }
+
+  aoStats.ms += performance.now() - startedAt
+  aoStats.bakes++
+  aoStats.rayTriangleTests += tests
+  aoStats.rayTriangleTestsBrute += vertexCount * samples * triCount
 
   return ao
 }

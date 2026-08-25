@@ -271,6 +271,125 @@ export default {
   'world': {
     'controlsHint': 'Arraste para olhar em volta · WASD para mover · role ou pince para dar zoom',
     'modeOrbit': 'Vista orbital',
-    'modeFirstPerson': 'Caminhar'
+    'modeFirstPerson': 'Caminhar',
+    'settings': {
+      'title': 'Gráficos',
+      'open': 'Configurações gráficas',
+      'grass': 'Detalhe da grama',
+      'grassHint': 'Grama mais densa e visível de mais longe. Reduza isto se o jogo travar.',
+      'grassAutoHint': 'A grama se ajusta ao que seu dispositivo aguenta.',
+      'drawnPatches': '{n} tufos na tela · {tris}k triângulos',
+      'detail': {
+        'auto': 'Automático',
+        'ultra': 'Ultra',
+        'high': 'Alto',
+        'medium': 'Médio',
+        'low': 'Baixo',
+        'minimum': 'Mínimo',
+        'off': 'Desligada'
+      }
+    }
+  },
+
+  'characters': {
+    'title': 'Crie o seu personagem',
+    'hint': 'Arraste para girar · role ou pince para aproximar',
+    'body': 'Tipo de corpo',
+    'bodies': {
+      'male': 'Masculino',
+      'female': 'Feminino'
+    },
+    'head': 'Formato da cabeça',
+    'heads': {
+      'round': 'Redondo',
+      'oval': 'Oval',
+      'square': 'Quadrado',
+      'heart': 'Coração'
+    },
+    'hair': 'Cabelo',
+    'hairStyles': {
+      'bowl': 'Corte tigela',
+      'short': 'Curto',
+      'ponytail': 'Rabo de cavalo',
+      'braids': 'Tranças',
+      'long': 'Longo',
+      'bald': 'Careca',
+      'topknot': 'Coque alto',
+      'buns': 'Coques laterais',
+      'bun': 'Coque baixo',
+      'plaits': 'Tranças salientes',
+      'flowing': 'Cabelo esvoaçante',
+      'queue': 'Trança longa',
+      'bob': 'Corte pajem',
+      'tresses': 'Mechas à frente',
+      'wild': 'Desgrenhado',
+      'swept': 'Penteado de lado',
+      'fringe': 'Franja pesada',
+      'bearded': 'Barbudo',
+      'mane': 'Juba',
+      'coif': 'Touca',
+      'receding': 'Entradas'
+    },
+    'eyes': 'Olhos',
+    'eyeStyles': {
+      'bright': 'Brilhantes',
+      'wide': 'Afastados',
+      'close': 'Juntos',
+      'tall': 'Altos',
+      'small': 'Pequenos',
+      'almond': 'Amendoados',
+      'sleepy': 'Sonolentos',
+      'sharp': 'Afiados',
+      'soft': 'Suaves',
+      'weary': 'Cansados'
+    },
+    'mouth': 'Boca',
+    'mouthStyles': {
+      'smile': 'Sorriso',
+      'neutral': 'Neutra',
+      'frown': 'Emburrada',
+      'grin': 'Sorrisão',
+      'open': 'Aberta'
+    },
+    'skinTone': 'Tom de pele',
+    'skinToneOption': 'Tom de pele {n}',
+    'hairColour': 'Cor do cabelo',
+    'hairColourOption': 'Cor do cabelo {n}',
+    'tunicColour': 'Cor da túnica',
+    'tunicColourOption': 'Cor da túnica {n}',
+    'outfit': 'Traje',
+    'outfitHint': 'De que cores uma peça é cortada. Cada manto, gibão e boné tem o seu conjunto.',
+    'equipment': 'Equipamento',
+    'items': {
+      'hat': 'Chapéu',
+      'torsoArmour': 'Armadura',
+      'sword': 'Espada',
+      'shield': 'Escudo'
+    },
+    'drawWeapon': 'Sacar arma',
+    'spin': 'Giro automático',
+    'randomise': 'Surpreenda-me',
+    'reset': 'Recomeçar',
+    'save': 'Salvar personagem',
+    'saved': 'Salvo',
+    'back': 'Voltar ao mundo',
+    'roster': 'Personagem',
+    'newCharacter': 'Novo personagem',
+    'unnamed': 'Sem nome',
+    'search': 'Pesquisar por nome ou ID',
+    'noMatches': 'Nenhum personagem corresponde.',
+    'empty': 'Nenhum personagem salvo ainda. Crie um, dê um nome e toque em Salvar.',
+    'name': 'Nome',
+    'namePlaceholder': 'Dê um nome ao seu personagem',
+    'copyName': 'Cópia de {name}',
+    'id': 'ID',
+    'idPending': 'Atribuído ao salvar.',
+    'idFixed': 'Fixado na criação. Saves e missões se referem a ele, então renomear nunca o altera.',
+    'duplicate': 'Duplicar',
+    'delete': 'Excluir',
+    'deleteConfirm': 'Excluir {name}? Isso não pode ser desfeito.',
+    'unsavedChanges': 'Você tem alterações não salvas.',
+    'saveAndContinue': 'Salvar e continuar',
+    'discard': 'Descartar'
   }
 }

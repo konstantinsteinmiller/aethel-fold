@@ -65,7 +65,28 @@ export const createLightRig = (scene: Scene, options: LightRigOptions): LightRig
   const {
     camera,
     shadowMapSize = 2048,
-    cascades: cascadeCount = 3,
+    // ── Two cascades, not three ───────────────────────────────────────────────
+    //
+    // The shadow pass is the most expensive thing in a constrained frame: with
+    // quality pinned and the camera still, it was **90 of 139 draw calls and
+    // 63 % of GPU time** (measured by toggling `shadows` inside one build).
+    //
+    // Dropping the third cascade removes, deterministically:
+    //   • 42 draw calls of 208 while moving (−20 %) — which is what brings the
+    //     frame back under the GDD §5 budget of ≤180, from 207–209
+    //   • ~25k submitted triangles of 114k (−22 %)
+    //
+    // Checked by eye at 5 m and 14 m before changing it, since this trades
+    // shadow-map texel density for submission cost: cascade 0 now covers a wider
+    // range, so any loss shows up near the camera first. Nothing visible at
+    // either distance — the shadows here are soft, periwinkle-tinted and
+    // dithered (GDD R5), which absorbs the density this gives up.
+    //
+    // `?cascades=3` restores the old value for comparison. Honest caveat: the
+    // *timing* win could not be separated from noise on the development machine
+    // (within-config GPU spread was as wide as the difference between configs).
+    // The reduction in submitted work is deterministic; the ms are not proven.
+    cascades: cascadeCount = 2,
     shadowMaxFar = 260,
     sunIntensity = 2.15,
     fillIntensity = 0.85
