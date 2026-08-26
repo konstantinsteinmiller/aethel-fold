@@ -351,6 +351,31 @@ export default {
       'grin': 'Grand sourire',
       'open': 'Ouverte'
     },
+    'beard': 'Barbe',
+    'beardStyles': {
+      'none': 'Rasé de près',
+      'moustache': 'Moustache',
+      'goatee': 'Bouc',
+      'cropped': 'Taillée',
+      'muttonChops': 'Favoris',
+      'full': 'Fournie',
+      'forked': 'Fourchue',
+      'braided': 'Tressée',
+      'patriarch': 'Patriarche'
+    },
+    'nose': 'Nez',
+    'noseStyles': {
+      'none': 'Aucun',
+      'button': 'Retroussé',
+      'round': 'Rond',
+      'hooked': 'Busqué',
+      'broad': 'Large'
+    },
+    'brows': 'Sourcils',
+    'browStyles': {
+      'fine': 'Fins',
+      'bushy': 'Broussailleux'
+    },
     'skinTone': 'Couleur de peau',
     'skinToneOption': 'Couleur de peau {n}',
     'hairColour': 'Couleur des cheveux',

@@ -1,6 +1,7 @@
 import type { Color } from 'three'
 import type { ItemKind } from '../equipment'
 import { finishGear, type GearModel, type SweptPart } from './gearKit'
+import { WANDERER_WAYS } from './wanderer'
 import {
   around,
   band,
@@ -1103,13 +1104,27 @@ export const sleeveColourFor = (kind: GarmentKind, seed = 1): number => WAYS_OF[
  * match.
  *
  * `torsoArmour` is the case that matters: it lives in the `torso` slot like the
- * nine cloth garments but it is plate, it has no colourway table, and its arms
- * are bare skin rather than cloth. A caller holding an `ItemKind` — which is
+ * cloth garments but it is plate, it has no colourway table, and its arms are
+ * bare skin rather than cloth. A caller holding an `ItemKind` — which is
  * everything outside this folder — should ask this rather than narrowing the
  * type itself and getting `undefined[…]` for the one kind that does not fit.
+ *
+ * ── It answers for `wanderer.ts` too, and has to ────────────────────────────
+ *
+ * The road coat is a torso garment with its own six colourways and it does not
+ * live in this file, so the obvious `kind in WAYS_OF` misses it — and the
+ * failure is silent and exactly the one this function exists to prevent: an ash
+ * coat arriving with two woad shoulder caps on it. Anything with a colourway
+ * table has to be reachable from here, which is why `ALL_WAYS` merges rather
+ * than `WAYS_OF` being the whole answer.
  */
-export const sleeveColourForItem = (kind: ItemKind, seed = 1): number | null =>
-  kind in WAYS_OF ? sleeveColourFor(kind as GarmentKind, seed) : null
+export const sleeveColourForItem = (kind: ItemKind, seed = 1): number | null => {
+  const ways = ALL_WAYS[kind]
+  if (!ways) {
+    return null
+  }
+  return ways[((Math.round(seed) % ways.length) + ways.length) % ways.length]!.cloth.tunicIndex
+}
 
 const WAYS_OF: Record<GarmentKind, readonly Colourway[]> = {
   robe: ROBE_WAYS,
@@ -1134,4 +1149,16 @@ export const GARMENT_COLOURWAYS: Record<GarmentKind, number> = {
   jerkin: JERKIN_WAYS.length,
   roughTunic: TUNIC_WAYS.length,
   mantle: MANTLE_WAYS.length
+}
+
+/**
+ * Every colourway table in the folder, keyed by `ItemKind`.
+ *
+ * A partial record on purpose: most kinds have no sleeves to match (a sword, a
+ * hat, a pair of trousers), and `undefined` is the right answer for them rather
+ * than a zero that would repaint an arm.
+ */
+const ALL_WAYS: Partial<Record<ItemKind, readonly Colourway[]>> = {
+  ...WAYS_OF,
+  wanderersCoat: WANDERER_WAYS.wanderersCoat
 }

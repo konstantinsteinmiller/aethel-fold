@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>faces bench</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #dceef7;
+      }
+      #bench {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+      #report {
+        position: fixed;
+        left: 10px;
+        bottom: 10px;
+        margin: 0;
+        padding: 8px 10px;
+        font: 11px/1.45 ui-monospace, monospace;
+        color: #22303f;
+        background: rgba(255, 255, 255, 0.72);
+        border-radius: 6px;
+        white-space: pre;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="bench"></canvas>
+    <pre id="report"></pre>
+    <script type="module" src="./faces.ts"></script>
+  </body>
+</html>

@@ -351,6 +351,31 @@ export default {
       'grin': 'ยิ้มกว้าง',
       'open': 'อ้าปาก'
     },
+    'beard': 'เครา',
+    'beardStyles': {
+      'none': 'ไม่มี',
+      'moustache': 'หนวด',
+      'goatee': 'เคราแพะ',
+      'cropped': 'เคราสั้น',
+      'muttonChops': 'จอน',
+      'full': 'เคราเต็ม',
+      'forked': 'เคราสองแฉก',
+      'braided': 'เคราถัก',
+      'patriarch': 'เคราผู้เฒ่า'
+    },
+    'nose': 'จมูก',
+    'noseStyles': {
+      'none': 'ไม่มี',
+      'button': 'จมูกเล็ก',
+      'round': 'จมูกกลม',
+      'hooked': 'จมูกงุ้ม',
+      'broad': 'จมูกกว้าง'
+    },
+    'brows': 'คิ้ว',
+    'browStyles': {
+      'fine': 'คิ้วบาง',
+      'bushy': 'คิ้วดก'
+    },
     'skinTone': 'สีผิว',
     'skinToneOption': 'สีผิว {n}',
     'hairColour': 'สีผม',

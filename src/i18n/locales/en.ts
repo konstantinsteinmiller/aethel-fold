@@ -475,6 +475,31 @@ export default {
       'grin': 'Grin',
       'open': 'Open'
     },
+    'beard': 'Beard',
+    'beardStyles': {
+      'none': 'Clean-shaven',
+      'moustache': 'Moustache',
+      'goatee': 'Goatee',
+      'cropped': 'Cropped',
+      'muttonChops': 'Mutton chops',
+      'full': 'Full beard',
+      'forked': 'Forked',
+      'braided': 'Braided',
+      'patriarch': 'Patriarch'
+    },
+    'nose': 'Nose',
+    'noseStyles': {
+      'none': 'None',
+      'button': 'Button',
+      'round': 'Round',
+      'hooked': 'Hooked',
+      'broad': 'Broad'
+    },
+    'brows': 'Brows',
+    'browStyles': {
+      'fine': 'Fine',
+      'bushy': 'Bushy'
+    },
     'skinTone': 'Skin tone',
     'skinToneOption': 'Skin tone {n}',
     'hairColour': 'Hair colour',

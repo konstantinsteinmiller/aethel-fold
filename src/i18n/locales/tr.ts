@@ -351,6 +351,31 @@ export default {
       'grin': 'Sırıtış',
       'open': 'Açık'
     },
+    'beard': 'Sakal',
+    'beardStyles': {
+      'none': 'Sakalsız',
+      'moustache': 'Bıyık',
+      'goatee': 'Keçi sakalı',
+      'cropped': 'Kısa',
+      'muttonChops': 'Favori',
+      'full': 'Gür sakal',
+      'forked': 'Çatal sakal',
+      'braided': 'Örgülü',
+      'patriarch': 'Ata sakalı'
+    },
+    'nose': 'Burun',
+    'noseStyles': {
+      'none': 'Yok',
+      'button': 'Kalkık',
+      'round': 'Yuvarlak',
+      'hooked': 'Kemerli',
+      'broad': 'Geniş'
+    },
+    'brows': 'Kaşlar',
+    'browStyles': {
+      'fine': 'İnce',
+      'bushy': 'Gür'
+    },
     'skinTone': 'Ten rengi',
     'skinToneOption': 'Ten rengi {n}',
     'hairColour': 'Saç rengi',

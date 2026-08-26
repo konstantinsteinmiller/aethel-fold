@@ -351,6 +351,31 @@ export default {
       'grin': 'Keng tabassum',
       'open': 'Ochiq'
     },
+    'beard': 'Soqol',
+    'beardStyles': {
+      'none': 'Soqolsiz',
+      'moustache': 'Mo\'ylov',
+      'goatee': 'Echki soqol',
+      'cropped': 'Kalta',
+      'muttonChops': 'Yonoq soqol',
+      'full': 'To\'liq soqol',
+      'forked': 'Ayri soqol',
+      'braided': 'O\'ralgan',
+      'patriarch': 'Oqsoqol'
+    },
+    'nose': 'Burun',
+    'noseStyles': {
+      'none': 'Yo\'q',
+      'button': 'Puchuq',
+      'round': 'Dumaloq',
+      'hooked': 'Qayrilma',
+      'broad': 'Keng'
+    },
+    'brows': 'Qosh',
+    'browStyles': {
+      'fine': 'Ingichka',
+      'bushy': 'Qalin'
+    },
     'skinTone': 'Teri rangi',
     'skinToneOption': 'Teri rangi {n}',
     'hairColour': 'Soch rangi',

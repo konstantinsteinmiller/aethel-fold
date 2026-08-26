@@ -1,10 +1,13 @@
 import {
   DEFAULT_APPEARANCE,
   EMPTY_LOADOUT,
+  type BeardStyle,
+  type BrowStyle,
   type CharacterAppearance,
   type EquipmentLoadout,
   type HairStyle,
   type ItemKind,
+  type NoseStyle,
   type Sex,
   type SkinTone
 } from './equipment'
@@ -65,6 +68,14 @@ export type Profession =
   | 'shopOwner'
   | 'housewife'
   | 'maid'
+  // ── From out of town ──────────────────────────────────────────────────────
+  //
+  // The eighteen above are a *town*: every one of them has a trade and a house
+  // in it. These two do not, and they are the reason `gear/wanderer.ts` exists —
+  // a road coat and a pair of tall boots are not a tradesman's kit, and a
+  // stranger who reads as one is a stranger nobody notices arriving.
+  | 'wanderer'
+  | 'ranger'
 
 export interface ProfessionOutfit {
   /** Palette label. The editor is a dev tool, so this stays untranslated. */
@@ -93,6 +104,16 @@ export interface ProfessionOutfit {
   sex: Sex | null
   /** Hair styles that suit the role. Empty means "any of them". */
   hair?: readonly HairStyle[]
+  /**
+   * Beards that suit the role, on the roles where facial hair is part of the
+   * costume rather than part of the person.
+   *
+   * Absent — the normal case — means the seed rolls freely over `NPC_BEARDS`,
+   * gated by sex. Present means this role *is* its beard: a wanderer with a
+   * three-day stubble is a different character from a wanderer with a beard to
+   * his sternum, and only one of them is the one being placed.
+   */
+  beard?: readonly BeardStyle[]
 }
 
 /**
@@ -333,6 +354,47 @@ export const PROFESSIONS: Record<Profession, ProfessionOutfit> = {
     seeds: [0, 2, 4],
     sex: 'female',
     hair: ['braids', 'plaits', 'bun', 'ponytail']
+  },
+
+  // ── From out of town ──────────────────────────────────────────────────────
+  wanderer: {
+    label: 'Wanderer',
+    torso: 'wanderersCoat',
+    legs: 'tallBoots',
+    head: null,
+    mainHand: null,
+    offHand: null,
+    // A greatsword on the back, and it is what makes the silhouette read at
+    // 20 m: nobody else in the eighteen carries anything across their shoulders,
+    // so the diagonal above the shoulder line is unique before the coat is.
+    back: 'greatsword',
+    // Grey wool and brass. `COAT_WAYS[1]` and `BOOT_WAYS[1]` are the pair this
+    // role was designed around; 3 is the undyed journeyman's, which is the same
+    // person a season later.
+    seeds: [1, 3],
+    sex: null,
+    // Unkempt, or long, or tied back on the road. Never a coif and never a
+    // fashionable cut: this is somebody who has not been near a barber.
+    hair: ['wild', 'mane', 'long', 'swept', 'queue', 'receding'],
+    // The role *is* its beard. Three long ones and nothing shorter — a
+    // clean-shaven wanderer in a road coat is a merchant.
+    beard: ['patriarch', 'forked', 'braided', 'full']
+  },
+  ranger: {
+    label: 'Ranger',
+    torso: 'wanderersCoat',
+    legs: 'tallBoots',
+    head: 'hood',
+    mainHand: null,
+    offHand: null,
+    back: 'bow',
+    // Forest and undyed — the two ways in the coat's table that are not grey,
+    // which is the whole difference between this role and the one above it at
+    // any distance where the bow and the greatsword are one dark diagonal.
+    seeds: [0, 2],
+    sex: null,
+    hair: ['queue', 'ponytail', 'short', 'swept', 'braids'],
+    beard: ['cropped', 'goatee', 'none', 'muttonChops']
   }
 }
 
@@ -383,7 +445,14 @@ const SALT = {
   mouth: 89,
   skin: 103,
   tunic: 127,
-  gear: 149
+  gear: 149,
+  // Four more, and they are prime and distinct for the reason the eight above
+  // are: two fields that share a salt move together, so every farmer with a
+  // square head would also have the same nose.
+  beard: 163,
+  beardRoll: 181,
+  brows: 197,
+  nose: 211
 } as const
 
 const HEADS = ['round', 'oval', 'square', 'heart'] as const
@@ -422,6 +491,80 @@ export const NPC_HAIR: readonly HairStyle[] = [
 ]
 
 /**
+ * Every beard, for the roles that do not name their own.
+ *
+ * Written out here rather than imported from `features.ts`'s `BEARD_STYLES` for
+ * the reason `NPC_HAIR` is written out rather than imported from
+ * `CreatorScene`: this list is a *casting* decision and that one is the union.
+ * They happen to agree today and `npc.test.ts` asserts they do, so a style added
+ * to the union and forgotten here is a failing test rather than a beard nobody
+ * in the world can grow.
+ */
+export const NPC_BEARDS: readonly BeardStyle[] = [
+  'none',
+  'moustache',
+  'goatee',
+  'cropped',
+  'muttonChops',
+  'full',
+  'forked',
+  'braided',
+  'patriarch'
+]
+
+/** Noses, likewise. `none` is in it: a face without one is a face this world draws. */
+export const NPC_NOSES: readonly NoseStyle[] = ['none', 'button', 'round', 'hooked', 'broad']
+
+const NPC_BROWS: readonly BrowStyle[] = ['fine', 'bushy']
+
+/**
+ * How often a crowd NPC who *may* have a beard has one.
+ *
+ * ── Two in five, and neither extreme is a town ──────────────────────────────
+ *
+ * A flat roll over the nine styles leaves one person in nine clean-shaven, which
+ * is a town where every man has a beard and only one of them shaves. Rolling
+ * `'none'` at its natural weight *and* keeping the eight others is the same
+ * thing. So the decision is split in two — whether at all, then which — exactly
+ * as `CreatorScene.randomAppearance` splits it, and for the same reason.
+ *
+ * 0.4 rather than 0.5 because a beard is 60–190 triangles and a crowd pays for
+ * it per head: at 0.4, a hundred townspeople cost about 5 500 triangles of
+ * facial hair, which is under 6 % of the crowd and buys the single largest
+ * silhouette difference available between two people in the same costume.
+ */
+const BEARD_RATE = 0.4
+/** Out of the hash's 32-bit range, so the comparison is integer. */
+const BEARD_THRESHOLD = BEARD_RATE * 0x100000000
+
+/**
+ * Which beard, given the role and the seed.
+ *
+ * **Two paths, and a role that names its own beards does not take the rate.**
+ * `BEARD_RATE` exists to keep an *unnamed* crowd from being a town where
+ * everybody has a beard; a role that lists its own has already made that
+ * decision, and applying the rate on top of it silently overrides the list —
+ * which is what shipped first, and which gave the wanderer at seed 0 a bare
+ * chin under a road coat. A role that wants some of its people clean-shaven puts
+ * `'none'` in its own list, as the ranger does.
+ *
+ * The sex gate is applied by the caller and is *not* overridable, because it is
+ * about the silhouette rather than about the costume — see the note there.
+ */
+const rolledBeard = (outfit: ProfessionOutfit, n: number): BeardStyle => {
+  if (outfit.beard && outfit.beard.length > 0) {
+    return pick(outfit.beard, n, SALT.beard)
+  }
+  if (hash(n, SALT.beardRoll) >= BEARD_THRESHOLD) {
+    return 'none'
+  }
+  return pick(GROWABLE_BEARDS, n, SALT.beard)
+}
+
+/** `NPC_BEARDS` without `'none'`, so the two-step roll cannot land on it twice. */
+const GROWABLE_BEARDS: readonly BeardStyle[] = NPC_BEARDS.filter(style => style !== 'none')
+
+/**
  * The face, hair, build and colouring of one NPC.
  *
  * Deterministic in `(profession, seed)`. The outfit is *not* here — that is
@@ -432,11 +575,26 @@ export const professionAppearance = (profession: Profession, seed: number): Char
   const outfit = PROFESSIONS[profession]
   const n = Math.floor(seed)
   const hair = outfit.hair && outfit.hair.length > 0 ? outfit.hair : NPC_HAIR
+  const sex = outfit.sex ?? (hash(n, SALT.sex) % 2 === 0 ? 'male' : 'female')
   return {
     ...DEFAULT_APPEARANCE,
-    sex: outfit.sex ?? (hash(n, SALT.sex) % 2 === 0 ? 'male' : 'female'),
+    sex,
     head: pick(HEADS, n, SALT.head),
     hair: pick(hair, n, SALT.hair),
+    // ── Facial hair ─────────────────────────────────────────────────────────
+    //
+    // Gated on sex and rolled in two steps. The gate is not a statement about
+    // who may have a beard — it is that this figure is read at 20 m and its
+    // *silhouette* is all that survives, so a beard is one of the two or three
+    // cues the crowd has for a build it otherwise cannot show (see `BUILDS`,
+    // which is three numbers and no triangles). A role that names its own
+    // beards overrides the roll but not the gate.
+    beard: sex === 'female' ? 'none' : rolledBeard(outfit, n),
+    // Ungated, both of them. A heavy brow and a nose are not a build cue and
+    // they are what stop a hundred faces being one face at conversation range,
+    // which is where a player actually talks to somebody.
+    brows: pick(NPC_BROWS, n, SALT.brows),
+    nose: pick(NPC_NOSES, n, SALT.nose),
     eyes: pick(EYES, n, SALT.eyes),
     mouth: pick(MOUTHS, n, SALT.mouth),
     skinTone: (hash(n, SALT.skin) % SKIN_TONES.length) as SkinTone,

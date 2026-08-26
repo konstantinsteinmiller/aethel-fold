@@ -195,6 +195,50 @@
             @click="patch({ mouth: option })"
           ) {{ t(`characters.mouthStyles.${option}`) }}
 
+      //- The volume half of the face (`features.ts`), grouped after the two
+        decal pickers above it because that is the order they read in: eyes and
+        mouth are what a face *is*, a beard and a nose are what it is *shaped
+        like*. All three default to the value that draws nothing, so the panel
+        opens on the figure this screen has always shown.
+      section(class="flex flex-col gap-1.5")
+        span(class="text-xs font-semibold tracking-wide text-slate-400") {{ t('characters.beard') }}
+        div(class="flex flex-wrap gap-1.5" role="radiogroup" :aria-label="t('characters.beard')")
+          button(
+            v-for="option in BEARD_STYLE_OPTIONS"
+            :key="option"
+            type="button"
+            role="radio"
+            :aria-checked="appearance.beard === option"
+            :class="pill(appearance.beard === option)"
+            @click="patch({ beard: option })"
+          ) {{ t(`characters.beardStyles.${option}`) }}
+
+      section(class="flex flex-col gap-1.5")
+        span(class="text-xs font-semibold tracking-wide text-slate-400") {{ t('characters.nose') }}
+        div(class="flex flex-wrap gap-1.5" role="radiogroup" :aria-label="t('characters.nose')")
+          button(
+            v-for="option in NOSE_STYLE_OPTIONS"
+            :key="option"
+            type="button"
+            role="radio"
+            :aria-checked="appearance.nose === option"
+            :class="pill(appearance.nose === option)"
+            @click="patch({ nose: option })"
+          ) {{ t(`characters.noseStyles.${option}`) }}
+
+      section(class="flex flex-col gap-1.5")
+        span(class="text-xs font-semibold tracking-wide text-slate-400") {{ t('characters.brows') }}
+        div(class="flex flex-wrap gap-1.5" role="radiogroup" :aria-label="t('characters.brows')")
+          button(
+            v-for="option in BROW_STYLE_OPTIONS"
+            :key="option"
+            type="button"
+            role="radio"
+            :aria-checked="appearance.brows === option"
+            :class="pill(appearance.brows === option)"
+            @click="patch({ brows: option })"
+          ) {{ t(`characters.browStyles.${option}`) }}
+
       section(class="flex flex-col gap-1.5")
         span(class="text-xs font-semibold tracking-wide text-slate-400") {{ t('characters.skinTone') }}
         div(class="flex flex-wrap gap-2" role="radiogroup" :aria-label="t('characters.skinTone')")
@@ -402,8 +446,11 @@ import { useRouter } from 'vue-router'
 import {
   CreatorScene,
   EYE_STYLE_OPTIONS,
+  BEARD_STYLE_OPTIONS,
+  BROW_STYLE_OPTIONS,
   HAIR_COLOUR_SWATCHES,
   HAIR_STYLES,
+  NOSE_STYLE_OPTIONS,
   HEAD_SHAPES,
   MOUTH_STYLE_OPTIONS,
   PREVIEW_ITEMS,

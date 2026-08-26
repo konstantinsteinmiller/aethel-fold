@@ -351,6 +351,31 @@ export default {
       'grin': 'Cengiran',
       'open': 'Terbuka'
     },
+    'beard': 'Janggut',
+    'beardStyles': {
+      'none': 'Bercukur bersih',
+      'moustache': 'Kumis',
+      'goatee': 'Janggut dagu',
+      'cropped': 'Pendek',
+      'muttonChops': 'Cambang',
+      'full': 'Lebat',
+      'forked': 'Bercabang',
+      'braided': 'Dikepang',
+      'patriarch': 'Panjang'
+    },
+    'nose': 'Hidung',
+    'noseStyles': {
+      'none': 'Tidak ada',
+      'button': 'Pesek',
+      'round': 'Bulat',
+      'hooked': 'Bengkok',
+      'broad': 'Lebar'
+    },
+    'brows': 'Alis',
+    'browStyles': {
+      'fine': 'Tipis',
+      'bushy': 'Tebal'
+    },
     'skinTone': 'Warna kulit',
     'skinToneOption': 'Warna kulit {n}',
     'hairColour': 'Warna rambut',

@@ -351,6 +351,31 @@ export default {
       'grin': 'Brede grijns',
       'open': 'Open'
     },
+    'beard': 'Baard',
+    'beardStyles': {
+      'none': 'Gladgeschoren',
+      'moustache': 'Snor',
+      'goatee': 'Sik',
+      'cropped': 'Kortgeknipt',
+      'muttonChops': 'Bakkebaarden',
+      'full': 'Volle baard',
+      'forked': 'Gevorkt',
+      'braided': 'Gevlochten',
+      'patriarch': 'Patriarch'
+    },
+    'nose': 'Neus',
+    'noseStyles': {
+      'none': 'Geen',
+      'button': 'Wipneus',
+      'round': 'Rond',
+      'hooked': 'Haakneus',
+      'broad': 'Breed'
+    },
+    'brows': 'Wenkbrauwen',
+    'browStyles': {
+      'fine': 'Fijn',
+      'bushy': 'Borstelig'
+    },
     'skinTone': 'Huidskleur',
     'skinToneOption': 'Huidskleur {n}',
     'hairColour': 'Haarkleur',

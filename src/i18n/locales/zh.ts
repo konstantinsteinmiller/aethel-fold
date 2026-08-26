@@ -351,6 +351,31 @@ export default {
       'grin': '咧嘴笑',
       'open': '张嘴'
     },
+    'beard': '胡须',
+    'beardStyles': {
+      'none': '无',
+      'moustache': '八字胡',
+      'goatee': '山羊胡',
+      'cropped': '短须',
+      'muttonChops': '连鬓胡',
+      'full': '满脸胡',
+      'forked': '分叉长须',
+      'braided': '编辫长须',
+      'patriarch': '及胸长须'
+    },
+    'nose': '鼻子',
+    'noseStyles': {
+      'none': '无',
+      'button': '小圆鼻',
+      'round': '圆鼻',
+      'hooked': '鹰钩鼻',
+      'broad': '宽鼻'
+    },
+    'brows': '眉毛',
+    'browStyles': {
+      'fine': '细眉',
+      'bushy': '浓眉'
+    },
     'skinTone': '肤色',
     'skinToneOption': '肤色 {n}',
     'hairColour': '发色',

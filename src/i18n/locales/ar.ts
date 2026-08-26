@@ -351,6 +351,31 @@ export default {
       'grin': 'ابتسامة عريضة',
       'open': 'مفتوح'
     },
+    'beard': 'اللحية',
+    'beardStyles': {
+      'none': 'حليق',
+      'moustache': 'شارب',
+      'goatee': 'لحية الذقن',
+      'cropped': 'قصيرة',
+      'muttonChops': 'سوالف',
+      'full': 'كثيفة',
+      'forked': 'مشقوقة',
+      'braided': 'مضفورة',
+      'patriarch': 'لحية الشيخ'
+    },
+    'nose': 'الأنف',
+    'noseStyles': {
+      'none': 'بلا',
+      'button': 'صغير',
+      'round': 'مستدير',
+      'hooked': 'معقوف',
+      'broad': 'عريض'
+    },
+    'brows': 'الحاجبان',
+    'browStyles': {
+      'fine': 'رفيعان',
+      'bushy': 'كثيفان'
+    },
     'skinTone': 'لون البشرة',
     'skinToneOption': 'لون البشرة {n}',
     'hairColour': 'لون الشعر',

@@ -232,13 +232,14 @@ Every world object ships **exactly four LOD tiers**, plus a cull distance.
 | Terrain chunk (48 m) | 1400 | 400 | 128 | 24 | 1344 / 384 / 120 / 18 |
 | Grass patch (4 m) *(6 tiers)* | 6300 | 2800 | 720 | 110 / 44 / 20 | exact |
 | *(future)* Monster | 900 | 420 | 180 | 40 | — |
-| Chibi human | 1060 | 510 | 225 | 52 | 896–1016 / — / — / — |
+| Chibi human | 1380 | 662 | 290 | 69 | 896–1356 / — / — / — |
 
 Generators call `assertTriBudget(geometry, budget, name)` and **throw** in dev if
 they exceed it. The budget is a ceiling, not a target.
 
-**The chibi human row was raised from 700 to 850 to pay for customisation, and
-from 850 to 1060 to pay for hands.** Almost none of *customisation* costs
+**The chibi human row was raised from 700 to 850 to pay for customisation, from
+850 to 1060 to pay for hands, and from 1060 to 1380 to pay for a face with
+volume.** Almost none of *customisation* costs
 triangles and that has not changed: head shape (four shapes) is a warp of the
 head that already exists, sex is two torso radii and a cross-section, and skin,
 hair, tunic and brow colour are albedo. What costs triangles is geometry that
@@ -272,11 +273,38 @@ belong to the body now and a haircut may only cover them; eleven styles do.
 hair colour on their face — they read to about 3 m and nothing past it, which is
 the same range the mouth's five styles and the eye's lid slant work at.
 
+**A face that is geometry rather than decals**, which is where the last 320 went
+and the newest of the three. `face.ts` can put a dark shape anywhere on the
+skull; what it cannot do is change the skull's *outline*, because a decal has no
+thickness. `features.ts` adds the three things that do — and they are their own
+axes on `CharacterAppearance`, not hair styles, because hair and beard were one
+axis before this and "a grey mane **and** a beard to the sternum" was therefore
+inexpressible:
+
+| feature | tris | note |
+|---|---:|---|
+| beard, `moustache` → `forked` | 60–250 | eight styles, spread by which direction they break the outline |
+| bushy brow ridge | 60 | 30 a side; the decal brow stays underneath it |
+| nose | 30 | any of four, and the only feature on this head with a *profile* |
+
+The nose is the best value in the whole table: 30 triangles for the one place
+this figure's outline stops being an egg. The long beards are the dearest and
+are also the largest silhouette change the figure has — `patriarch` is 216
+triangles for a mass 294 mm across hanging 196 mm below the chin, which is more
+outline than any hairstyle buys, read at 20 m where a face is not.
+
+**All three default to the value that emits nothing**, so the shipped figure and
+every character saved before they existed is still 956 triangles. A crowd pays
+for facial hair at `professions.ts`'s own rate (0.4, and never on the feminine
+build): about **+13 000 triangles on a hundred townspeople**, in the same draw
+calls and the same programs, because every one of these is merged into the
+body's own skinned mesh.
+
 So the ceiling covers 896 (`coif`, the one style that is painted *and* covers the
-ears) through 1016 (`wild`, `ponytail` and `topknot` tie), and leaves 44 — a
-little under one face's worth — of headroom. The coarse tiers are scaled by the
-same factors as before (0.48 / 0.21 / 0.05 of LOD0), so the row's shape is
-unchanged; the tiers themselves are still owed, as noted in §6 Phase C.
+ears) through **1356** (`ponytail` + `forked` + a nose + bushy brows), and leaves
+24 of headroom. The coarse tiers are scaled by the same factors as before
+(0.48 / 0.21 / 0.05 of LOD0), so the row's shape is unchanged; the tiers
+themselves are still owed, as noted in §6 Phase C.
 
 **A torso or leg garment does not add to this row.** Both *replace* body parts
 rather than covering them — the torso's 96 triangles and the legs' 144 are never

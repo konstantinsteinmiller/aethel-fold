@@ -351,6 +351,31 @@ export default {
       'grin': 'Grinsen',
       'open': 'Offen'
     },
+    'beard': 'Bart',
+    'beardStyles': {
+      'none': 'Glatt rasiert',
+      'moustache': 'Schnurrbart',
+      'goatee': 'Kinnbart',
+      'cropped': 'Kurzbart',
+      'muttonChops': 'Backenbart',
+      'full': 'Vollbart',
+      'forked': 'Gabelbart',
+      'braided': 'Geflochten',
+      'patriarch': 'Patriarch'
+    },
+    'nose': 'Nase',
+    'noseStyles': {
+      'none': 'Ohne',
+      'button': 'Stupsnase',
+      'round': 'Rund',
+      'hooked': 'Hakennase',
+      'broad': 'Breit'
+    },
+    'brows': 'Augenbrauen',
+    'browStyles': {
+      'fine': 'Fein',
+      'bushy': 'Buschig'
+    },
     'skinTone': 'Hautton',
     'skinToneOption': 'Hautton {n}',
     'hairColour': 'Haarfarbe',

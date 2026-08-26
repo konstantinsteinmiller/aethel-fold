@@ -351,6 +351,31 @@ export default {
       'grin': 'Cười tươi',
       'open': 'Mở'
     },
+    'beard': 'Râu',
+    'beardStyles': {
+      'none': 'Cạo nhẵn',
+      'moustache': 'Ria mép',
+      'goatee': 'Râu dê',
+      'cropped': 'Râu cắt ngắn',
+      'muttonChops': 'Tóc mai',
+      'full': 'Râu rậm',
+      'forked': 'Râu chẻ',
+      'braided': 'Râu tết',
+      'patriarch': 'Râu trưởng lão'
+    },
+    'nose': 'Mũi',
+    'noseStyles': {
+      'none': 'Không',
+      'button': 'Mũi hếch',
+      'round': 'Mũi tròn',
+      'hooked': 'Mũi khoằm',
+      'broad': 'Mũi to'
+    },
+    'brows': 'Lông mày',
+    'browStyles': {
+      'fine': 'Mảnh',
+      'bushy': 'Rậm'
+    },
     'skinTone': 'Màu da',
     'skinToneOption': 'Màu da {n}',
     'hairColour': 'Màu tóc',

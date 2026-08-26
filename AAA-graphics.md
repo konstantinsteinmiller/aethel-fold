@@ -363,6 +363,71 @@ fixed cost for the whole character family however many characters exist, but it
 is most of the remaining headroom, and a second skinned material family would
 not fit.
 
+### A face with volume, and the one axis that was missing
+
+`face.ts` draws eyes, a mouth and a brow line as **decals** — patches pressed
+onto the skull by a ray-cast, a fraction of a millimetre proud of it. That is the
+right shape for everything whose read comes from albedo, and it has one hard
+limit: *a decal cannot change the outline*. `features.ts` is the other half —
+beard, brow ridge and nose, built from the same `limbMesh` primitive the hair is,
+appended before the outline-hull cut so all three get the 1.6 px rim.
+
+**A beard was a hairstyle, and that was the actual bug.** `HairStyle` has carried
+a `bearded` entry since the crowd landed and it works; what it cannot do is be
+worn *with* a haircut, so "a grey mane **and** a beard to the sternum" — an
+entirely ordinary person — was inexpressible. Three new fields on
+`CharacterAppearance` (`beard`, `brows`, `nose`), all defaulting to the value
+that emits nothing, so the shipped figure and every saved character is
+byte-for-byte what it was.
+
+**Cost, per axis, on the default head:**
+
+| axis | tris | what it buys |
+|---|---:|---|
+| nose (any of four) | 30 | the only feature on this head with a *profile* |
+| bushy brow ridge | 60 | 30 a side; the decal brow stays under it |
+| beard, `moustache` → `forked` | 60–250 | eight styles, by which way they break the outline |
+
+The row went 1060 → **1380** and the worst figure 1016 → **1356**. A crowd pays
+for facial hair at `professions.ts`'s rate (0.4, never on the feminine build):
+**+13 000 triangles on a hundred townspeople, and not one extra draw call or
+program** — every one of these is merged into the body's own skinned mesh.
+
+**Measured in the world, within one build**, eight NPCs of one profession in a
+ring around the camera, against the same scene with an empty crowd:
+
+| crowd of 8 | draw calls | Δ | programs | triangles |
+|---|---:|---:|---:|---:|
+| (empty)    | 161 | —   | 21 | 121 040 |
+| farmer     | 177 | +16 | 21 | 161 920 |
+| town guard | 181 | +20 | 21 | 172 160 |
+| **wanderer** | **173** | **+12** | 21 | 173 688 |
+| ranger     | 181 | +20 | 21 | 178 000 |
+
+The wanderer is the **cheapest of the four in draw calls and the dearest in
+triangles**, and both halves of that are the same fact: its coat and boots are
+`torso`/`legs` items, which *replace* body parts rather than being parented to a
+bone, and it wears no headwear. Triangles are vertex work the frame has room for;
+draw calls are the thing GDD §5.2 is actually short of. **A hat costs more than a
+beard.**
+
+### `Number(params.get(name))` is 0, and it switched the crowd off in dev
+
+Found while trying to look at a new NPC in the world and seeing nothing.
+`WorldScene.vue` read its dev overrides as `Number(params.get(name))`;
+`URLSearchParams.get` returns `null` for a missing key, and `Number(null)` is
+**0**, not `NaN`. Four of the five overrides guard with `> 0` and were
+accidentally safe. `crowd` guards with `>= 0` — deliberately, so `?crowd=0` can
+switch the crowd off for an A/B — so **every dev session without `?crowd=N` ran
+with `crowdBudget: 0`**, `Crowd.search()` took `Math.min(0, count)` spawns, and
+the level's NPCs never stood up. No error, no warning; the perf panel's NPC row
+read a perfectly plausible `0 draws`. Production was never affected, because the
+`import.meta.env.DEV` gate already returned `NaN` there.
+
+The durable lesson is the one this document keeps arriving at from other
+directions: **a plausible zero is worse than a crash.** `devNumber` now returns
+`NaN` for absent, which is what all five callers already assumed.
+
 ### What skinning broke, and how
 
 **The outline hull had no skinning at all.** It is a hand-written

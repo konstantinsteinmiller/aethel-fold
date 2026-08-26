@@ -351,6 +351,31 @@ export default {
       'grin': 'Sorrisone',
       'open': 'Aperta'
     },
+    'beard': 'Barba',
+    'beardStyles': {
+      'none': 'Rasato',
+      'moustache': 'Baffi',
+      'goatee': 'Pizzetto',
+      'cropped': 'Corta',
+      'muttonChops': 'Basette',
+      'full': 'Folta',
+      'forked': 'Biforcuta',
+      'braided': 'Intrecciata',
+      'patriarch': 'Patriarca'
+    },
+    'nose': 'Naso',
+    'noseStyles': {
+      'none': 'Nessuno',
+      'button': 'All\'insù',
+      'round': 'Tondo',
+      'hooked': 'Aquilino',
+      'broad': 'Largo'
+    },
+    'brows': 'Sopracciglia',
+    'browStyles': {
+      'fine': 'Sottili',
+      'bushy': 'Folte'
+    },
     'skinTone': 'Tono della pelle',
     'skinToneOption': 'Tono della pelle {n}',
     'hairColour': 'Colore dei capelli',

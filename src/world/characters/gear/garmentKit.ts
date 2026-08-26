@@ -214,13 +214,15 @@ export const FITTED_SECTION = clearingSection(
 /**
  * A cloth colour, as a lit/base/shadow triple.
  *
- * All thirteen are existing palette entries regrouped — not one new constant,
+ * All fifteen are existing palette entries regrouped — not one new constant,
  * which is the point: a dye range invented for costumes is a second palette, and
  * the two drift until a farmer's smock is a green no tree in the world is.
  *
  * The shadow end is what the no-black rule (GDD R4) is measured at, and the
- * darkest of these is `needleDeep` at **0.183 authored sRGB luma** — comfortably
- * over the 0.06 floor `tests/world/gear.test.ts` holds every model to. The
+ * darkest of these is `charcoal`'s `barkOldDark` at **0.144 authored sRGB
+ * luma** — still comfortably over the 0.06 floor `tests/world/gear.test.ts`
+ * holds every model to, and the reason a "black" coat in this world is a very
+ * dark brown-grey rather than a black one. The
  * discipline that follows is stated once here: **a garment never lerps past its
  * own dye's shadow.** Every shading term below bottoms out there.
  */
@@ -273,7 +275,30 @@ export const DYES = {
   saffron: dye('saffron', C.strawLit, C.strawBase, C.strawShadow, 5),
   sage: dye('sage', C.grassCapLit, C.grassCapBase, C.grassCapDeep, 2),
   flax: dye('flax', C.birchLit, C.birchBase, C.birchMark, 4),
-  steel: dye('steel', C.steelLit, C.steelBase, C.steelShadow, 4)
+  steel: dye('steel', C.steelLit, C.steelBase, C.steelShadow, 4),
+  /**
+   * Charcoal — the darkest *cloth* in the set, and the only one whose lit stop
+   * is another family's shadow.
+   *
+   * `undyed` already runs `clothLit → clothBase → clothShadow` and stops at a
+   * mid grey-brown; a road coat and a pair of working trousers want the two
+   * stops below that, which is exactly what this is: `rockShadow` (0.380 sRGB
+   * luma) over `clothShadow` (0.237) over `barkOldDark` (0.144). Still three
+   * existing palette entries and still clear of GDD R4's 0.06 floor by more than
+   * `forest`'s `needleDeep` was at 0.183 — the darkest thing in the folder
+   * before this.
+   *
+   * The sleeves it names are `TUNIC_COLOURS[4]`, `cliffBase`: the nearest thing
+   * the *body's* five-stop ramp has to a grey, because a garment does not own
+   * the arms (see `Dye.tunicIndex`).
+   */
+  charcoal: dye('charcoal', C.rockShadow, C.clothShadow, C.barkOldDark, 4),
+  /**
+   * Brass, for a buckle. A *trim* dye and never a cloth one — nothing in this
+   * world wears a metre of brass, and at `EQUIPMENT_BUDGET`'s scale a buckle is
+   * a painted band a few millimetres of `u` wide.
+   */
+  brass: dye('brass', C.brassLit, C.brassBase, C.woodShadow, 5)
 } as const
 
 /**

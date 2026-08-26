@@ -13,6 +13,7 @@ import {
 import { appendFace } from './face'
 import { limbMesh } from './limb'
 import { BONE_NAMES, type BoneName, boneDefinition } from './rig'
+import { featureMesh } from './features'
 import {
   BUILDS,
   HAIRLINE,
@@ -1052,8 +1053,17 @@ export const skinTorsoGeometry = (source: BufferGeometry): BufferGeometry => {
 export interface ChibiBlocks {
   /** First vertex of the ear block. Equal to `hair` when no ear is shown. */
   ears: number
-  /** First vertex of the hair block. Equal to `face` for a painted style. */
+  /** First vertex of the hair block. Equal to `features` for a painted style. */
   hair: number
+  /**
+   * First vertex of the beard / brow-ridge / nose block (`features.ts`).
+   *
+   * Equal to `face` on the default appearance, which is what every suite that
+   * used to read the hair block as `[hair, face)` relies on — those three fields
+   * are `none`, `fine` and `none` there and the block is empty. A suite that
+   * wants the hair *alone* on a bearded character has to bound it by this.
+   */
+  features: number
   /** First vertex of the face block. */
   face: number
   /** Total vertex count, so a caller never has to reach for the attribute. */
@@ -1072,37 +1082,67 @@ export interface ChibiGeometry {
 /**
  * GDD §4.1, `Chibi human` LOD0.
  *
- * ── Raised from 850 to 1060, and here is every triangle of it ───────────────
+ * ── Raised 850 → 1060 for hands, and 1060 → 1380 for a face with volume ─────
  *
- *   | part                        | was | now | note                          |
- *   |-----------------------------|----:|----:|-------------------------------|
- *   | body, no hands              | 654 | 654 | unchanged                     |
- *   | hands                       |   0 | 192 | 96 each — see `HAND_PARTS`    |
- *   | ears                        |   0 |  60 | 30 each, moved off the hair   |
- *   | face (eyes + mouth)         |  38 |  38 | unchanged                     |
- *   | brows                       |   0 |  12 | 6 each                        |
- *   | **default figure (`bowl`)** | 692 | 956 |                               |
- *   | worst hair (`wild`, `mane`) | 120 | 120 | unchanged                     |
- *   | **worst figure**            | 812 |1016 | 44 of headroom                |
+ *   | part                          | 850 |1060 |1380 | note                  |
+ *   |-------------------------------|----:|----:|----:|-----------------------|
+ *   | body, no hands                | 654 | 654 | 654 | unchanged             |
+ *   | hands                         |   0 | 192 | 192 | 96 each, `HAND_PARTS` |
+ *   | ears                          |   0 |  60 |  60 | 30 each, off the hair |
+ *   | face decals (eyes + mouth)    |  38 |  38 |  38 | unchanged             |
+ *   | brow decals                   |   0 |  12 |  12 | 6 each                |
+ *   | **default figure (`bowl`)**   | 692 | 956 | 956 | **unchanged**         |
+ *   | worst hair, net of ears       | 120 |  60 |  60 | `wild` ties `ponytail`|
+ *   | worst beard (`forked`)        |   0 |   0 | 250 | `features.ts`         |
+ *   | bushy brow ridges             |   0 |   0 |  60 | 30 each               |
+ *   | nose                          |   0 |   0 |  30 | any of the four       |
+ *   | **worst figure**              | 812 |1016 |1356 | 24 of headroom        |
  *
- * Ears are in both columns' worst case and cost the *figure* nothing new: they
- * were already 60 triangles on the nine styles that showed them, and moving them
- * to the body only changed who decides. What is genuinely additive is **204** —
- * hands and brows — and the split matters, because a crowd pays for it a hundred
- * times over:
+ * ── What the 320 buys, and what it costs a crowd ───────────────────────────
  *
- *   * **Hands are 192 of the 204 and are 19 % of the figure.** That is a lot for
- *     two objects that are 30 px at 3 m and 3 px at 20 m, and it is the one line
- *     here that a coarse tier should attack first: LOD1 wants the mitten back.
- *     It is spent because a character in this game holds a sword, and the hand
- *     is where the player's eye goes the moment one is drawn.
- *   * **Brows are 12** — half a percent — and they are the only thing on the
- *     figure that puts the character's *hair colour* on their face.
+ * **The default figure did not move.** All three new axes default to the value
+ * that emits nothing (`beard: 'none'`, `brows: 'fine'`, `nose: 'none'`), so the
+ * shipped character and every character saved before they existed is the same
+ * 956 triangles it was. This ceiling is what a figure that *asks* for a face
+ * with volume is allowed to spend.
+ *
+ * Measured per axis, on the default head:
+ *
+ *   | axis                      | tris | note                                  |
+ *   |---------------------------|-----:|---------------------------------------|
+ *   | `moustache`               |   60 | two sweeps, 30 each                   |
+ *   | `muttonChops`             |   60 | two, and no moustache                 |
+ *   | `goatee`                  |   96 | moustache + a 108 mm chin mass        |
+ *   | `cropped`                 |  180 | + the pair of sideburns               |
+ *   | `full`                    |  204 |                                       |
+ *   | `patriarch` / `braided`   |  216 / 228 | to the sternum                  |
+ *   | `forked`                  |  250 | the dearest: a mass plus two tines    |
+ *   | `brows: 'bushy'`          |   60 | 30 a side                             |
+ *   | any nose                  |   30 | one strand, and the whole profile     |
+ *
+ * A hundred townspeople at `professions.ts`'s own beard rate (0.4, and never on
+ * the feminine build) is about **+13 000 triangles** against the crowd's
+ * ~102 000 — 13 %, **in the same draw calls and the same programs**, because
+ * every one of these is merged into the body's own skinned mesh. Vertex work is
+ * not what GDD §5.2 is short of; draw calls are, and this adds none.
+ *
+ * ── Where the money went, ranked ────────────────────────────────────────────
+ *
+ *   * **The nose is the best-value line in this table.** 30 triangles, and it is
+ *     the only feature on the head with a *profile*: `face.ts` can put a dark
+ *     shape anywhere on the skull but it cannot make the outline non-convex, and
+ *     a nose is the cheapest place the outline stops being an egg.
+ *   * **A long beard is the dearest and is also the largest silhouette change
+ *     the figure has.** `patriarch` is 216 triangles for a mass 294 mm across
+ *     hanging 196 mm below the chin — more outline than any hairstyle buys, and
+ *     it is read at 20 m where a face is not.
+ *   * **Hands are still 192 and still the first thing a coarse tier should
+ *     attack**; nothing here competes with that.
  *
  * Head shape, build, skin tone and every colour still cost nothing: they are
  * warps, radii and albedo.
  */
-export const CHIBI_BUDGET = 1060
+export const CHIBI_BUDGET = 1380
 
 /**
  * The most expensive thing `ITEM_SLOT` allows in a given body slot.
@@ -1854,6 +1894,34 @@ export const buildChibiGeometry = (
     headwear: shell
   })
 
+  // ── Beard, brow ridge and nose ───────────────────────────────────────────
+  //
+  // The volume half of the face (`features.ts`), appended here rather than with
+  // the face for the reason the hair is: all three change the **silhouette**, so
+  // all three belong in the outline hull, and the hull is the index prefix that
+  // ends on the next line. A nose left out of it is a nose with no rim, which at
+  // 8 m is a nose with no profile.
+  //
+  // **`headwear` is not passed**, and that is the one place this block departs
+  // from the two above it. `tuckUnder` pulls a vertex back along the ray from
+  // the head's centre until it is inside the worn shell — right for a topknot
+  // under a straw brim (81 mm, measured), catastrophic for anything below the
+  // jaw: a hood's shell reaches the collar, so a tucked beard is pulled inside
+  // the character's own chest, and any hat at all flattens a nose into the
+  // skull. Nothing here is ever *under* headwear.
+  const featuresStart = positions.length / 3
+  appendHeadStrands(featureMesh(appearance), warp, {
+    positions,
+    normals,
+    colors,
+    skinIndices,
+    skinWeights,
+    indices,
+    headBone: boneIndexOf('head'),
+    neckBone: boneIndexOf('neck'),
+    headwear: null
+  })
+
   // Where the body's triangles stop and the face's begin. The outline hull is
   // built from this prefix — see `outlineGeometry` below.
   const bodyIndexCount = indices.length
@@ -1968,6 +2036,6 @@ export const buildChibiGeometry = (
     geometry,
     outlineGeometry,
     boneNames: BONE_NAMES,
-    blocks: { ears: earsStart, hair: hairStart, face: faceStart, count: positions.length / 3 }
+    blocks: { ears: earsStart, hair: hairStart, features: featuresStart, face: faceStart, count: positions.length / 3 }
   }
 }

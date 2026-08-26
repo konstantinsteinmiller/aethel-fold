@@ -351,6 +351,31 @@ export default {
       'grin': 'Кең күлкі',
       'open': 'Ашық'
     },
+    'beard': 'Сақал',
+    'beardStyles': {
+      'none': 'Сақалсыз',
+      'moustache': 'Мұрт',
+      'goatee': 'Ешкі сақал',
+      'cropped': 'Қысқа',
+      'muttonChops': 'Жақ сақал',
+      'full': 'Қалың сақал',
+      'forked': 'Айыр сақал',
+      'braided': 'Өрілген',
+      'patriarch': 'Ақсақал'
+    },
+    'nose': 'Мұрын',
+    'noseStyles': {
+      'none': 'Жоқ',
+      'button': 'Пұштақ',
+      'round': 'Дөңгелек',
+      'hooked': 'Имек',
+      'broad': 'Жалпақ'
+    },
+    'brows': 'Қас',
+    'browStyles': {
+      'fine': 'Жіңішке',
+      'bushy': 'Қалың'
+    },
     'skinTone': 'Тері түсі',
     'skinToneOption': 'Тері түсі {n}',
     'hairColour': 'Шаш түсі',

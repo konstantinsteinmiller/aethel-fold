@@ -233,6 +233,54 @@ export const browColour = (appearance: CharacterAppearance): Color => {
   return toAuthoredLuma(brow, Math.max(BROW_LUMA_FLOOR, skinLuma - BROW_MIN_CONTRAST))
 }
 
+/**
+ * The same guarantee, factored out, because a beard needs it for a different
+ * reason and at a different strength.
+ *
+ * A brow is a 7 mm line lying flat on skin and reads by albedo alone, so it is
+ * carried most of the way to its dark stop. A **beard is a mass** — 284 mm
+ * across on `full`, hanging 200 mm off the jaw on `patriarch` — and the same
+ * darkening is the exact failure `hairSpecs` records twice: at `hairDark` the
+ * chin wedge "rendered as a black bib" and the mane "as a black ball", because
+ * `hairDark` is `hairBase × 0.33` in linear space and the front of a figure in
+ * this world faces away from the sun.
+ *
+ * So the beard starts a quarter of the way down instead of seven tenths, and
+ * then takes the *same* floor: it must still clear the skin it is next to by
+ * `BROW_MIN_CONTRAST`, or a light-haired character on mid skin has a beard that
+ * is only visible where it leaves the head's outline. That pair — light hair on
+ * mid or dark skin — is the one `browColour` measured as actually colliding, and
+ * a beard covers far more of that skin than a brow does.
+ */
+const BEARD_DARKEN = 0.25
+
+export interface BeardStops {
+  /** The mass's lit end, guaranteed to clear the wearer's skin. */
+  base: Color
+  /** Its own shadow, and the value a binding or a braid's cord is drawn in. */
+  dark: Color
+}
+
+export const beardStops = (appearance: CharacterAppearance): BeardStops => {
+  const hair = pick(HAIR_COLOURS, appearance.hairColour)
+  const skin = pick(SKIN_TONES, appearance.skinTone)
+  const base = hair.base.clone().lerp(hair.dark, BEARD_DARKEN)
+  const skinLuma = authoredLuma(skin)
+  if (Math.abs(authoredLuma(base) - skinLuma) < BROW_MIN_CONTRAST) {
+    toAuthoredLuma(base, Math.max(BROW_LUMA_FLOOR, skinLuma - BROW_MIN_CONTRAST))
+  }
+  return { base, dark: hair.dark.clone() }
+}
+
+/**
+ * The wearer's skin, for the one feature that is made of it.
+ *
+ * `bodyPalette` already returns this and four other colours; a nose wants the
+ * one and building the other four to get it would tie the feature block to the
+ * tunic, which it has nothing to do with.
+ */
+export const skinColour = (appearance: CharacterAppearance): Color => pick(SKIN_TONES, appearance.skinTone).clone()
+
 export interface BodyPalette {
   skin: Color
   hair: Color
@@ -623,7 +671,7 @@ export const crownHeadroom = (hair: HairStyle): number => (hair === 'topknot' ? 
  * the profile so there is no cut to bevel (GDD R1/R3), and one shading solution
  * shared with everything else on the figure.
  */
-interface StrandSpec {
+export interface StrandSpec {
   from: readonly [number, number, number]
   to: readonly [number, number, number]
   radiusStart: number
@@ -1141,6 +1189,23 @@ const hairSpecs = (appearance: CharacterAppearance, hair: Color, hairDark: Color
 
     // ── Below the chin ───────────────────────────────────────────────────────
     case 'bearded':
+      // ── Yields to the beard axis, and only to it ─────────────────────────
+      //
+      // `appearance.beard` (`features.ts`) is the general answer to facial hair
+      // and this entry is the special one that predates it. They must not both
+      // emit: two masses hanging off the same chin at two different radii read
+      // as a beard with a lump in it, and the *inner* one is invisible, so it is
+      // 36 triangles nobody can see.
+      //
+      // The style is not removed and the hairline it sets (+60 mm — "a beard is
+      // an old man, and the hairline is half of what says so") is not touched,
+      // because `professions.ts` names `bearded` in four roles and every saved
+      // character wearing it must keep the figure it had. With
+      // `beard: 'none'` — the default, and what all of those carry — this branch
+      // is byte-for-byte what it always was.
+      if (appearance.beard !== 'none') {
+        break
+      }
       specs.push(
         // The only mass below the head, and the only one that changes the
         // *figure's* outline rather than the head's: it fills the notch between
@@ -1184,7 +1249,7 @@ const _colour = new Color()
  * `FrontSide` and the outline is `BackSide`, so an inward-wound strand renders
  * its own far surface and its inverted hull draws *in front of* the character.
  */
-const buildStrands = (specs: readonly StrandSpec[]): HairMesh | null => {
+export const buildStrands = (specs: readonly StrandSpec[]): HairMesh | null => {
   if (specs.length === 0) {
     return null
   }

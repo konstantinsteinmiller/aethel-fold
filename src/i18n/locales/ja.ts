@@ -351,6 +351,31 @@ export default {
       'grin': 'にっこり',
       'open': '開いた口'
     },
+    'beard': 'ひげ',
+    'beardStyles': {
+      'none': 'なし',
+      'moustache': '口ひげ',
+      'goatee': 'あごひげ',
+      'cropped': '短いひげ',
+      'muttonChops': 'ほおひげ',
+      'full': '濃いひげ',
+      'forked': '二股ひげ',
+      'braided': '編みひげ',
+      'patriarch': '長老ひげ'
+    },
+    'nose': '鼻',
+    'noseStyles': {
+      'none': 'なし',
+      'button': '団子鼻',
+      'round': '丸い鼻',
+      'hooked': 'かぎ鼻',
+      'broad': '大きい鼻'
+    },
+    'brows': 'まゆげ',
+    'browStyles': {
+      'fine': '細い',
+      'bushy': '太い'
+    },
     'skinTone': '肌の色',
     'skinToneOption': '肌の色 {n}',
     'hairColour': '髪の色',

@@ -23,11 +23,14 @@ import { CharacterEquipment, variantOf } from './CharacterEquipment'
 import {
   DEFAULT_APPEARANCE,
   EQUIP_SLOTS,
+  type BeardStyle,
+  type BrowStyle,
   type CharacterAppearance,
   type EquipmentLoadout,
   type HairStyle,
   type HeadShape,
   type ItemKind,
+  type NoseStyle,
   type Sex,
   type SkinTone
 } from './equipment'
@@ -105,6 +108,34 @@ const HAIR_ORDER: Record<HairStyle, true> = {
   receding: true
 }
 
+/**
+ * ── The three volume axes ─────────────────────────────────────────────────
+ *
+ * Same `Record` trick, same reason: `features.ts` also exports `BEARD_STYLES`,
+ * `BROW_STYLES` and `NOSE_STYLES` in the order it wants them read, and those
+ * lists are the ones the *world* uses — this file drags a renderer in behind it,
+ * so `professions.ts` cannot import from here. `characterCreator.test.ts` asserts
+ * the two agree, exactly as it already does for `NPC_HAIR`, so a style added to
+ * one and not the other is a failing test rather than an option nobody can pick.
+ *
+ * `none` leads the beard and the nose because it is the shipped face and the
+ * default; the rest run shortest-to-longest, which is also least-to-most
+ * silhouette.
+ */
+const BEARD_ORDER: Record<BeardStyle, true> = {
+  none: true,
+  moustache: true,
+  goatee: true,
+  cropped: true,
+  muttonChops: true,
+  full: true,
+  forked: true,
+  braided: true,
+  patriarch: true
+}
+const BROW_ORDER: Record<BrowStyle, true> = { fine: true, bushy: true }
+const NOSE_ORDER: Record<NoseStyle, true> = { none: true, button: true, round: true, hooked: true, broad: true }
+
 const EYE_ORDER: Record<EyeStyle, true> = {
   bright: true, wide: true, close: true, tall: true, small: true,
   almond: true, sleepy: true, sharp: true, soft: true, weary: true
@@ -116,6 +147,9 @@ const MOUTH_ORDER: Record<MouthStyle, true> = {
 export const SEXES = Object.keys(SEX_ORDER) as Sex[]
 export const HEAD_SHAPES = Object.keys(HEAD_ORDER) as HeadShape[]
 export const HAIR_STYLES = Object.keys(HAIR_ORDER) as HairStyle[]
+export const BEARD_STYLE_OPTIONS = Object.keys(BEARD_ORDER) as BeardStyle[]
+export const BROW_STYLE_OPTIONS = Object.keys(BROW_ORDER) as BrowStyle[]
+export const NOSE_STYLE_OPTIONS = Object.keys(NOSE_ORDER) as NoseStyle[]
 export const EYE_STYLE_OPTIONS = Object.keys(EYE_ORDER) as EyeStyle[]
 export const MOUTH_STYLE_OPTIONS = Object.keys(MOUTH_ORDER) as MouthStyle[]
 
@@ -163,6 +197,12 @@ const isEyeStyle = (value: unknown): value is EyeStyle =>
   typeof value === 'string' && (EYE_STYLE_OPTIONS as string[]).includes(value)
 const isMouthStyle = (value: unknown): value is MouthStyle =>
   typeof value === 'string' && (MOUTH_STYLE_OPTIONS as string[]).includes(value)
+const isBeardStyle = (value: unknown): value is BeardStyle =>
+  typeof value === 'string' && (BEARD_STYLE_OPTIONS as string[]).includes(value)
+const isBrowStyle = (value: unknown): value is BrowStyle =>
+  typeof value === 'string' && (BROW_STYLE_OPTIONS as string[]).includes(value)
+const isNoseStyle = (value: unknown): value is NoseStyle =>
+  typeof value === 'string' && (NOSE_STYLE_OPTIONS as string[]).includes(value)
 
 /** Rounds and clamps into `[0, length)`. Never NaN — see `sanitiseAppearance`. */
 const clampIndex = (value: number, length: number): number => {
@@ -218,6 +258,20 @@ export const sanitiseAppearance = (raw: unknown): CharacterAppearance => {
   }
   if (isMouthStyle(data.mouth)) {
     appearance.mouth = data.mouth
+  }
+  // A save written before the face had volume has none of these three keys and
+  // falls through to `none` / `fine` / `none` — which is precisely the face that
+  // build drew, so an old character reloads unchanged rather than sprouting a
+  // beard. Same rule as `eyes`/`mouth` and `gearSeed` above, and the reason all
+  // three defaults are the absent value.
+  if (isBeardStyle(data.beard)) {
+    appearance.beard = data.beard
+  }
+  if (isBrowStyle(data.brows)) {
+    appearance.brows = data.brows
+  }
+  if (isNoseStyle(data.nose)) {
+    appearance.nose = data.nose
   }
   if (typeof data.skinTone === 'number') {
     appearance.skinTone = clampIndex(data.skinTone, SKIN_TONE_SWATCHES.length) as SkinTone
@@ -295,13 +349,32 @@ export const copyAppearance = (
 export const appearanceEquals = (a: CharacterAppearance, b: CharacterAppearance): boolean =>
   APPEARANCE_FIELDS.every(field => a[field] === b[field])
 
-/** A uniformly random appearance. Used by the panel's "surprise me". */
+/**
+ * A random appearance. Used by the panel's "surprise me".
+ *
+ * Uniform in every field but one — see `beard`, which is the only place a flat
+ * roll produces a result a player would read as broken rather than as a
+ * surprise.
+ */
 export const randomAppearance = (random: () => number = Math.random): CharacterAppearance => {
   const pick = <T>(list: readonly T[]): T => list[Math.min(list.length - 1, Math.floor(random() * list.length))]!
+  const sex = pick(SEXES)
   return {
-    sex: pick(SEXES),
+    sex,
     head: pick(HEAD_SHAPES),
     hair: pick(HAIR_STYLES),
+    // ── The one field that is not a flat roll ───────────────────────────────
+    //
+    // Two things go wrong with a uniform roll over nine styles and they pull in
+    // opposite directions, so one probability fixes both: only one roll in nine
+    // is clean-shaven, which is a town where nobody shaves; and one in nine
+    // lands a beard to the sternum on a feminine build, which reads as a bug
+    // rather than as a surprise. The beard is therefore rolled in two steps —
+    // whether at all, then which — and the first step is the only place in this
+    // function that looks at another field.
+    beard: random() < (sex === 'female' ? 0.05 : 0.6) ? pick(BEARD_STYLE_OPTIONS.slice(1)) : 'none',
+    brows: pick(BROW_STYLE_OPTIONS),
+    nose: pick(NOSE_STYLE_OPTIONS),
     // Rolled too — a city of a hundred that all share one face is the thing the
     // ten eyes and five mouths exist to prevent.
     eyes: pick(EYE_STYLE_OPTIONS),

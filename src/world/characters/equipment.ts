@@ -72,6 +72,53 @@ export type HairStyle =
   | 'coif'
   | 'receding'
 
+/**
+ * Facial hair, as its own axis.
+ *
+ * **Not a `HairStyle`.** `HairStyle` already has a `bearded` entry and it works,
+ * but it is *one* axis: a character could have a beard or a haircut and never
+ * both, which makes "grey mane plus a beard to the sternum" — an entirely
+ * ordinary person — inexpressible. Splitting it is the fix, and it is free for
+ * everything that already exists because `'none'` is the default and emits
+ * nothing.
+ *
+ * Eight shapes plus none, spread by which direction they break the outline
+ * rather than by barbering. `features.ts` carries the table and the argument for
+ * each; read that before adding a ninth.
+ */
+export type BeardStyle =
+  | 'none'
+  | 'moustache'
+  | 'goatee'
+  | 'cropped'
+  | 'muttonChops'
+  | 'full'
+  | 'forked'
+  | 'braided'
+  | 'patriarch'
+
+/**
+ * Whether the brow is the face's own decal or a ridge standing off the
+ * forehead.
+ *
+ * Two values and no range, which is the honest count: `face.ts` already derives
+ * a brow per eye style and varies its tilt, its width and its height, so the
+ * intermediate settings of a "brow weight" slider all already ship. What is
+ * missing is the one thing a decal cannot be — *thick* — and thickness on this
+ * figure is a bit, not a dial. See `features.ts`.
+ */
+export type BrowStyle = 'fine' | 'bushy'
+
+/**
+ * The nose, which this face has never had.
+ *
+ * `'none'` is the shipped figure and stays the default: at three heads tall with
+ * a toon ramp, a face made of two dark shapes and a mouth is a legitimate and
+ * deliberate look, and every character authored before this existed is that
+ * face. The four shapes are for the ones that want a profile.
+ */
+export type NoseStyle = 'none' | 'button' | 'round' | 'hooked' | 'broad'
+
 /** Index into the palette's `skinTone0..4` ramp. */
 export type SkinTone = 0 | 1 | 2 | 3 | 4
 
@@ -79,6 +126,19 @@ export interface CharacterAppearance {
   sex: Sex
   head: HeadShape
   hair: HairStyle
+  /**
+   * Facial hair, independent of the haircut above it.
+   *
+   * The three fields below it are the *volume* half of the face — beard, brow
+   * ridge, nose — against `eyes` and `mouth`, which are the decal half. They are
+   * separate axes because they are separately true of a person, and because
+   * every one of them defaults to the value that emits no geometry: an
+   * appearance blob written before they existed deserialises to exactly the
+   * figure it drew.
+   */
+  beard: BeardStyle
+  brows: BrowStyle
+  nose: NoseStyle
   /**
    * Ten eyes and five mouths — 50 faces, all at **identical topology** (38
    * triangles, 50 vertices, every combination). That is structural, not a budget
@@ -124,6 +184,12 @@ export const DEFAULT_APPEARANCE: CharacterAppearance = {
   sex: 'male',
   head: 'round',
   hair: 'bowl',
+  // The three absent values. Any other default would repaint every character
+  // that has ever been saved, and `characterVariants.test.ts` hashes the shipped
+  // figure — so this is enforced rather than intended.
+  beard: 'none',
+  brows: 'fine',
+  nose: 'none',
   eyes: 'bright',
   mouth: 'smile',
   skinTone: 1,
@@ -169,6 +235,13 @@ export type ItemKind =
   | 'jerkin'
   | 'roughTunic'
   | 'mantle'
+  // ── The road kit ──────────────────────────────────────────────────────────
+  //
+  // Two items rather than a family, and they go together: everything above is a
+  // *townsperson's*, because that is what the eighteen professions asked for.
+  // Somebody who arrives from somewhere else needs a coat that is not a
+  // tradesman's and a boot that is not a shoe. See `gear/wanderer.ts`.
+  | 'wanderersCoat'
   | 'coif'
   | 'hood'
   | 'flatCap'
@@ -184,6 +257,7 @@ export type ItemKind =
   | 'looseTrousers'
   | 'plateLegs'
   | 'rolledTrousers'
+  | 'tallBoots'
 
 /**
  * Where an item lives on the character when it is **not** in use.
@@ -226,6 +300,7 @@ export const ITEM_SLOT: Record<ItemKind, EquipSlot> = {
   jerkin: 'torso',
   roughTunic: 'torso',
   mantle: 'torso',
+  wanderersCoat: 'torso',
   coif: 'head',
   hood: 'head',
   flatCap: 'head',
@@ -234,7 +309,8 @@ export const ITEM_SLOT: Record<ItemKind, EquipSlot> = {
   hose: 'legs',
   looseTrousers: 'legs',
   plateLegs: 'legs',
-  rolledTrousers: 'legs'
+  rolledTrousers: 'legs',
+  tallBoots: 'legs'
 }
 
 /**
@@ -412,6 +488,7 @@ export const STOW_SOCKET: Record<ItemKind, SocketName | null> = {
   jerkin: null,
   roughTunic: null,
   mantle: null,
+  wanderersCoat: null,
   coif: 'headTop',
   hood: 'headTop',
   flatCap: 'headTop',
@@ -420,7 +497,8 @@ export const STOW_SOCKET: Record<ItemKind, SocketName | null> = {
   hose: null,
   looseTrousers: null,
   plateLegs: null,
-  rolledTrousers: null
+  rolledTrousers: null,
+  tallBoots: null
 }
 
 /**
@@ -575,6 +653,7 @@ export const DRAWN_SOCKET: Record<ItemKind, SocketName | null> = {
   jerkin: null,
   roughTunic: null,
   mantle: null,
+  wanderersCoat: null,
   coif: null,
   hood: null,
   flatCap: null,
@@ -583,7 +662,8 @@ export const DRAWN_SOCKET: Record<ItemKind, SocketName | null> = {
   hose: null,
   looseTrousers: null,
   plateLegs: null,
-  rolledTrousers: null
+  rolledTrousers: null,
+  tallBoots: null
 }
 
 /**
@@ -647,6 +727,10 @@ export const EQUIPMENT_BUDGET: Record<ItemKind, number> = {
   jerkin: 260,
   roughTunic: 240,
   mantle: 405,
+  // The road coat. `garments.ts`'s dearest silhouette minus its hanging panel:
+  // 16 stations at 10 segments, with the crossed straps costing nothing because
+  // they are paint. See `gear/wanderer.ts::WANDERER_BUDGET`.
+  wanderersCoat: 450,
   coif: 200,
   hood: 250,
   flatCap: 180,
@@ -660,5 +744,9 @@ export const EQUIPMENT_BUDGET: Record<ItemKind, number> = {
   hose: 345,
   looseTrousers: 345,
   plateLegs: 380,
-  rolledTrousers: 380
+  rolledTrousers: 380,
+  // The dearest leg garment in the project, and the fold under the knee is why:
+  // a profile that turns 180° needs a ring on each face of the turn, and rings
+  // on a leg are paid for twice because there are two legs.
+  tallBoots: 445
 }

@@ -19,6 +19,7 @@ import {
   buildTabard
 } from './garments'
 import { buildCoif, buildFlatCap, buildHelmet, buildHood, buildOfficialCap } from './headwear'
+import { buildTallBoots, buildWanderersCoat } from './wanderer'
 import { buildHose, buildLooseTrousers, buildPlateLegs, buildRolledTrousers } from './legGarments'
 
 /**
@@ -111,6 +112,7 @@ export {
   buildTabard
 } from './garments'
 export { buildCoif, buildFlatCap, buildHelmet, buildHood, buildOfficialCap } from './headwear'
+export { buildTallBoots, buildWanderersCoat, WANDERER_BUDGET, WANDERER_WAYS } from './wanderer'
 /**
  * ── The leg garments, which are not in `GEAR_BUILDERS` yet ──────────────────
  *
@@ -174,6 +176,7 @@ export const GEAR_BUILDERS: Record<ItemKind, GearBuilder> = {
   jerkin: buildJerkin,
   roughTunic: buildRoughTunic,
   mantle: buildMantle,
+  wanderersCoat: buildWanderersCoat,
   coif: buildCoif,
   hood: buildHood,
   flatCap: buildFlatCap,
@@ -182,7 +185,8 @@ export const GEAR_BUILDERS: Record<ItemKind, GearBuilder> = {
   hose: buildHose,
   looseTrousers: buildLooseTrousers,
   plateLegs: buildPlateLegs,
-  rolledTrousers: buildRolledTrousers
+  rolledTrousers: buildRolledTrousers,
+  tallBoots: buildTallBoots
 }
 
 /**

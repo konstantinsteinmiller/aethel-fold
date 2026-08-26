@@ -351,6 +351,31 @@ export default {
       'grin': '활짝 웃음',
       'open': '벌린 입'
     },
+    'beard': '수염',
+    'beardStyles': {
+      'none': '없음',
+      'moustache': '콧수염',
+      'goatee': '염소수염',
+      'cropped': '짧은 수염',
+      'muttonChops': '구레나룻',
+      'full': '덥수룩한 수염',
+      'forked': '갈래 수염',
+      'braided': '땋은 수염',
+      'patriarch': '장로 수염'
+    },
+    'nose': '코',
+    'noseStyles': {
+      'none': '없음',
+      'button': '들창코',
+      'round': '둥근 코',
+      'hooked': '매부리코',
+      'broad': '넓은 코'
+    },
+    'brows': '눈썹',
+    'browStyles': {
+      'fine': '가는 눈썹',
+      'bushy': '짙은 눈썹'
+    },
     'skinTone': '피부색',
     'skinToneOption': '피부색 {n}',
     'hairColour': '머리 색',

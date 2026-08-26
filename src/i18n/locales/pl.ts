@@ -351,6 +351,31 @@ export default {
       'grin': 'Szeroki uśmiech',
       'open': 'Otwarte'
     },
+    'beard': 'Broda',
+    'beardStyles': {
+      'none': 'Gładko ogolony',
+      'moustache': 'Wąsy',
+      'goatee': 'Bródka',
+      'cropped': 'Przycięta',
+      'muttonChops': 'Bokobrody',
+      'full': 'Pełna',
+      'forked': 'Rozdwojona',
+      'braided': 'Zapleciona',
+      'patriarch': 'Patriarcha'
+    },
+    'nose': 'Nos',
+    'noseStyles': {
+      'none': 'Brak',
+      'button': 'Zadarty',
+      'round': 'Okrągły',
+      'hooked': 'Orli',
+      'broad': 'Szeroki'
+    },
+    'brows': 'Brwi',
+    'browStyles': {
+      'fine': 'Cienkie',
+      'bushy': 'Krzaczaste'
+    },
     'skinTone': 'Odcień skóry',
     'skinToneOption': 'Odcień skóry {n}',
     'hairColour': 'Kolor włosów',

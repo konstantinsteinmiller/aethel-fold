@@ -351,6 +351,31 @@ export default {
       'grin': 'चौड़ी मुस्कान',
       'open': 'खुला'
     },
+    'beard': 'दाढ़ी',
+    'beardStyles': {
+      'none': 'साफ़ मुँडा',
+      'moustache': 'मूँछ',
+      'goatee': 'बकरा दाढ़ी',
+      'cropped': 'छोटी',
+      'muttonChops': 'गलमुच्छे',
+      'full': 'घनी',
+      'forked': 'दोफाड़',
+      'braided': 'गुँथी हुई',
+      'patriarch': 'ऋषि दाढ़ी'
+    },
+    'nose': 'नाक',
+    'noseStyles': {
+      'none': 'कोई नहीं',
+      'button': 'छोटी',
+      'round': 'गोल',
+      'hooked': 'तोतानुमा',
+      'broad': 'चौड़ी'
+    },
+    'brows': 'भौंहें',
+    'browStyles': {
+      'fine': 'पतली',
+      'bushy': 'घनी'
+    },
     'skinTone': 'त्वचा का रंग',
     'skinToneOption': 'त्वचा का रंग {n}',
     'hairColour': 'बालों का रंग',

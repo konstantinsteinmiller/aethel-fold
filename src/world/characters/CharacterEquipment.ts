@@ -1219,6 +1219,13 @@ const BILLETS: Record<ItemKind, Billet> = {
     top: C.leatherLit,
     bottom: C.leatherShadow
   },
+  wanderersCoat: {
+    size: [0.408, 0.42, 0.306],
+    offset: [0, 0.165, 0],
+    chamfer: 0.03,
+    top: C.leatherLit,
+    bottom: C.leatherShadow
+  },
   coif: { size: [0.4, 0.16, 0.4], offset: [0, 0.14, 0], chamfer: 0.026, top: C.leatherLit, bottom: C.leatherShadow },
   hood: { size: [0.4, 0.16, 0.4], offset: [0, 0.14, 0], chamfer: 0.026, top: C.leatherLit, bottom: C.leatherShadow },
   flatCap: { size: [0.4, 0.16, 0.4], offset: [0, 0.14, 0], chamfer: 0.026, top: C.leatherLit, bottom: C.leatherShadow },
@@ -1229,7 +1236,8 @@ const BILLETS: Record<ItemKind, Billet> = {
   hose: { size: [0.26, 0.6, 0.2], offset: [0, -0.32, 0], chamfer: 0.024, top: C.clothBase, bottom: C.clothShadow },
   looseTrousers: { size: [0.26, 0.6, 0.2], offset: [0, -0.32, 0], chamfer: 0.024, top: C.clothBase, bottom: C.clothShadow },
   plateLegs: { size: [0.26, 0.6, 0.2], offset: [0, -0.32, 0], chamfer: 0.024, top: C.clothBase, bottom: C.clothShadow },
-  rolledTrousers: { size: [0.26, 0.6, 0.2], offset: [0, -0.32, 0], chamfer: 0.024, top: C.clothBase, bottom: C.clothShadow }
+  rolledTrousers: { size: [0.26, 0.6, 0.2], offset: [0, -0.32, 0], chamfer: 0.024, top: C.clothBase, bottom: C.clothShadow },
+  tallBoots: { size: [0.26, 0.6, 0.2], offset: [0, -0.32, 0], chamfer: 0.024, top: C.clothBase, bottom: C.clothShadow }
 }
 
 const _normal = new Vector3()

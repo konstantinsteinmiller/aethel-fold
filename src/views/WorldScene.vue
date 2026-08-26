@@ -105,8 +105,33 @@ onMounted(() => {
   // shipping density the frame is vsync-bound, so culling work is unmeasurable
   // without a way to load the scene up.
   const params = new URLSearchParams(location.search)
-  const devNumber = (name: string): number =>
-    import.meta.env.DEV ? Number(params.get(name)) : Number.NaN
+  /**
+   * A dev-only numeric override, or `NaN` when it was not given.
+   *
+   * ── `Number(null)` is 0, and that switched the crowd off in dev ────────────
+   *
+   * This read `Number(params.get(name))`, and `URLSearchParams.get` returns
+   * `null` for a missing key, so **an absent override arrived as `0`** rather
+   * than as `NaN`. Four of the five callers below guard with `> 0` and were
+   * accidentally safe. `crowd` guards with `>= 0` — deliberately, because
+   * `?crowd=0` is the A/B arm that turns the crowd off — so every dev session
+   * without `?crowd=N` in the URL got `crowdBudget: 0`, `Crowd.budget` of zero,
+   * and `search()` picking `Math.min(0, count)` spawns. No error, no warning:
+   * the level's NPCs simply never stood up, and the perf panel's NPC row read a
+   * perfectly plausible 0.
+   *
+   * Production was never affected — the `DEV` gate already returned `NaN` there,
+   * which is why the shipped world has always had its crowd. Returning `NaN` for
+   * "absent" in *both* branches is what every caller already assumes, and it
+   * keeps `?crowd=0` meaning what it is for.
+   */
+  const devNumber = (name: string): number => {
+    if (!import.meta.env.DEV) {
+      return Number.NaN
+    }
+    const raw = params.get(name)
+    return raw === null || raw.trim() === '' ? Number.NaN : Number(raw)
+  }
   const density = devNumber('density')
   // `?cascades=2&shadowfar=180` — the shadow pass is the single most expensive
   // thing in a constrained frame, and its cascade count is a shader define, so

@@ -374,7 +374,11 @@ describe('every sex × head × hair builds', () => {
     // (`ponytail`, `topknot`).
     expect(worst, 'worst-case figure').toBe(1016)
     expect(['wild', 'ponytail', 'topknot'], `worst style is ${worstAt}`).toContain(worstAt)
-    expect(CHIBI_BUDGET - worst, 'headroom left above the worst case').toBe(44)
+    // The hair-only worst is unchanged and must stay so: `features.ts` added
+    // three axes and none of them touched a hairstyle. What the ceiling covers
+    // now is the *product* — see the beard row in `characterFeatures.test.ts`,
+    // which is where the 1356 worst case is asserted.
+    expect(CHIBI_BUDGET - worst, 'headroom above the worst hair-only figure').toBe(364)
   })
 
   it('emits only finite floats', () => {

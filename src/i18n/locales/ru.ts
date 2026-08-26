@@ -351,6 +351,31 @@ export default {
       'grin': 'Широкая улыбка',
       'open': 'Открытый'
     },
+    'beard': 'Борода',
+    'beardStyles': {
+      'none': 'Гладко выбрит',
+      'moustache': 'Усы',
+      'goatee': 'Эспаньолка',
+      'cropped': 'Короткая',
+      'muttonChops': 'Бакенбарды',
+      'full': 'Окладистая',
+      'forked': 'Раздвоенная',
+      'braided': 'Заплетённая',
+      'patriarch': 'Патриаршая'
+    },
+    'nose': 'Нос',
+    'noseStyles': {
+      'none': 'Нет',
+      'button': 'Курносый',
+      'round': 'Круглый',
+      'hooked': 'Крючковатый',
+      'broad': 'Широкий'
+    },
+    'brows': 'Брови',
+    'browStyles': {
+      'fine': 'Тонкие',
+      'bushy': 'Густые'
+    },
     'skinTone': 'Тон кожи',
     'skinToneOption': 'Тон кожи {n}',
     'hairColour': 'Цвет волос',
