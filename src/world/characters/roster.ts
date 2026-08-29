@@ -1,4 +1,4 @@
-import { copyAppearance, sanitiseAppearance } from './CreatorScene'
+import { copyAppearance, loadAppearance, sanitiseAppearance } from './appearance'
 import { DEFAULT_APPEARANCE, EQUIP_SLOTS, type CharacterAppearance, type EquipmentLoadout } from './equipment'
 import { ITEM_KINDS, copyLoadout, emptyLoadout, sanitiseInventory } from './inventory'
 import {
@@ -592,3 +592,82 @@ export const emptyDraft = (): ProfileDraft => ({
   appearance: copyAppearance(DEFAULT_APPEARANCE),
   loadout: emptyLoadout()
 })
+
+
+// ─── What the player walks around as ────────────────────────────────────────
+
+/**
+ * The appearance and loadout the world should dress the player in.
+ *
+ * ── The screen existed and had nowhere to send its work ────────────────────
+ *
+ * `/characters` could build a character, name it, mint it a stable id and store
+ * it — and nothing outside that route ever read any of it. `player/chibiBody.ts`
+ * built its figure with `new Character({ perfTag })`, i.e. `DEFAULT_APPEARANCE`,
+ * so the person you walked around as was the shipped bowl-cut regardless. This
+ * is the missing half.
+ *
+ * ── Three sources, in this order, and each one is a different promise ───────
+ *
+ *   1. **The roster's active profile.** What is open in the creation screen and
+ *      what `Save` last wrote. This is the answer whenever the player has ever
+ *      saved anybody, and it is the only source that carries a **loadout** —
+ *      a profile stores all six slots, so a sword saved on the wardrobe screen
+ *      is a sword worn in the world.
+ *   2. **The standalone appearance key.** Written by `Save` as well, and by
+ *      builds that predate the roster. Appearance only: there is no loadout in
+ *      it to find, so the player is dressed and unarmed rather than dressed in
+ *      a guess.
+ *   3. **The default.** A first visit, or storage that is blocked or corrupt.
+ *
+ * Falling *forward* through the three rather than trusting any one of them is
+ * what makes the failure mode "the shipped character" instead of "no character":
+ * every branch returns something a `Character` can be built from, which is the
+ * same total-repair rule `sanitiseAppearance` and `sanitiseInventory` are
+ * written to.
+ *
+ * ── Read once, at spawn, on purpose ────────────────────────────────────────
+ *
+ * There is no live sync back into a running world, and none is needed:
+ * `/characters` is its own route, so opening it unmounts `WorldScene` and
+ * returning mounts a fresh `World` that calls this again. A watcher would be a
+ * second path to the same result, and a rebuild is ~1.4 ms of merging the whole
+ * figure — not something to run on every pill click in a screen the world is not
+ * even visible behind.
+ */
+export interface PlayerLook {
+  appearance: CharacterAppearance
+  loadout: EquipmentLoadout
+  /** Which of the three branches answered. Dev logging and the tests read it. */
+  source: 'profile' | 'appearance' | 'default'
+}
+
+export const playerLook = (roster: CharacterRoster = loadRoster()): PlayerLook => {
+  const active = roster.activeId === null ? null : roster.profiles.find(profile => profile.id === roster.activeId)
+  if (active) {
+    return {
+      appearance: copyAppearance(active.appearance),
+      loadout: { ...active.loadout },
+      source: 'profile'
+    }
+  }
+  const saved = loadAppearance()
+  if (!appearanceIsDefault(saved)) {
+    return { appearance: saved, loadout: emptyLoadout(), source: 'appearance' }
+  }
+  return { appearance: copyAppearance(DEFAULT_APPEARANCE), loadout: emptyLoadout(), source: 'default' }
+}
+
+/**
+ * Whether a stored appearance is indistinguishable from the shipped one.
+ *
+ * Used to tell "nobody has ever opened the creation screen" from "somebody
+ * opened it and chose the default on purpose". The two are genuinely the same
+ * figure, so this only decides which `source` label comes back — nothing about
+ * what is drawn — which is why an exact field-by-field compare is honest here
+ * rather than a heuristic.
+ */
+const appearanceIsDefault = (appearance: CharacterAppearance): boolean =>
+  (Object.keys(DEFAULT_APPEARANCE) as (keyof CharacterAppearance)[]).every(
+    field => appearance[field] === DEFAULT_APPEARANCE[field]
+  )

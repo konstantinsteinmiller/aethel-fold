@@ -1,6 +1,14 @@
 import type { Color } from 'three'
 import type { BeardStyle, BrowStyle, CharacterAppearance, NoseStyle } from './equipment'
-import { beardStops, buildStrands, type HairMesh, skinColour, type StrandSpec } from './variants'
+import {
+  beardStops,
+  buildStrands,
+  FULL_STRAND_DETAIL,
+  type HairMesh,
+  skinColour,
+  type StrandDetail,
+  type StrandSpec
+} from './variants'
 
 /**
  * ─── The features that are volumes, not decals ──────────────────────────────
@@ -174,7 +182,18 @@ const MOUSTACHE_END_MIX = 0.45
  * root sitting on the surface opens a seam on exactly the head shapes that need
  * it least to.
  */
-const beardSpecs = (style: BeardStyle, hair: Color, hairDark: Color, moustache: Color): StrandSpec[] => {
+const beardSpecs = (
+  style: BeardStyle,
+  hair: Color,
+  hairDark: Color,
+  moustache: Color,
+  /**
+   * Whether to emit the parts of a beard that are *shape within the mass*
+   * rather than the mass itself: the moustache, the sideburns, and `forked`'s
+   * two tines. False past LOD1 — see `FeatureScope`.
+   */
+  detail = true
+): StrandSpec[] => {
   const specs: StrandSpec[] = []
 
   const strand = (
@@ -231,6 +250,9 @@ const beardSpecs = (style: BeardStyle, hair: Color, hairDark: Color, moustache: 
    * draws for free.
    */
   const moustachePair = (droop: number, spread: number, thickness: number, height = 1.3): void => {
+    if (!detail) {
+      return
+    }
     for (const side of [1, -1] as const) {
       specs.push(
         strand(
@@ -271,6 +293,9 @@ const beardSpecs = (style: BeardStyle, hair: Color, hairDark: Color, moustache: 
    * beard and disappears into the hair at the temple.
    */
   const cheekPair = (thickness = 0.04): void => {
+    if (!detail) {
+      return
+    }
     for (const side of [1, -1] as const) {
       specs.push(strand([side * 0.138, 1.183, 0.1], [side * 0.104, 1.095, 0.172], thickness, thickness * 1.45, 5, 1, 1, [1, 0.95]))
     }
@@ -418,10 +443,14 @@ const beardSpecs = (style: BeardStyle, hair: Color, hairDark: Color, moustache: 
         // x = ±0.095 — a notch 190 mm wide at the bottom of a 1.56 m figure,
         // which is 10 px at 20 m and the only symmetric silhouette break below
         // the chin anything here makes.
-        strand([0, 1.205, 0.03], [0, 1.06, 0.16], 0.115, 0.08, 7, 1, 2, [0.8, 1.28]),
-        strand([0.035, 1.09, 0.16], [0.095, 0.955, 0.245], 0.05, 0.04, 5, 1, 1, [0.85, 1]),
-        strand([-0.035, 1.09, 0.16], [-0.095, 0.955, 0.245], 0.05, 0.04, 5, 1, 1, [0.85, 1])
+        strand([0, 1.205, 0.03], [0, 1.06, 0.16], 0.115, 0.08, 7, 1, 2, [0.8, 1.28])
       )
+      if (detail) {
+        specs.push(
+          strand([0.035, 1.09, 0.16], [0.095, 0.955, 0.245], 0.05, 0.04, 5, 1, 1, [0.85, 1]),
+          strand([-0.035, 1.09, 0.16], [-0.095, 0.955, 0.245], 0.05, 0.04, 5, 1, 1, [0.85, 1])
+        )
+      }
       break
     case 'braided':
       moustachePair(0.026, 0.078, 0.02, 1.4)
@@ -433,14 +462,18 @@ const beardSpecs = (style: BeardStyle, hair: Color, hairDark: Color, moustache: 
         // steps out. That is the cue; the two bindings are what makes it a plait
         // rather than a spike.
         strand([0, 1.19, 0.055], [0, 1.06, 0.175], 0.078, 0.05, 6, 1, 1, [0.9, 1.05]),
-        strand([0, 1.06, 0.178], [0, 0.95, 0.235], 0.042, 0.046, 6, 2, 1, [0.9, 1.05]),
-        // The bindings: two flattened collars, `hairDark` at both ends because a
-        // binding is a cord and not the hair it holds. `capRings: 0` leaves them
-        // open — they are rings threaded onto a rope that is already there, so a
-        // cap would be a disc inside the braid.
-        strand([0, 1.075, 0.177], [0, 1.058, 0.186], 0.046, 0.046, 6, 1, 0, [0.75, 1], 1, hairDark),
-        strand([0, 0.982, 0.226], [0, 0.965, 0.235], 0.043, 0.043, 6, 1, 0, [0.75, 1], 1, hairDark)
+        strand([0, 1.06, 0.178], [0, 0.95, 0.235], 0.042, 0.046, 6, 2, 1, [0.9, 1.05])
       )
+      // The bindings: two flattened collars, `hairDark` at both ends because a
+      // binding is a cord and not the hair it holds. `capRings: 0` leaves them
+      // open — they are rings threaded onto a rope that is already there, so a
+      // cap would be a disc inside the braid.
+      if (detail) {
+        specs.push(
+          strand([0, 1.075, 0.177], [0, 1.058, 0.186], 0.046, 0.046, 6, 1, 0, [0.75, 1], 1, hairDark),
+          strand([0, 0.982, 0.226], [0, 0.965, 0.235], 0.043, 0.043, 6, 1, 0, [0.75, 1], 1, hairDark)
+        )
+      }
       break
   }
 
@@ -660,20 +693,51 @@ const noseSpec = (style: Exclude<NoseStyle, 'none'>, skin: Color): StrandSpec =>
  * figure byte-identical — `appendHeadStrands` takes an early return on it and
  * not one vertex moves.
  */
-export const featureMesh = (appearance: CharacterAppearance): HairMesh | null => {
+/**
+ * How much of the block a coarse LOD tier still wants.
+ *
+ * The two middle values exist because the three axes here do **not** fall off at
+ * the same range, and neither does a beard's own anatomy:
+ *
+ *   * `'beard'` — a brow ridge and a nose are 20–40 mm of relief and resolve to
+ *     nothing past about 8 m, while a beard is *silhouette*: `patriarch` is
+ *     294 mm across on a 470 mm head, still 6 px wide at 45 m. LOD1 keeps the
+ *     beard and drops the other two.
+ *   * `'beardMass'` — inside a beard the same split happens again. The **main
+ *     mass** is the silhouette; the moustache (30 mm), the sideburns (a strip
+ *     down the cheek) and `forked`'s two tines are *shape within* it, and at
+ *     LOD2's 45 m the whole head is 13 px, so a 30 mm moustache is 1.5 px and
+ *     the notch between two tines is 4. LOD2 keeps the mass alone, which takes
+ *     `forked` from 250 triangles to about 90 without changing the outline a
+ *     crowd is read by.
+ *
+ * See `CHIBI_TIERS` for which tier asks for which.
+ */
+export type FeatureScope = 'all' | 'beard' | 'beardMass' | 'none'
+
+export const featureMesh = (
+  appearance: CharacterAppearance,
+  scope: FeatureScope = 'all',
+  detail: StrandDetail = FULL_STRAND_DETAIL
+): HairMesh | null => {
+  if (scope === 'none') {
+    return null
+  }
   const specs: StrandSpec[] = []
 
   if (appearance.beard !== 'none') {
     const beard = beardStops(appearance)
-    specs.push(...beardSpecs(appearance.beard, beard.base, beard.dark, beard.base))
+    specs.push(...beardSpecs(appearance.beard, beard.base, beard.dark, beard.base, scope !== 'beardMass'))
   }
-  if (appearance.brows === 'bushy') {
-    const colour = beardStops(appearance).base
-    specs.push(browSpec(1, colour), browSpec(-1, colour))
-  }
-  if (appearance.nose !== 'none') {
-    specs.push(noseSpec(appearance.nose, skinColour(appearance)))
+  if (scope === 'all') {
+    if (appearance.brows === 'bushy') {
+      const colour = beardStops(appearance).base
+      specs.push(browSpec(1, colour), browSpec(-1, colour))
+    }
+    if (appearance.nose !== 'none') {
+      specs.push(noseSpec(appearance.nose, skinColour(appearance)))
+    }
   }
 
-  return buildStrands(specs)
+  return buildStrands(specs, detail)
 }

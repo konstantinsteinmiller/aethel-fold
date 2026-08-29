@@ -38,6 +38,7 @@ import { Profiler } from '../perf/Profiler'
 import { AdaptiveQuality } from '../perf/AdaptiveQuality'
 import { TerrainOcclusion } from '../perf/TerrainOcclusion'
 import { Character, type CharacterState } from '../characters/Character'
+import { playerLook } from '../characters/roster'
 import { createPlayer, type Player } from '../player'
 import { addChunkScatter, maxInstancesPerChunk, type ScatterOptions } from '../scatter'
 import { ScatterColliderIndex, type ScatterColliderSpec } from '../scatterColliders'
@@ -718,10 +719,22 @@ export class World {
     this.controller.setFocus(-38, field.heightAt(-38, 26) + 2.2, 26)
 
     // ── Player ─────────────────────────────────────────────────────────────
+    //
+    // The figure is whoever `/characters` last saved — see `roster.ts::playerLook`
+    // for the three sources it falls through and why it is read once here rather
+    // than watched. Read at construction, so returning from the creation screen
+    // (which unmounts `WorldScene` and mounts a fresh `World`) picks the new
+    // character up with no plumbing at all.
+    const look = playerLook()
+    if (import.meta.env.DEV) {
+      console.debug(`[world] player is the ${look.source} character`)
+    }
     this.player = createPlayer({
       camera: this.camera,
       heightAt: (x, z) => field.heightAt(x, z),
       spawn: { x: -38, z: 26 },
+      appearance: look.appearance,
+      loadout: look.loadout,
       // Orbit owns the frame on boot; first-person is opt-in.
       enabled: false
     })

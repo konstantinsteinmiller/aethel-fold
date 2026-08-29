@@ -797,13 +797,13 @@ const earSpec = (side: 1 | -1, skin: Color): StrandSpec => ({
  * which applies to anything glued to the head and which a separate append path
  * would be free to get wrong.
  */
-export const earMesh = (appearance: CharacterAppearance): HairMesh | null => {
+export const earMesh = (appearance: CharacterAppearance, detail: StrandDetail = FULL_STRAND_DETAIL): HairMesh | null => {
   const ears = visibleEars(appearance.hair)
   if (ears === 'none') {
     return null
   }
   const skin = pick(SKIN_TONES, appearance.skinTone)
-  return buildStrands(ears === 'both' ? [earSpec(1, skin), earSpec(-1, skin)] : [earSpec(-1, skin)])
+  return buildStrands(ears === 'both' ? [earSpec(1, skin), earSpec(-1, skin)] : [earSpec(-1, skin)], detail)
 }
 
 /**
@@ -1249,10 +1249,54 @@ const _colour = new Color()
  * `FrontSide` and the outline is `BackSide`, so an inward-wound strand renders
  * its own far surface and its inverted hull draws *in front of* the character.
  */
-export const buildStrands = (specs: readonly StrandSpec[]): HairMesh | null => {
+/**
+ * How much of a strand's tessellation a LOD tier wants.
+ *
+ * ── The strands were the whole overage ─────────────────────────────────────
+ *
+ * `chibiGeometry`'s tier table coarsens the twelve `PartSpec`s the *body* is
+ * made of, and the first pass stopped there — which left the hair, the ears and
+ * the whole `features.ts` block being built at LOD0 tessellation on every tier.
+ * Measured, that was **310 of the 782 triangles** the worst LOD1 figure came out
+ * at against a 640 budget: a ponytail is 60 triangles and a `forked` beard 250,
+ * and neither of them knew what tier it was in.
+ *
+ * The rule is `chibiGeometry`'s own, restated here because these specs never
+ * pass through `parts()`: scale `radial`, `rings` and `capRings`, floor `radial`
+ * at 4 and the other two at 1. A cap of 0 is a flat disc, and on a strand that
+ * is worse than on a limb — a beard that ends in a disc reads as a plank.
+ */
+export interface StrandDetail {
+  radial: number
+  rings: number
+  capRings: number
+}
+
+/** LOD0. Identity, and the default, so every existing caller is unchanged. */
+export const FULL_STRAND_DETAIL: StrandDetail = { radial: 1, rings: 1, capRings: 1 }
+
+const coarsenStrand = (spec: StrandSpec, detail: StrandDetail): StrandSpec => ({
+  ...spec,
+  radial: Math.max(4, Math.round(spec.radial * detail.radial)),
+  rings: Math.max(1, Math.round(spec.rings * detail.rings)),
+  // `capRings: 0` is authored on purpose by the braid's two bindings — they are
+  // rings threaded onto a rope that is already closed, so a cap there would be a
+  // disc *inside* the braid. Scaling it would turn 0 into 1 and put that disc
+  // back, so an authored zero is passed through untouched.
+  capRings: spec.capRings === 0 ? 0 : Math.max(1, Math.round(spec.capRings * detail.capRings))
+})
+
+export const buildStrands = (
+  specs: readonly StrandSpec[],
+  detail: StrandDetail = FULL_STRAND_DETAIL
+): HairMesh | null => {
   if (specs.length === 0) {
     return null
   }
+  const tessellated =
+    detail.radial === 1 && detail.rings === 1 && detail.capRings === 1
+      ? specs
+      : specs.map(spec => coarsenStrand(spec, detail))
 
   const position: number[] = []
   const normal: number[] = []
@@ -1260,7 +1304,7 @@ export const buildStrands = (specs: readonly StrandSpec[]): HairMesh | null => {
   const along: number[] = []
   const index: number[] = []
 
-  for (const spec of specs) {
+  for (const spec of tessellated) {
     const part = limbMesh({
       from: _from.set(spec.from[0], spec.from[1], spec.from[2]),
       to: _to.set(spec.to[0], spec.to[1], spec.to[2]),
@@ -1301,7 +1345,7 @@ export const buildStrands = (specs: readonly StrandSpec[]): HairMesh | null => {
 }
 
 /** Builds a style's geometry, or `null` for the painted styles. */
-export const hairMesh = (appearance: CharacterAppearance): HairMesh | null => {
+export const hairMesh = (appearance: CharacterAppearance, detail: StrandDetail = FULL_STRAND_DETAIL): HairMesh | null => {
   const palette = bodyPalette(appearance)
-  return buildStrands(hairSpecs(appearance, palette.hair, palette.hairDark))
+  return buildStrands(hairSpecs(appearance, palette.hair, palette.hairDark), detail)
 }

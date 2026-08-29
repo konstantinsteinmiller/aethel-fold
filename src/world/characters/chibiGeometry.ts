@@ -13,7 +13,7 @@ import {
 import { appendFace } from './face'
 import { limbMesh } from './limb'
 import { BONE_NAMES, type BoneName, boneDefinition } from './rig'
-import { featureMesh } from './features'
+import { featureMesh, type FeatureScope } from './features'
 import {
   BUILDS,
   HAIRLINE,
@@ -24,6 +24,7 @@ import {
   earMesh,
   hairMesh,
   headWarp,
+  type StrandDetail,
   warpVertex
 } from './variants'
 
@@ -469,17 +470,202 @@ const fistPoint = (side: 'L' | 'R', scale: number, along: number, outward: numbe
  * slightly fattened end cap on the shin reads as a boot, and a boot is a shape
  * the style wants anyway. See `HAND_PARTS` for the other half of that argument.
  */
+/**
+ * ─── The LOD ladder, and the one rule that shapes all of it ─────────────────
+ *
+ * Every object in this world ships four tiers (GDD R7) and the chibi shipped
+ * **one**, which the GDD has recorded as owed since Phase C started. This is
+ * that debt.
+ *
+ * ── Tiers share a skeleton, so a tier may not change the rig ───────────────
+ *
+ * GDD §6 Phase C: *"LOD tiers share one skeleton, so LOD switching never
+ * re-binds a skin."* That is the hard constraint and it decides the whole shape
+ * of this table. A coarse tier may drop geometry, coarsen a sweep and skip a
+ * block — it may **not** move a joint, rename a bone or reorder `BONE_NAMES`,
+ * because every tier is bound to the same `Skeleton` with the same
+ * `bindMatrix` and reads the same bone texture. So there is no "simplified rig"
+ * row here, and there never can be one.
+ *
+ * ── What each tier drops, and the range that justifies it ──────────────────
+ *
+ * At the world's 55° camera a 1080-line frame resolves **51.9 px per metre at
+ * 20 m**, so the numbers below are pixels, not taste:
+ *
+ * | tier | switch | figure is | budget | worst | drops |
+ * |------|-------:|----------:|-------:|------:|-------|
+ * | 0 | 0–18 m | 81 px tall | 1380 | 1356 | nothing |
+ * | 1 | 18–45 m | 32 px | 700 | 676 | the face, the brow ridge, the nose, four fingers |
+ * | 2 | 45–110 m | 13 px | 430 | 414 | hair mesh, ears, the beard's own detail |
+ * | 3 | 110 m+ | 5 px | 320 | 312 | the beard, both hands, half the sweep again |
+ *
+ * ── The ladder does not fall off like a prop's, and cannot ─────────────────
+ *
+ * GDD §4.1 scaled this row's coarse tiers by the factors every *prop* uses —
+ * 0.48 / 0.21 / 0.05 of LOD0, i.e. 662 / 290 / **69** — and two of those three
+ * are unreachable by construction, which is worth stating once rather than
+ * quietly missing:
+ *
+ * A prop is one blob and its tessellation goes all the way down. **A chibi is
+ * twelve separate capsules**, and a capsule has a floor: `MIN_RADIAL` segments
+ * around, one ring along, one cap ring at each end is `3 × 4 × 2 = 24`
+ * triangles, and twelve of those is **288**. Add the head's extra cap rings and
+ * the floor of this construction is **312** — four and a half times the 69 the
+ * scaling asked for. No amount of coarsening reaches it, because the number is
+ * not about detail, it is about how many *parts* a body is made of.
+ *
+ * Two ways out were considered and both rejected:
+ *
+ *   * **Drop parts at LOD3** — the neck (it is entirely inside the head/torso
+ *     overlap already) and the two feet. That is 240 rather than 312, still 3.5×
+ *     over, and it buys `8 × 72 = 576` triangles across a whole crowd. Not worth
+ *     a second body topology to maintain.
+ *   * **An impostor** — a billboard from a rendered atlas, which is what a
+ *     69-triangle tier actually implies. That is a real answer and a real
+ *     feature; this project has no impostor system, and building one to save
+ *     vertex work the frame is not short of would be the wrong order.
+ *
+ * So the coarse budgets below are **measured and then given the ~2 % headroom
+ * LOD0 has**, rather than scaled. GDD §4.1's row is updated to match.
+ *
+ * ── What a character's LOD ladder actually buys ────────────────────────────
+ *
+ * Worth being honest about, because it is not what a prop's buys. Measured in
+ * the world, eight NPCs against an empty crowd, the cost is **draw calls**
+ * (161 → 181), and a tier does not change how many draws a figure is: it is
+ * still one body plus one outline either way. What the ladder buys is:
+ *
+ *   1. **Vertex work**, 1356 → 312 at range. Real, and the smaller half.
+ *   2. **The outline, dropped past LOD1** — that *is* a draw call per figure,
+ *      and its shadow another.
+ *   3. **Shadow casting, dropped past LOD1**, which the crossfade already
+ *      handles for props.
+ *
+ * (2) and (3) are the reason this is worth building, and they live in the
+ * runtime rather than here.
+ *
+ * The order things are dropped in is **cost ÷ pixels**, and it puts the two
+ * newest systems in this file at opposite ends:
+ *
+ *   * **The face and the feature block go first, together, at LOD1.** A nose is
+ *     3 px at 8 m and gone by 20; `features.ts` says so in its own header, and
+ *     `face.ts` measures its five mouths as indistinguishable past ~3 m. They
+ *     are 30–340 and 50 triangles of pure conversation-range detail.
+ *   * **Hands go at LOD1 too, to a mitten.** 192 triangles — 14 % of the worst
+ *     figure — for two objects `chibiGeometry` already measured at "30 px at
+ *     3 m and 3 px at 20 m". The file's own comment asked for this: *"LOD1
+ *     wants the mitten back."*
+ *   * **The beard is not in either list.** It survives to LOD2 and is the only
+ *     part of `features.ts` that does, because it is the one that is
+ *     *silhouette* rather than detail: `patriarch` is 294 mm across on a 470 mm
+ *     head, which is still 6 px wide at 45 m. Dropping it at LOD1 with the rest
+ *     of the face would visibly change the outline of every dwarf in a crowd at
+ *     the exact distance a crowd is read at.
+ *
+ * ── `radial` is scaled, `rings` and `capRings` are floored ─────────────────
+ *
+ * Coarsening a sweep is not uniform. `radial` is the samples *around* an axis
+ * and halving it halves a limb's triangles for a silhouette error that goes as
+ * `1 − cos(π/n)` — 3 % of a radius at 8 segments, 12 % at 4. `capRings` is the
+ * rounding of an end, and taking it below 1 leaves a **flat disc**, which reads
+ * as a cut limb at any distance because the toon ramp puts a hard band edge on
+ * it. So caps floor at 1 and never at 0.
+ */
+export interface ChibiTierProfile {
+  /** Scales every part's `radial`. Floored at `MIN_RADIAL` — see below. */
+  radial: number
+  /** Scales `rings`, the samples *along* an axis. Floored at 1. */
+  rings: number
+  /** Scales `capRings`. Floored at 1: a cap of 0 is a flat disc. */
+  capRings: number
+  /** `full` is three parts a hand; `mitten` is one; `none` ends the arm at the wrist. */
+  hands: 'full' | 'mitten' | 'none'
+  ears: boolean
+  /** The hair *mesh*. The painted hairline is the head's own colour ramp and always survives. */
+  hair: boolean
+  /**
+   * How much of `features.ts` this tier wants: everything, the beard, the
+   * beard's main mass alone, or nothing. See `FeatureScope`.
+   */
+  features: FeatureScope
+  /** The `face.ts` decals: eyes, mouth and the brow line. */
+  face: boolean
+  /** GDD §4.1's `Chibi human` row. */
+  budget: number
+}
+
+/**
+ * A sweep may not go below this many segments around its axis.
+ *
+ * Four is a square in cross-section and it is the floor rather than three
+ * because of what the *outline* does with it: the inverted hull extrudes along
+ * the vertex normal, and on a triangular cross-section the three normals are
+ * 120° apart, so the hull's corners shoot out to 2× the radius and a distant
+ * limb grows spikes. At four they are 90° apart and the hull stays a box.
+ */
+const MIN_RADIAL = 4
+
+export const CHIBI_TIERS: readonly ChibiTierProfile[] = [
+  { radial: 1, rings: 1, capRings: 1, hands: 'full', ears: true, hair: true, features: 'all', face: true, budget: 1380 },
+  { radial: 0.62, rings: 1, capRings: 0.5, hands: 'mitten', ears: true, hair: true, features: 'beard', face: false, budget: 700 },
+  { radial: 0.5, rings: 0.5, capRings: 0.3, hands: 'mitten', ears: false, hair: false, features: 'beardMass', face: false, budget: 430 },
+  { radial: 0.34, rings: 0.5, capRings: 0.25, hands: 'none', ears: false, hair: false, features: 'none', face: false, budget: 320 }
+]
+
+export const CHIBI_TIER_COUNT = CHIBI_TIERS.length
+
+/** Clamps a tier index into the ladder. A caller's arithmetic never indexes out. */
+export const chibiTier = (tier: number): ChibiTierProfile =>
+  CHIBI_TIERS[Math.max(0, Math.min(CHIBI_TIERS.length - 1, Math.round(tier)))]!
+
+/** Applies a tier's coarsening to one sweep parameter. */
+const coarsen = (value: number, scale: number, floor: number): number =>
+  Math.max(floor, Math.round(value * scale))
+
+/**
+ * The mitten: one capsule from inside the forearm to the knuckles.
+ *
+ * Replaces `HAND_PARTS`' palm, index finger and thumb — 96 triangles a hand — at
+ * every tier past the first. It keeps the palm's own `from`/`to` and its
+ * flattened cross-section, so the *silhouette* of the hand is unchanged at the
+ * range this is used; what is gone is the notch between the index finger and the
+ * mass, which is 1 px at 18 m and 0 past it.
+ */
+const MITTEN_PART = {
+  from: [-0.01, 0] as const,
+  to: [0.062, 0.004] as const,
+  radiusStart: 0.037,
+  radiusEnd: 0.03,
+  radial: 5,
+  rings: 1,
+  capRings: 1,
+  crossSection: [1.15, 0.66] as const,
+  blendToParent: true
+}
+
 const parts = (
   appearance: CharacterAppearance,
   torsoArmoured: boolean,
   legArmoured: boolean,
-  grips: HandGrips = OPEN_HANDS
+  grips: HandGrips = OPEN_HANDS,
+  profile: ChibiTierProfile = CHIBI_TIERS[0]!
 ): PartSpec[] => {
-  const mirror = (spec: PartSpec): PartSpec => spec
   const paint = bodyPalette(appearance)
   const build = BUILDS[appearance.sex]
   const limb = build.limbScale
-  const list: PartSpec[] = []
+  const raw: PartSpec[] = []
+  /**
+   * Identity, kept so the authored specs below read the way they always have.
+   *
+   * The coarsening is applied **once, on the way out** (see the return), rather
+   * than at each of the twelve `radial:` literals. That is deliberate: those
+   * numbers are the authored shape and every one of them carries a comment
+   * arguing for its value, so a reader has to be able to see the number the
+   * argument is about. A tier is a transformation *of* that shape, not twelve
+   * more numbers to keep in step with it.
+   */
+  const mirror = (spec: PartSpec): PartSpec => spec
+  const list = raw
   if (!torsoArmoured) {
     // Torso. Deeper than it is wide — `crossSection[0]` scales **Z**, not X (see
     // the note in `face.ts`) — so the figure reads as a body from the side
@@ -599,8 +785,11 @@ const parts = (
         colorStart: paint.skin,
         colorEnd: paint.skin
       })
-    } else {
-      for (const hand of HAND_PARTS) {
+    } else if (profile.hands !== 'none') {
+      // One part instead of three past LOD0 — see `MITTEN_PART`. A closed fist
+      // is unaffected: it is already a single swept barrel, and a hand that is
+      // holding a sword is a hand the player is looking at.
+      for (const hand of profile.hands === 'full' ? HAND_PARTS : [MITTEN_PART]) {
         list.push({
           bone: `hand.${side}` as BoneName,
           from: handPoint(side, limb, hand.from[0], hand.from[1]),
@@ -674,7 +863,26 @@ const parts = (
       })
     )
   }
-  return list
+
+  // ── The tier, applied once ───────────────────────────────────────────────
+  //
+  // `radial` is scaled and floored at `MIN_RADIAL`; `rings` and `capRings` are
+  // scaled and floored at **1**, because a cap of 0 is a flat disc and the toon
+  // ramp draws a hard band edge across it — a cut limb at any distance. The head
+  // is exempt from the `capRings` floor being *raised*, not from being coarsened:
+  // it is four cap rings of a sphere and it is the whole silhouette above the
+  // shoulders, so it keeps more of them than a forearm does.
+  if (profile.radial === 1 && profile.rings === 1 && profile.capRings === 1) {
+    // LOD0 returns the authored specs untouched, so the shipped figure is
+    // provably the same bytes rather than the same numbers re-derived.
+    return raw
+  }
+  return raw.map(spec => ({
+    ...spec,
+    radial: coarsen(spec.radial, profile.radial, MIN_RADIAL),
+    rings: coarsen(spec.rings, profile.rings, 1),
+    capRings: spec.capRings === undefined ? undefined : coarsen(spec.capRings, profile.capRings, 1)
+  }))
 }
 
 const boneIndexOf = (name: BoneName): number => {
@@ -1142,7 +1350,7 @@ export interface ChibiGeometry {
  * Head shape, build, skin tone and every colour still cost nothing: they are
  * warps, radii and albedo.
  */
-export const CHIBI_BUDGET = 1380
+export const CHIBI_BUDGET = CHIBI_TIERS[0]!.budget
 
 /**
  * The most expensive thing `ITEM_SLOT` allows in a given body slot.
@@ -1583,7 +1791,13 @@ const appendFist = (side: 'L' | 'R', limb: number, skin: Color, sink: FistSink):
 }
 
 export const buildChibiGeometry = (
-  budget = CHIBI_BUDGET,
+  /**
+   * Triangle ceiling. Defaults to **the tier's own** budget from `CHIBI_TIERS`,
+   * not to LOD0's — a coarse tier checked against 1380 would pass while being
+   * four times the size it is allowed to be, which is the failure a budget
+   * exists to catch.
+   */
+  budget: number | undefined = undefined,
   name = 'chibi/LOD0',
   appearance: CharacterAppearance = DEFAULT_APPEARANCE,
   /**
@@ -1612,7 +1826,18 @@ export const buildChibiGeometry = (
    * — no caller ever wants to pass `sleeveColour` and skip `headwear` by
    * position. Both default to "nothing", which is the byte-identical path.
    */
-  worn: WornContext = NOTHING_WORN
+  worn: WornContext = NOTHING_WORN,
+  /**
+   * Which rung of `CHIBI_TIERS` to build. 0 is the authored figure and is the
+   * default, so every existing caller — the creator screen, the benches, the
+   * player, ten test suites — is untouched.
+   *
+   * Positional rather than a field on `worn`, because a tier is not something
+   * the character is *wearing*: `worn` is read by the body to paint sleeves and
+   * tuck hair, and a reader looking for "why is this figure coarse" would not
+   * find it there.
+   */
+  tier = 0
 ): ChibiGeometry => {
   const positions: number[] = []
   const normals: number[] = []
@@ -1623,6 +1848,15 @@ export const buildChibiGeometry = (
 
   const color = new Color()
   const warp = headWarp(appearance)
+  const profile = chibiTier(tier)
+  // The same three numbers the body's `PartSpec`s are coarsened by, handed to
+  // the three strand blocks — which never pass through `parts()` and were
+  // therefore built at LOD0 tessellation on every tier until this existed.
+  const strandDetail: StrandDetail = {
+    radial: profile.radial,
+    rings: profile.rings,
+    capRings: profile.capRings
+  }
 
   // ── The sleeves that go with the garment ──────────────────────────────────
   //
@@ -1641,7 +1875,7 @@ export const buildChibiGeometry = (
       ? appearance
       : { ...appearance, tunicColour: worn.sleeveColour }
 
-  for (const spec of parts(dressed, torsoGarment !== null, legGarment !== null, grips)) {
+  for (const spec of parts(dressed, torsoGarment !== null, legGarment !== null, grips, profile)) {
     const from = spec.from ? spec.from.clone() : jointVector(spec.bone)
     const to = spec.to instanceof Vector3 ? spec.to.clone() : jointVector(spec.to)
 
@@ -1861,7 +2095,7 @@ export const buildChibiGeometry = (
   const shell = headShell(worn.headwear ?? null)
 
   const earsStart = positions.length / 3
-  appendHeadStrands(earMesh(appearance), warp, {
+  appendHeadStrands(profile.ears ? earMesh(appearance, strandDetail) : null, warp, {
     positions,
     normals,
     colors,
@@ -1882,7 +2116,7 @@ export const buildChibiGeometry = (
   // Weights are the skull's own at each vertex's height, never weight 1 on
   // `head` — see the note on `HairMesh.along`.
   const hairStart = positions.length / 3
-  appendHeadStrands(hairMesh(appearance), warp, {
+  appendHeadStrands(profile.hair ? hairMesh(appearance, strandDetail) : null, warp, {
     positions,
     normals,
     colors,
@@ -1909,8 +2143,12 @@ export const buildChibiGeometry = (
   // jaw: a hood's shell reaches the collar, so a tucked beard is pulled inside
   // the character's own chest, and any hat at all flattens a nose into the
   // skull. Nothing here is ever *under* headwear.
+  // At LOD1 and LOD2 the block narrows to the **beard alone**: it is the only
+  // one of the three that is silhouette rather than detail (`patriarch` is 6 px
+  // wide at 45 m, a nose is 0), so it outlives the brow ridge and the nose by
+  // two whole tiers. See `CHIBI_TIERS`.
   const featuresStart = positions.length / 3
-  appendHeadStrands(featureMesh(appearance), warp, {
+  appendHeadStrands(featureMesh(appearance, profile.features, strandDetail), warp, {
     positions,
     normals,
     colors,
@@ -1933,29 +2171,31 @@ export const buildChibiGeometry = (
   // joints. It rides the skull's own joint blend rather than claiming weight 1
   // on `head` — see `face.ts` for the 49.6 mm of slide that choice caused.
   const faceStart = positions.length / 3
-  appendFace({
-    positions,
-    normals,
-    colors,
-    skinIndices,
-    skinWeights,
-    indices,
-    headBone: boneIndexOf('head'),
-    // The face rides the skull's own joint blend rather than claiming weight 1,
-    // so both bone and blend width are handed over from here — the one place
-    // that owns them — instead of being restated in `face.ts`.
-    neckBone: boneIndexOf('neck'),
-    jointBlend: JOINT_BLEND,
-    eyes: appearance.eyes,
-    mouth: appearance.mouth,
-    // The brow is the only thing on the figure that puts the character's hair
-    // colour below the hairline, and it is derived here rather than in `face.ts`
-    // because that file knows nothing about appearance — and because importing
-    // `variants.ts` from it would close a cycle. See `browColour` for what
-    // "hair-coloured" has to survive: light hair on dark skin, which is the pair
-    // that actually collides, and not the blond-on-pale one the palette feared.
-    brow: browColour(appearance)
-  })
+  if (profile.face) {
+    appendFace({
+      positions,
+      normals,
+      colors,
+      skinIndices,
+      skinWeights,
+      indices,
+      headBone: boneIndexOf('head'),
+      // The face rides the skull's own joint blend rather than claiming weight 1,
+      // so both bone and blend width are handed over from here — the one place
+      // that owns them — instead of being restated in `face.ts`.
+      neckBone: boneIndexOf('neck'),
+      jointBlend: JOINT_BLEND,
+      eyes: appearance.eyes,
+      mouth: appearance.mouth,
+      // The brow is the only thing on the figure that puts the character's hair
+      // colour below the hairline, and it is derived here rather than in `face.ts`
+      // because that file knows nothing about appearance — and because importing
+      // `variants.ts` from it would close a cycle. See `browColour` for what
+      // "hair-coloured" has to survive: light hair on dark skin, which is the pair
+      // that actually collides, and not the blond-on-pale one the palette feared.
+      brow: browColour(appearance)
+    })
+  }
 
   // ── And the face gets the same warp ──────────────────────────────────────
   //
@@ -1995,7 +2235,7 @@ export const buildChibiGeometry = (
   // that `EQUIPMENT_BUDGET` already caps in their own right.
   assertTriBudget(
     geometry,
-    budget + (torsoGarment ? TORSO_GARMENT_BUDGET : 0) + (legGarment ? LEG_GARMENT_BUDGET : 0),
+    (budget ?? profile.budget) + (torsoGarment ? TORSO_GARMENT_BUDGET : 0) + (legGarment ? LEG_GARMENT_BUDGET : 0),
     name
   )
 

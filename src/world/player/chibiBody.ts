@@ -1,5 +1,7 @@
 import type { Object3D, Vector3 } from 'three'
 import { Character } from '../characters/Character'
+import { CharacterEquipment, variantOf } from '../characters/CharacterEquipment'
+import { DEFAULT_APPEARANCE, type CharacterAppearance, type EquipmentLoadout } from '../characters/equipment'
 import { FIGURE_HEIGHT } from '../characters/rig'
 
 /**
@@ -23,6 +25,25 @@ import { FIGURE_HEIGHT } from '../characters/rig'
  * enough: the skeleton, the gait and the outline all ride along, and nothing in
  * the animation is authored in absolute metres except the pelvis bob, which
  * scales correctly with it.
+ *
+ * ── It wears the character you made ─────────────────────────────────────────
+ *
+ * `appearance` and `loadout` come from `roster.ts::playerLook()`, which resolves
+ * the roster's active profile, then the standalone appearance key, then the
+ * default. Before this the figure was `new Character({ perfTag })` — i.e.
+ * `DEFAULT_APPEARANCE` — so `/characters` could save a character that appeared
+ * nowhere.
+ *
+ * The **loadout needs a `CharacterEquipment`**, and that is the whole of why one
+ * is built here: a `Character` on its own has a body and a skeleton but no
+ * sockets, so a saved sword is a field in storage and nothing else. Attaching
+ * one also buys the arm poses for free — `CharacterEquipment` registers itself
+ * as the host's combat source, so a player carrying a shield carries it on the
+ * forearm rather than clipping it through their hip.
+ *
+ * It is skipped entirely when the loadout is empty, which is the common case and
+ * the one that must stay free: no attachments, no gear models built, no combat
+ * pose layer, and the figure is exactly the mesh it was before.
  *
  * ── Facing follows motion, not the camera ───────────────────────────────────
  *
@@ -49,23 +70,56 @@ export interface ChibiBodyOptions {
   /** Player capsule height, so the figure can be scaled to match. */
   height: number
   perfTag?: string
+  /** Who the player is. Defaults to the shipped figure. */
+  appearance?: CharacterAppearance
+  /**
+   * What they are wearing. Omitted or all-null builds no equipment layer at all
+   * — see the note in the header on why that path has to stay free.
+   */
+  loadout?: EquipmentLoadout
 }
 
-export const createChibiBody = (options: ChibiBodyOptions): PlayerBody => {
-  const { height, perfTag = 'player' } = options
+const wearsSomething = (loadout: EquipmentLoadout | undefined): loadout is EquipmentLoadout =>
+  loadout !== undefined &&
+  (loadout.mainHand !== null ||
+    loadout.offHand !== null ||
+    loadout.back !== null ||
+    loadout.head !== null ||
+    loadout.torso !== null ||
+    loadout.legs !== null)
 
-  const character = new Character({ perfTag })
+export const createChibiBody = (options: ChibiBodyOptions): PlayerBody => {
+  const { height, perfTag = 'player', appearance = DEFAULT_APPEARANCE, loadout } = options
+
+  const character = new Character({ perfTag, appearance })
   const scale = height / FIGURE_HEIGHT
   character.group.scale.setScalar(scale)
   character.group.name = 'player'
   character.group.userData.perfTag = perfTag
   character.group.visible = false
 
+  // ── The equipment layer, only when there is equipment ────────────────────
+  //
+  // `setVariant` before `setLoadout`, the same ordering `Crowd.dress` uses and
+  // for the same reason: the variant carries the colourway, and applying the
+  // loadout first dresses the figure in the previous one and then rebuilds the
+  // whole body a second time to correct it.
+  let equipment: CharacterEquipment | null = null
+  if (wearsSomething(loadout)) {
+    equipment = new CharacterEquipment(character, { outline: true, castShadow: true })
+    equipment.setVariant(variantOf(appearance))
+    equipment.setLoadout(loadout)
+  }
+
   return {
     object: character.group,
     sync: (position: Vector3, _lookYaw: number, dt: number): void => {
       character.setPosition(position)
       character.update(dt)
+      // After the character, not before: the draw/stow animation re-parents an
+      // item to a bone, and a bone that has not been posed this frame hands it
+      // last frame's matrix.
+      equipment?.update(dt)
     },
     setVisible: (visible: boolean): void => {
       character.group.visible = visible
@@ -88,6 +142,10 @@ export const createChibiBody = (options: ChibiBodyOptions): PlayerBody => {
       character.jump()
     },
     dispose: (): void => {
+      // Equipment first: disposing it hands the character back their own torso,
+      // legs and untucked hair, and doing that to an already-disposed body is a
+      // rebuild of geometry nobody will ever draw.
+      equipment?.dispose()
       character.dispose()
     }
   }

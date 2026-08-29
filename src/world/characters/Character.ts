@@ -3,7 +3,8 @@ import { deriveOutlineColor } from '../art/palette'
 import { createOutlineMaterial, type OutlineMaterial } from '../shading/outlineMaterial'
 import { createToonMaterial, type ToonMaterial } from '../shading/toonMaterial'
 import { type BodyGarments, type ItemVariant, variantOf } from './CharacterEquipment'
-import { CHIBI_BUDGET, buildChibiGeometry, type HandGrips } from './chibiGeometry'
+import { CHIBI_TIER_COUNT, buildChibiGeometry, type HandGrips } from './chibiGeometry'
+import { COVERAGE_EPSILON, coverageAt, cullDistanceFor } from '../lod/config'
 import { type CharacterAppearance, DEFAULT_APPEARANCE } from './equipment'
 import { sleeveColourForItem } from './gear/garments'
 import { installGear } from './gearRegistry'
@@ -154,6 +155,34 @@ const blendPose = (bones: Map<BoneName, Bone>, from: Float32Array, weight: numbe
   }
 }
 
+/**
+ * One rung of the ladder: a body, its hull, and the two materials that hold
+ * their own dither coverage.
+ *
+ * `outline` and `outlineMaterial` are null past `OUTLINE_MAX_TIER`, and on every
+ * tier of a character built with `outline: false`.
+ */
+interface TierMesh {
+  body: SkinnedMesh
+  outline: SkinnedMesh | null
+  material: ToonMaterial
+  outlineMaterial: OutlineMaterial | null
+}
+
+/**
+ * The last tier that draws an inverted hull.
+ *
+ * GDD R6 puts the outline on LOD0 and LOD1 for every object in this world, and a
+ * character is no exception — but for a character it is worth restating *why* it
+ * is the cheap win here: an outline is a whole extra draw call per figure, and a
+ * crowd of eight was measured at 161 → 181 draws against GDD §5.2's cap of 180.
+ * Dropping the hull past 45 m is the one thing in the ladder that gives a draw
+ * call back rather than vertices.
+ */
+const OUTLINE_MAX_TIER = 1
+
+const _lodPosition = new Vector3()
+
 export class Character {
   readonly group = new Group()
   readonly body: SkinnedMesh
@@ -209,6 +238,53 @@ export class Character {
 
   private readonly material: ToonMaterial
   private readonly outlineMaterial: OutlineMaterial | null
+  /**
+   * ─── The LOD ladder ───────────────────────────────────────────────────────
+   *
+   * `CHIBI_TIERS` says what each rung *is*; this is what draws it. Tier 0 is
+   * `this.body` / `this.outline` themselves, so `EquipmentHost` — which reads
+   * `host.body.skeleton`, `host.body.bindMatrix` and `host.body.material` — is
+   * completely unchanged and could not tell there is a ladder at all.
+   *
+   * ── One skeleton, and it is the constraint the whole design turns on ──────
+   *
+   * GDD §6 Phase C: *"LOD tiers share one skeleton, so LOD switching never
+   * re-binds a skin."* Every tier here is `bind(skeleton, this.body.bindMatrix)`
+   * against the **same** `Skeleton` object built once in the constructor. The
+   * bone texture is uploaded once and read by all of them, a pose reaches every
+   * tier or none, and a switch is a visibility change rather than a re-bind.
+   *
+   * ── Built on demand, never all four up front ──────────────────────────────
+   *
+   * A rebuild is ~1.4 ms of merging the whole figure and four of them is ~2.5 ms
+   * (the coarse three are cheap). Paying that for every character at spawn would
+   * put 20 ms on a crowd of eight — for tiers most figures never reach. The
+   * player is the clearest case: it is the camera's own focus, so it is tier 0
+   * forever and must never pay for the other three.
+   *
+   * So a rung is built the first time it is actually wanted and cached after.
+   * `rebuild()` refreshes every rung that **exists**, which is what keeps an
+   * equip from silently applying to LOD0 alone.
+   */
+  private readonly tiers: (TierMesh | null)[] = new Array(CHIBI_TIER_COUNT).fill(null)
+  /** Written by `coverageAt` every frame. Module-level would not be re-entrant. */
+  private readonly coverage = new Float32Array(CHIBI_TIER_COUNT)
+  private readonly cullDistance = cullDistanceFor(1)
+  /**
+   * The rung currently carrying most of the figure, or −1 when it is culled.
+   *
+   * Public and read-only-by-convention because it is the only way to *see* the
+   * ladder from outside: a tier switch is a visibility change on meshes that all
+   * look alike from a test, and "did this figure actually coarsen" is otherwise
+   * a question you can only answer by counting triangles on the right one.
+   * `Crowd` reports it and `characterLod.test.ts` asserts against it.
+   *
+   * **0 until something hands `update` a camera position**, and that default
+   * matters: the creation screen, the three benches and the player all want the
+   * authored figure and none of them has a reason to think about distance. A
+   * ladder that engaged by default would quietly coarsen the turntable.
+   */
+  lodTier = 0
   private readonly bones: Map<BoneName, Bone>
   private readonly cadence: number
   private phase = 0
@@ -241,7 +317,7 @@ export class Character {
     this.appearance = { ...appearance }
     this.geometryName = geometryName
 
-    const { geometry, outlineGeometry } = buildChibiGeometry(CHIBI_BUDGET, geometryName, this.appearance)
+    const { geometry, outlineGeometry } = buildChibiGeometry(undefined, geometryName, this.appearance)
     const { skeleton, root, byName } = buildSkeleton()
     this.bones = byName
 
@@ -280,6 +356,16 @@ export class Character {
     } else {
       this.outline = null
       this.outlineMaterial = null
+    }
+
+    // Tier 0 *is* the body and the outline. Registering it here rather than
+    // special-casing index 0 everywhere below is what lets `refreshTiers` and
+    // `updateLod` treat the whole ladder as one array.
+    this.tiers[0] = {
+      body: this.body,
+      outline: this.outline,
+      material: this.material,
+      outlineMaterial: this.outlineMaterial
     }
 
     this.group.name = 'character'
@@ -386,12 +472,146 @@ export class Character {
     this.state = 'idle'
   }
 
-  private rebuild(): void {
-    const started = performance.now()
+  /**
+   * Builds one rung of the ladder and binds it to the shared skeleton.
+   *
+   * The coarse tiers get **cloned materials**, exactly as `DitheredLod` does for
+   * props and for the same reason: each rung needs to hold its own `uFade` so
+   * the two tiers in a transition band can carry complementary dither patterns.
+   * A clone shares the compiled program, so this costs no extra shader
+   * compilation and no extra program switch — which matters here more than it
+   * does for a prop, because `USE_SKINNING` already forks every program a
+   * skinned mesh touches and GDD §5 has ~2 programs of headroom left.
+   */
+  private buildTier(tier: number): TierMesh {
+    const existing = this.tiers[tier]
+    if (existing) {
+      return existing
+    }
+    const { geometry, outlineGeometry } = this.buildGeometry(tier)
+
+    const material = this.material.clone() as ToonMaterial
+    const body = new SkinnedMesh(geometry, material)
+    body.name = `chibi/body/LOD${tier}`
+    body.receiveShadow = true
+    // Only the two near tiers ever cast. Past LOD1 a figure is 13 px and its
+    // shadow is a smudge the cascade cannot resolve anyway — and a shadow draw
+    // is a *draw call*, which is the thing a crowd is actually short of.
+    body.castShadow = tier <= 1
+    body.visible = false
+    body.bind(this.body.skeleton, this.body.bindMatrix)
+    this.group.add(body)
+
+    let outline: SkinnedMesh | null = null
+    let outlineMaterial: OutlineMaterial | null = null
+    // The hull is dropped past LOD1, and this is the line that makes the ladder
+    // worth building: it is one draw call per distant figure, every frame.
+    if (this.outlineMaterial && tier <= OUTLINE_MAX_TIER) {
+      outlineMaterial = this.outlineMaterial.clone() as OutlineMaterial
+      outline = new SkinnedMesh(outlineGeometry, outlineMaterial)
+      outline.name = `chibi/outline/LOD${tier}`
+      outline.castShadow = false
+      outline.receiveShadow = false
+      outline.visible = false
+      outline.bind(this.body.skeleton, this.body.bindMatrix)
+      this.group.add(outline)
+    }
+    const built: TierMesh = { body, outline, material, outlineMaterial }
+    this.tiers[tier] = built
+    return built
+  }
+
+  /**
+   * Picks the tiers this distance needs, builds any that are missing, and sets
+   * each one's dither coverage.
+   *
+   * Allocation-free per frame (GDD §5.2): `coverage` is a field, the tier array
+   * is fixed-length, and the only branch that allocates is a first build, which
+   * happens once per rung per character.
+   */
+  private updateLod(cameraPosition: Vector3): void {
+    this.group.getWorldPosition(_lodPosition)
+    const distance = _lodPosition.distanceTo(cameraPosition)
+
+    if (distance > this.cullDistance) {
+      for (const tier of this.tiers) {
+        if (tier) {
+          tier.body.visible = false
+          if (tier.outline) {
+            tier.outline.visible = false
+          }
+        }
+      }
+      this.lodTier = -1
+      return
+    }
+
+    coverageAt(distance, 1, this.coverage)
+    // The dominant rung: inside a transition band two are drawn and this is the
+    // one carrying more than half of it. `coverage` is signed — negative means
+    // fading *in* — so the comparison is on the magnitude.
+    let dominant = 0
+    let strongest = 0
+    for (let tier = 0; tier < CHIBI_TIER_COUNT; tier++) {
+      const strength = Math.abs(this.coverage[tier]!)
+      if (strength > strongest) {
+        strongest = strength
+        dominant = tier
+      }
+    }
+    this.lodTier = dominant
+
+    for (let tier = 0; tier < CHIBI_TIER_COUNT; tier++) {
+      const coverage = this.coverage[tier]!
+      const wanted = Math.abs(coverage) > COVERAGE_EPSILON
+      if (!wanted) {
+        const built = this.tiers[tier]
+        if (built) {
+          built.body.visible = false
+          if (built.outline) {
+            built.outline.visible = false
+          }
+        }
+        continue
+      }
+      const built = this.buildTier(tier)
+      built.body.visible = true
+      built.material.setFade(coverage)
+      built.outlineMaterial?.setFade(coverage)
+      if (built.outline) {
+        built.outline.visible = true
+      }
+      // Only the dominant tier casts, so a crossfade cannot double-darken the
+      // shadow map — the same rule `DitheredLod` applies to props (GDD §4.3).
+      built.body.castShadow = tier <= 1 && Math.abs(coverage) >= 0.5
+    }
+  }
+
+  /** Every rung that exists, re-pointed at freshly built geometry. */
+  private refreshTiers(): void {
+    for (let tier = 1; tier < CHIBI_TIER_COUNT; tier++) {
+      const built = this.tiers[tier]
+      if (!built) {
+        continue
+      }
+      const { geometry, outlineGeometry } = this.buildGeometry(tier)
+      const previousBody = built.body.geometry
+      const previousOutline = built.outline?.geometry ?? null
+      built.body.geometry = geometry
+      if (built.outline) {
+        built.outline.geometry = outlineGeometry
+      }
+      previousBody.dispose()
+      previousOutline?.dispose()
+    }
+  }
+
+  /** One tier's geometry, with everything currently worn built into it. */
+  private buildGeometry(tier: number) {
     const { torso, legs, head } = this.garments
-    const { geometry, outlineGeometry } = buildChibiGeometry(
-      CHIBI_BUDGET,
-      this.geometryName,
+    return buildChibiGeometry(
+      undefined,
+      tier === 0 ? this.geometryName : `${this.geometryName.replace(/LOD\d+$/, '')}LOD${tier}`,
       this.appearance,
       torso?.geometry ?? null,
       legs?.geometry ?? null,
@@ -405,8 +625,14 @@ export class Character {
         // writing into the player's saved appearance.
         sleeveColour: torso ? sleeveColourForItem(torso.kind, this.appearance.gearSeed) : null,
         headwear: head
-      }
+      },
+      tier
     )
+  }
+
+  private rebuild(): void {
+    const started = performance.now()
+    const { geometry, outlineGeometry } = this.buildGeometry(0)
     const previousBody = this.body.geometry
     const previousOutline = this.outline?.geometry ?? null
     this.body.geometry = geometry
@@ -419,6 +645,13 @@ export class Character {
     // one is a no-op.
     previousBody.dispose()
     previousOutline?.dispose()
+    // **Every rung that exists, not just this one.** An equip that reached LOD0
+    // alone would be invisible until the player walked away and then *appear*,
+    // which is the exact class of bug the crossfade exists to prevent — and it
+    // would only ever show up on a crowd figure someone happened to be watching
+    // from 30 m. Rungs that have never been built are not built here: they pick
+    // the change up on their first use, from the same `buildGeometry`.
+    this.refreshTiers()
     this.lastRebuildMs = performance.now() - started
   }
 
@@ -507,7 +740,19 @@ export class Character {
     return combat.effectiveDrawn === 'sheathed' ? combat.drawnFrom : combat.effectiveDrawn
   }
 
-  update(dt: number): void {
+  update(dt: number, cameraPosition?: Vector3): void {
+    // ── The LOD ladder ──────────────────────────────────────────────────────
+    //
+    // Before the `dt <= 0` return, and outside it on purpose: a paused frame
+    // still has to resolve which tier is visible, or a character that stops
+    // moving stops switching. It is also the only line that engages the ladder
+    // at all — a caller that does not pass a camera (the creation screen, the
+    // three benches, the player, every test) stays at tier 0 forever, which is
+    // the authored figure.
+    if (cameraPosition) {
+      this.updateLod(cameraPosition)
+    }
+
     this.elapsed += dt
     if (dt <= 0) {
       return
@@ -637,7 +882,21 @@ export class Character {
   }
 
   dispose(): void {
-    this.body.geometry.dispose()
+    // Every rung, not just tier 0. A coarse tier owns its own geometry *and* a
+    // cloned material, and a clone is a real `Material` with its own uniforms
+    // and its own entry in three's program cache reference count — leaking one
+    // per crowd slot is how a level reload ends up with four hundred of them.
+    for (const tier of this.tiers) {
+      if (!tier) {
+        continue
+      }
+      tier.body.geometry.dispose()
+      tier.outline?.geometry.dispose()
+      if (tier.body !== this.body) {
+        tier.material.dispose()
+        tier.outlineMaterial?.dispose()
+      }
+    }
     this.material.dispose()
     this.outlineMaterial?.dispose()
     this.group.clear()

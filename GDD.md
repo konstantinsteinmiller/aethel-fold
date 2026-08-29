@@ -232,7 +232,7 @@ Every world object ships **exactly four LOD tiers**, plus a cull distance.
 | Terrain chunk (48 m) | 1400 | 400 | 128 | 24 | 1344 / 384 / 120 / 18 |
 | Grass patch (4 m) *(6 tiers)* | 6300 | 2800 | 720 | 110 / 44 / 20 | exact |
 | *(future)* Monster | 900 | 420 | 180 | 40 | — |
-| Chibi human | 1380 | 662 | 290 | 69 | 896–1356 / — / — / — |
+| Chibi human | 1380 | 700 | 430 | 320 | 896–1356 / 412–676 / 366–414 / 312 |
 
 Generators call `assertTriBudget(geometry, budget, name)` and **throw** in dev if
 they exceed it. The budget is a ceiling, not a target.
@@ -302,9 +302,48 @@ body's own skinned mesh.
 
 So the ceiling covers 896 (`coif`, the one style that is painted *and* covers the
 ears) through **1356** (`ponytail` + `forked` + a nose + bushy brows), and leaves
-24 of headroom. The coarse tiers are scaled by the same factors as before
-(0.48 / 0.21 / 0.05 of LOD0), so the row's shape is unchanged; the tiers
-themselves are still owed, as noted in §6 Phase C.
+24 of headroom.
+
+**The four tiers now exist** (`chibiGeometry.ts::CHIBI_TIERS`), and their budgets
+are **measured rather than scaled**, which is a change from every other row in
+this table. The coarse tiers were 662 / 290 / 69 — LOD0 times the 0.48 / 0.21 /
+0.05 a prop uses — and two of those three are unreachable by construction:
+
+> A prop is one blob and its tessellation goes all the way down. A chibi is
+> **twelve separate capsules**, and a capsule has a floor: four segments around,
+> one ring along, one cap ring at each end is 24 triangles, and twelve of those
+> is 288. With the head's extra cap rings the floor of this construction is
+> **312**, four and a half times the 69 the scaling asked for. The number is not
+> about detail, it is about how many *parts* a body is made of.
+
+Dropping parts at LOD3 (the neck, which is already entirely inside the
+head/torso overlap, and the two feet) reaches 240 — still 3.5× over, for a second
+body topology to maintain and 576 triangles saved across a whole crowd. The
+honest 69-triangle answer is an **impostor**, a billboard from a rendered atlas,
+and this project has no impostor system; building one to save vertex work the
+frame is not short of would be the wrong order of work. So the coarse budgets are
+the measured worst case plus the ~2 % headroom LOD0 has.
+
+What each rung drops, and the range that justifies it:
+
+| tier | switch | figure is | drops |
+|---|---:|---:|---|
+| 1 | 18 m | 32 px | the face decals, the brow ridge, the nose, four fingers a hand |
+| 2 | 45 m | 13 px | the hair mesh, the ears, the beard's own moustache and tines |
+| 3 | 110 m | 5 px | the beard, both hands, half the sweep again |
+
+**The beard outlives the nose by two tiers**, which is the one ordering worth
+stating: a beard is *silhouette* — `patriarch` is 294 mm across on a 470 mm head,
+still 6 px wide at 45 m — while a nose is 3 px at 8 m and gone by 20.
+
+**And a character's ladder does not buy what a prop's buys.** Measured in the
+world, eight NPCs against an empty crowd, the crowd's cost is **draw calls**
+(161 → 181 against §5.2's ≤180), and a tier does not change how many draws a
+figure is. What the ladder actually returns is the **hull past LOD1** — one draw
+call per distant figure and its shadow another. Measured on eight wanderers: the
+crowd submits 24 meshes with 12 hulls and 8 shadow casters up close, and 5 meshes
+with 1 hull and 0 shadow casters at 60 m. The vertex saving (1356 → 312) is real
+and is the smaller half.
 
 **A torso or leg garment does not add to this row.** Both *replace* body parts
 rather than covering them — the torso's 96 triangles and the legs' 144 are never
@@ -647,8 +686,17 @@ player-selectable detail levels; see [`grass.md`](./grass.md))**, cliffs, props
   **Departed from, deliberately:** the mesh and the cycles are procedural, like
   every other asset here — there are no character files to load. The engine path
   is unchanged (`SkinnedMesh` + `Skeleton`), so an imported glTF character drops
-  into the same pipeline. **LOD tiers are still owed**: characters ship one tier
-  where every other object ships four (R7). See `AAA-graphics.md` §10b.
+  into the same pipeline.
+  **Built**: four tiers (`CHIBI_TIERS`), crossfaded with the same dither the
+  props use, every rung bound to the **one** `Skeleton` the requirement above
+  names — so a switch is a visibility change, not a re-bind. Rungs are built on
+  demand and refreshed on equip; the hull and shadow casting stop at LOD1. See
+  §4.1 for why the coarse budgets are measured rather than scaled.
+  **Still owed**: the *gear* is single-tier. A wanderer's coat is 420 triangles
+  and the boots 416, so a figure at LOD2 is 430 of body under 836 of costume —
+  the garments now dominate a distant figure, which is the next thing to fix and
+  is exactly the argument `gear/index.ts` makes in reverse ("unlike a world prop
+  these are never at 200 m"). They are now.
 
 > **Skinning costs programs.** `USE_SKINNING` forks every program a skinned mesh
 > touches — toon, outline and shadow depth — taking the scene from 7 to **11**

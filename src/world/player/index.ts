@@ -1,6 +1,7 @@
 import type { Object3D, PerspectiveCamera } from 'three'
 import { Group, Vector3 } from 'three'
 import type { CollisionWorld, Placement } from '../level/types'
+import type { CharacterAppearance, EquipmentLoadout } from '../characters/equipment'
 import { createCapsuleMesh, type PlayerCapsule } from './capsuleMesh'
 import { createChibiBody, type PlayerBody } from './chibiBody'
 import { type ColliderDefinition, createCollisionWorld, type PlayerCollisionWorld } from './collision'
@@ -35,6 +36,18 @@ export interface PlayerSpawn {
 
 export interface CreatePlayerOptions {
   camera: PerspectiveCamera
+  /**
+   * The character the player walks around as, and what they are wearing.
+   *
+   * Both optional and both defaulted to the shipped figure, because two of the
+   * three callers of this function are a test and a bench that have no roster to
+   * read. `World` passes `roster.ts::playerLook()`; see the note there on why it
+   * is resolved once at spawn rather than watched.
+   *
+   * Ignored when `body` is `'capsule'` — a debug cylinder has no face.
+   */
+  appearance?: CharacterAppearance
+  loadout?: EquipmentLoadout
   /** Terrain sampler — `Heightfield.heightAt` / `Terrain.heightAt`. */
   heightAt?: (x: number, z: number) => number
   /** Supply a ready-made collision world instead; `heightAt` is then unused. */
@@ -157,7 +170,17 @@ export const createPlayer = (options: CreatePlayerOptions): Player => {
   // existing third-person/visibility plumbing is unchanged; `chibi` goes through
   // the same small interface.
   const capsule: PlayerCapsule | null = mesh && body === 'capsule' ? createCapsuleMesh({ radius, height }) : null
-  const chibi: PlayerBody | null = mesh && body === 'chibi' ? createChibiBody({ height }) : null
+  const chibi: PlayerBody | null =
+    mesh && body === 'chibi'
+      ? createChibiBody({
+          height,
+          // Who the player is. Resolved by the caller rather than read here, so
+          // this module keeps knowing nothing about storage — `World` owns the
+          // decision and a test can hand in whoever it likes.
+          ...(options.appearance ? { appearance: options.appearance } : {}),
+          ...(options.loadout ? { loadout: options.loadout } : {})
+        })
+      : null
   // `mesh: false` still gets a root, so the caller's scene.add / registerRoot
   // wiring is identical either way and never has to null-check.
   const object: Object3D = capsule ? capsule.group : chibi ? chibi.object : new Group()

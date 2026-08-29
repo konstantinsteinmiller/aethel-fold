@@ -238,6 +238,28 @@ export class Crowd {
   }
 
   /**
+   * How many standing figures are on each rung of the chibi LOD ladder.
+   *
+   * Allocates, so it is a debug read rather than a per-frame one — a console
+   * probe and `characterLod.test.ts` are the callers today, and the perf panel
+   * is the obvious third. It is the only way to see from outside that a crowd
+   * spread over 55 m is actually spread over tiers rather than all sitting on
+   * LOD0, which is exactly what a ladder that never engaged would look like and
+   * which nothing else would report.
+   */
+  tierCensus(): number[] {
+    const census = [0, 0, 0, 0, 0]
+    for (const slot of this.slots) {
+      if (!slot.spawnId) {
+        continue
+      }
+      const tier = slot.character.lodTier
+      census[tier < 0 ? 4 : tier] = (census[tier < 0 ? 4 : tier] ?? 0) + 1
+    }
+    return census
+  }
+
+  /**
    * One frame.
    *
    * `cameraPosition` decides who is near enough to exist. Without it nothing is
@@ -263,7 +285,16 @@ export class Crowd {
     for (const slot of this.slots) {
       if (slot.spawnId) {
         slot.equipment.update(dt)
-        slot.character.update(dt)
+        // The camera goes through, which is what engages each figure's own LOD
+        // ladder (`Character.update`). The crowd is the only caller that passes
+        // one: the player is the camera's own focus and is tier 0 by definition,
+        // and the creation screen and the benches want the authored figure.
+        //
+        // Per figure rather than once for the crowd, because a crowd is spread
+        // over the 55 m the search radius allows — the near half of a market is
+        // LOD0 and the far half is LOD2, and a tier chosen for the group would
+        // be wrong for both ends of it.
+        slot.character.update(dt, cameraPosition)
       }
     }
 

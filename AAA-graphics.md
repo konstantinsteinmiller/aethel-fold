@@ -411,6 +411,57 @@ bone, and it wears no headwear. Triangles are vertex work the frame has room for
 draw calls are the thing GDD §5.2 is actually short of. **A hat costs more than a
 beard.**
 
+### The LOD ladder, and what it actually buys for a character
+
+Characters shipped **one** tier where everything else ships four (GDD R7), which
+this document and the GDD have both carried as owed since Phase C. Four tiers now
+exist in `chibiGeometry.ts::CHIBI_TIERS`, crossfaded with the same dither the
+props use.
+
+**The hard constraint is one skeleton.** Every rung is
+`bind(skeleton, body.bindMatrix)` against the same `Skeleton` object, so the bone
+texture is uploaded once, a pose reaches every rung or none, and a switch is a
+visibility change rather than a re-bind. `characterLod.test.ts` asserts it,
+because a second skeleton would not throw — it would pose correctly, cost a
+second bone texture, and drift by a frame.
+
+**Rungs are built lazily.** A rebuild is ~1.4 ms of merging the whole figure;
+four up front is ~2.5 ms per character, or 20 ms on a crowd of eight, for tiers
+most figures never reach. The player is the clearest case — it is the camera's
+own focus, so it is tier 0 forever and never pays for the other three. A rung is
+built the first time it is wanted and `rebuild()` refreshes every rung that
+*exists*, which is what stops an equip reaching LOD0 alone and then **appearing**
+as the player walks away.
+
+**Measured, eight wanderers, what the crowd submits:**
+
+| camera | tier | meshes | hulls | shadow casters | triangles |
+|---|---|---:|---:|---:|---:|
+| close | LOD0/1 | 24 | 12 | 8 | 32 944 |
+| 25 m | LOD1 | 18 | 9 | 8 | 23 118 |
+| 60 m | LOD2 | 5 | 1 | 0 | 5 870 |
+
+**And here is the honest part: for a character the ladder is not mainly a
+triangle story.** The crowd's cost is draw calls — 161 → 181 with eight NPCs
+against §5.2's ≤180 — and a tier does not change how many draws a figure is: it
+is one body plus one hull either way. What the ladder returns is the **hull
+dropped past LOD1**, which is a draw call per distant figure and its shadow
+another. That is the line worth having built; the 1356 → 312 of vertex work is
+the smaller half.
+
+**The budgets are measured, not scaled**, and that is a first for this project.
+§4.1 gave the coarse tiers 0.48 / 0.21 / 0.05 of LOD0 — 662 / 290 / **69** — and
+69 is unreachable: a chibi is twelve capsules and a capsule floors at 24
+triangles, so twelve of them is 288 and the construction's floor is 312. The
+number is not about detail, it is about how many parts a body is made of. A
+69-triangle tier means an **impostor**, and this project has no impostor system.
+
+**What is still owed: the gear.** A wanderer at LOD2 is 430 triangles of body
+under a 420-triangle coat and 416 of boots. `gear/index.ts` argues that equipment
+ships a single tier because "unlike a world prop these are never at 200 m" — and
+since the crowd landed, they are. The garments now dominate a distant figure, and
+that is the next thing to cut.
+
 ### `Number(params.get(name))` is 0, and it switched the crowd off in dev
 
 Found while trying to look at a new NPC in the world and seeing nothing.
