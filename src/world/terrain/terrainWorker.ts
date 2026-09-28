@@ -2,6 +2,7 @@ import { buildChunkBuffers, type ChunkRequest } from './chunkGeometry'
 import { buildDistantRing, type DistantRingRequest } from './distantRing'
 import { DEFAULT_HEIGHTFIELD_PARAMS, type HeightfieldParams } from './heightfieldCore'
 import { SculptField, type SculptPatch } from './SculptField'
+import { setWaterTable } from './waterLevel'
 
 /**
  * ─── Terrain chunk worker ───────────────────────────────────────────────────
@@ -57,7 +58,23 @@ interface RingMessage {
   request: DistantRingRequest
 }
 
-export type TerrainWorkerMessage = InitMessage | BuildMessage | SculptMessage | RingMessage
+/**
+ * The packed water table (`waterLevel.ts`), which decides where the ground turns
+ * to sand.
+ *
+ * Its own message rather than a field on `init`, and the reason is the ordering:
+ * a chapter's water is content and is created *after* the world is, so an `init`
+ * field would always carry an empty table. This arrives later and every build
+ * queued after it sees the new shoreline — the same FIFO argument `sculpt`
+ * makes, which is why both are broadcasts rather than replies.
+ */
+interface WaterMessage {
+  type: 'water'
+  /** `WATER_STRIDE` floats per body. Cloned, not transferred: N workers need N copies. */
+  table: Float32Array
+}
+
+export type TerrainWorkerMessage = InitMessage | BuildMessage | SculptMessage | RingMessage | WaterMessage
 
 /**
  * Buffers as they cross the wire. Typed loosely on the buffer parameter because
@@ -104,6 +121,11 @@ self.onmessage = (event: MessageEvent<TerrainWorkerMessage>): void => {
     // live local one or `heightAtCore` would call a method that isn't there.
     params = { ...message.params, delta }
     palette = message.palette
+    return
+  }
+
+  if (message.type === 'water') {
+    setWaterTable(message.table)
     return
   }
 

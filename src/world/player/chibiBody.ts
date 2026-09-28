@@ -1,5 +1,7 @@
 import type { Object3D, Vector3 } from 'three'
 import { Character } from '../characters/Character'
+import { applyPosture, type SeatKind } from '../combat/postures'
+import { seatRootLift } from '../interaction/SitController'
 import { CharacterEquipment, variantOf } from '../characters/CharacterEquipment'
 import { DEFAULT_APPEARANCE, type CharacterAppearance, type EquipmentLoadout } from '../characters/equipment'
 import { FIGURE_HEIGHT } from '../characters/rig'
@@ -45,6 +47,13 @@ import { FIGURE_HEIGHT } from '../characters/rig'
  * the one that must stay free: no attachments, no gear models built, no combat
  * pose layer, and the figure is exactly the mesh it was before.
  *
+ * ── It can sit down ─────────────────────────────────────────────────────────
+ *
+ * `setPosture` is the whole of what the sandbox needs from this file to use
+ * `world/interaction/`. It exists here rather than in the caller because the
+ * bones are here: `world/interaction/SitController` owns *where* a sitter is and
+ * *which way they face*, and neither of those is a bone.
+ *
  * ── Facing follows motion, not the camera ───────────────────────────────────
  *
  * `Character` derives its own heading from how it actually moved. That is left
@@ -63,6 +72,28 @@ export interface PlayerBody {
   /** First person: visible for its shadow, outline off so it cannot fill the view. */
   setFirstPerson(active: boolean): void
   jump(): void
+  /**
+   * Holds a seated pose, or lets it go.
+   *
+   * `blend` is 0 standing, 1 fully seated, and everything between while the
+   * figure is on its way into or out of a seat — the same number
+   * `Combatant.postureBlend` carries, so the chapter and the sandbox are
+   * provably running the same motion.
+   *
+   * `seatAboveGround` is the seat's top face measured from the ground the
+   * figure is standing on, and it is here rather than in the caller because
+   * **this** is the object that knows the group scale. The rig is 1.56 m and
+   * the player capsule is 1.8, so this figure is scaled to 1.154 — and a scaled
+   * figure's solved pose lands its backside `S·(1 − scale)` off the plank.
+   * `seatRootLift` is that number; `SitController`'s header derives it.
+   *
+   * Applied every frame it is non-zero, and safe to be: `applyPosture`
+   * re-seats the pelvis before it composes, which is what makes a posture
+   * idempotent where a swing is not. `applyClip` *adds* its hip lift, and the
+   * one time that ran unchecked on a held pose it put a household's heads
+   * between 30 and 52 metres underground.
+   */
+  setPosture(seat: SeatKind | null, blend: number, seatAboveGround?: number): void
   dispose(): void
 }
 
@@ -111,15 +142,39 @@ export const createChibiBody = (options: ChibiBodyOptions): PlayerBody => {
     equipment.setLoadout(loadout)
   }
 
+  /** The seat being held, how far into it, and how high it stands. `setPosture`. */
+  let posture: SeatKind | null = null
+  let postureBlend = 0
+  let postureSeatHeight = 0
+
   return {
     object: character.group,
     sync: (position: Vector3, _lookYaw: number, dt: number): void => {
       character.setPosition(position)
+      // The root lift, before the pose rather than after: `Character.update`
+      // reads nothing from the group's position, and doing it here means the
+      // one write to `group.position.y` in this function is the final one.
+      if (posture && postureBlend > 0) {
+        character.group.position.y += seatRootLift(postureSeatHeight, scale, postureBlend)
+      }
       character.update(dt)
+      // Between the gait and the equipment, and it has to be both: after
+      // `character.update`, which resets the pose and runs the walk cycle, so
+      // the seat wins; before `equipment.update`, which reads the bones it is
+      // parented to and would otherwise carry a sword through a chair on last
+      // frame's matrix.
+      if (posture && postureBlend > 0) {
+        applyPosture(character.bones, posture, postureBlend)
+      }
       // After the character, not before: the draw/stow animation re-parents an
       // item to a bone, and a bone that has not been posed this frame hands it
       // last frame's matrix.
       equipment?.update(dt)
+    },
+    setPosture: (seat: SeatKind | null, blend: number, seatAboveGround = 0): void => {
+      posture = seat
+      postureBlend = blend
+      postureSeatHeight = seatAboveGround
     },
     setVisible: (visible: boolean): void => {
       character.group.visible = visible

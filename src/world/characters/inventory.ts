@@ -49,12 +49,24 @@ export const DRAWN_STATES: readonly DrawnState[] = ['sheathed', 'mainHand', 'two
  * by `ITEM_SLOT`, so naming `sword` here would be a second place to update when
  * a mace arrives.
  */
-const DRAWN_SOURCE: Record<DrawnState, { slot: EquipSlot; kind: ItemKind | null } | null> = {
+const DRAWN_SOURCE: Record<DrawnState, { slot: EquipSlot; kinds: readonly ItemKind[] | null } | null> = {
   sheathed: null,
-  mainHand: { slot: 'mainHand', kind: null },
-  twoHand: { slot: 'back', kind: 'greatsword' },
-  bow: { slot: 'back', kind: 'bow' },
-  crossbow: { slot: 'back', kind: 'crossbow' }
+  mainHand: { slot: 'mainHand', kinds: null },
+  // ── A list rather than one kind, and that is the whole change ──────────────
+  //
+  // `mainHand` never named a kind — anything in that slot is drawn by it — but
+  // the three back-slot states each named exactly one, so a war axe in the back
+  // slot could not satisfy `twoHand` and a longbow could not satisfy `bow`. The
+  // symptom was not an error: `drawFault` returned `itemNotEquipped`,
+  // `setDrawn` ignored the request, and the character simply never took the
+  // weapon off their back.
+  //
+  // Which kinds share a state is the same question `combatPoses.POSE_FAMILY`
+  // answers, and the two must agree — a kind listed here whose pose family is
+  // null would animate its draw as nothing at all.
+  twoHand: { slot: 'back', kinds: ['greatsword', 'warAxe'] },
+  bow: { slot: 'back', kinds: ['bow', 'huntingBow'] },
+  crossbow: { slot: 'back', kinds: ['crossbow'] }
 }
 
 /**
@@ -100,7 +112,7 @@ export const drawFault = (loadout: EquipmentLoadout, state: DrawnState): DrawFau
     return null
   }
   const held = loadout[source.slot]
-  if (held === null || (source.kind !== null && held !== source.kind)) {
+  if (held === null || (source.kinds !== null && !source.kinds.includes(held))) {
     return 'itemNotEquipped'
   }
   // A shield is never stowed — `STOW_SOCKET.shield` is the left hand, the same

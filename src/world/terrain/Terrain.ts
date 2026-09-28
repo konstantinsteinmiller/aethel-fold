@@ -12,6 +12,7 @@ import { TERRAIN_PALETTE_SLOTS } from './heightfieldCore'
 import type { SculptPatch } from './SculptField'
 import type { TerrainWorkerResult } from './terrainWorker'
 import { TerrainMaterial } from './TerrainMaterial'
+import { packWaterBodies, setWaterTable, SHORE_DRY_TOP, type WaterBody } from './waterLevel'
 
 /**
  * ─── Streaming chunked terrain ──────────────────────────────────────────────
@@ -388,6 +389,90 @@ export class Terrain {
    */
   setSculptDelta(patch: SculptPatch): void {
     this.pool.setSculptDelta(patch)
+  }
+
+  // ── water ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Tells the ground where the water is, so it can grow a shore.
+   *
+   * The engine holds **no** opinion about which bodies of water exist — that is
+   * content, and `src/world/terrain/` may not import a chapter to find out. This
+   * is the whole of the contract in the other direction: hand over a list of
+   * rectangles with surface heights (`waterLevel.ts::WaterBody`) and every
+   * terrain chunk built from here on paints sand at the waterline; hand over an
+   * empty list and the world is exactly what it was before this existed.
+   *
+   * Three things have to happen and the order is not negotiable:
+   *
+   * 1. **this** module graph's table, for the inline no-worker fallback and for
+   *    `grassPlacement.ts`, which runs on the main thread;
+   * 2. the workers', broadcast ahead of any build that has not been queued yet;
+   * 3. a rebuild of the chunks already standing. Without it the ring of ground
+   *    the player is looking at keeps its old paint until they walk far enough
+   *    to unload it — the identical trap `GrassField.rebuild()` exists for, and
+   *    grass has to be rebuilt too (see the note there; `World` owns that call
+   *    because it owns the field).
+   *
+   * Returns the number of live chunks queued for rebuild, like
+   * `invalidateRegion`, so a caller can log that the shoreline actually landed.
+   *
+   * ── TODO(shore-wiring): nothing calls this yet ─────────────────────────────
+   *
+   * The chapter's two bodies of water are created in `views/StoryScene.vue`
+   * (`seaPlacement()` and `arlaPlacement()`), and the engine cannot reach them
+   * from here without importing the story — which `CLAUDE.md` forbids. So the
+   * call belongs one level up, wherever `World` learns about water:
+   *
+   * ```ts
+   * world.terrain.setWaterBodies([
+   *   // frame.ts: a square pool, SEA_HALF either side of ISLE, surface SEA_LEVEL
+   *   { minX: ISLE.x - SEA_HALF, minZ: ISLE.z - SEA_HALF,
+   *     maxX: ISLE.x + SEA_HALF, maxZ: ISLE.z + SEA_HALF, y: SEA_LEVEL },
+   *   // level.ts: the Arla, one sloped rect — see `waterLevel.ts` on why one
+   *   { minX: RIVER_X - 20, minZ: -130, maxX: RIVER_X + 20, maxZ: 130,
+   *     y: 0, slopeZ: 3.4 / 260 }
+   * ])
+   * world.grass.rebuild()
+   * ```
+   *
+   * Verified by hand over CDP with exactly that call: 49–56 live chunks
+   * rebuilt, the island grew a 13 m beach and the grass stopped 9 m short of the
+   * water. Both lines belong wherever `setGrassExclusions` + `grass.rebuild()`
+   * already run, i.e. inside `onPlaceablesReady`, so the shore lands on the same
+   * frame the village footprints do.
+   *
+   * The scatter's water-awareness can ride on the same table rather than a
+   * second one: once this has been called, `waterLevel.ts::waterLevelAt(x, z)`
+   * *is* the main thread's water-height sampler.
+   */
+  setWaterBodies(bodies: readonly WaterBody[]): number {
+    const table = packWaterBodies(bodies)
+    setWaterTable(table)
+    this.pool.setWaterTable(table)
+
+    if (bodies.length === 0) {
+      return 0
+    }
+
+    // The affected ground is the union of the bodies' rectangles, grown by the
+    // widest the band can reach. It is a *height*, not a distance, so the
+    // horizontal reach depends on the slope — on a 1 % mudflat `SHORE_DRY_TOP`
+    // would be 230 m away. `SHORE_DRY_TOP * 100` is that mudflat's worth of
+    // margin and costs nothing: `invalidateRegion` walks live chunks only, and
+    // there are never more than a few hundred of those.
+    let minX = Number.POSITIVE_INFINITY
+    let minZ = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let maxZ = Number.NEGATIVE_INFINITY
+    for (const body of bodies) {
+      minX = Math.min(minX, body.minX, body.maxX)
+      maxX = Math.max(maxX, body.minX, body.maxX)
+      minZ = Math.min(minZ, body.minZ, body.maxZ)
+      maxZ = Math.max(maxZ, body.minZ, body.maxZ)
+    }
+    const margin = SHORE_DRY_TOP * 100
+    return this.invalidateRegion(minX - margin, minZ - margin, maxX + margin, maxZ + margin)
   }
 
   /**

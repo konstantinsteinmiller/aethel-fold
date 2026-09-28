@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { prependBaseUrl } from '@/utils/function'
 
-// 3d-world draws all gameplay art programmatically (Canvas 2D) and uses
+// aethel-fold draws all gameplay art programmatically (Canvas 2D) and uses
 // inline SVG for HUD icons, so the preloader only has to decode two pieces of
 // UI chrome. SFX decode on first play (see `useSound.ts`) and are warmed on an
 // idle slot after first paint; the splash exits as soon as the bundle parses.
@@ -211,9 +211,11 @@ export const loadAudioBuffer = async (src: string): Promise<AudioBuffer | null> 
 // The only bitmaps on the critical path are UI chrome. Gameplay art is
 // procedural, so there is nothing else to block first paint on.
 const CRITICAL_IMAGE_SRCS: ReadonlyArray<string> = [
-  // Splash logo — decoded before the splash mounts so FLogoProgress never
-  // paints a blank box on the first frame.
-  '/images/logo/logo_256x256.webp',
+  // The splash logo used to be decoded here so `FLogoProgress` never painted a
+  // blank box on its first frame. It is now `ArlaanLogo.vue` — inline SVG, in
+  // the same chunk as the component that mounts it — so there is nothing to
+  // decode and nothing to wait for. Keeping the bitmap on this list would have
+  // gated the loading bar on downloading a logo the game no longer shows.
   // Result-screen ribbon. Small, and needed the moment a siege ends.
   '/images/bg/parchment-ribbon_553x188.webp'
 ]
@@ -238,7 +240,7 @@ const decodeImage = (src: string): Promise<void> => {
 // ─── Off-hot-path background warm-up ───────────────────────────────────────
 // Runs ONCE, after the splash has hidden (hot path done + first paint).
 //
-// 3d-world draws every block, enemy and background layer procedurally, so
+// aethel-fold draws every block, enemy and background layer procedurally, so
 // there is no gameplay art to decode here — the only deferred work is the SFX
 // buffer decode. Doing it on an idle slot means the first explosion of a
 // session doesn't pay a decode cost mid-frame, without delaying first paint.
@@ -258,7 +260,7 @@ const runBackgroundWarmup = (): void => {
 export default () => {
   const preloadAssets = async (): Promise<void> => {
     // ── HOT PATH ──
-    // 3d-world has NO gameplay bitmaps: blocks, enemies, projectiles and the
+    // aethel-fold has NO gameplay bitmaps: blocks, enemies, projectiles and the
     // whole background are drawn from code. The only critical images are the
     // splash logo and the result-screen ribbon, and the renderer chunk itself.
     //

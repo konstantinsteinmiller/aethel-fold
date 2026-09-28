@@ -3,6 +3,7 @@ import type { EyeStyle, MouthStyle } from './face'
 import {
   DEFAULT_APPEARANCE,
   type BeardStyle,
+  type BuildStyle,
   type BrowStyle,
   type CharacterAppearance,
   type HairStyle,
@@ -107,6 +108,7 @@ const BEARD_ORDER: Record<BeardStyle, true> = {
 }
 const BROW_ORDER: Record<BrowStyle, true> = { fine: true, bushy: true }
 const NOSE_ORDER: Record<NoseStyle, true> = { none: true, button: true, round: true, hooked: true, broad: true }
+const BUILD_ORDER: Record<BuildStyle, true> = { slight: true, average: true, broad: true }
 
 const EYE_ORDER: Record<EyeStyle, true> = {
   bright: true, wide: true, close: true, tall: true, small: true,
@@ -122,6 +124,7 @@ export const HAIR_STYLES = Object.keys(HAIR_ORDER) as HairStyle[]
 export const BEARD_STYLE_OPTIONS = Object.keys(BEARD_ORDER) as BeardStyle[]
 export const BROW_STYLE_OPTIONS = Object.keys(BROW_ORDER) as BrowStyle[]
 export const NOSE_STYLE_OPTIONS = Object.keys(NOSE_ORDER) as NoseStyle[]
+export const BUILD_STYLE_OPTIONS = Object.keys(BUILD_ORDER) as BuildStyle[]
 export const EYE_STYLE_OPTIONS = Object.keys(EYE_ORDER) as EyeStyle[]
 export const MOUTH_STYLE_OPTIONS = Object.keys(MOUTH_ORDER) as MouthStyle[]
 
@@ -175,6 +178,8 @@ const isBrowStyle = (value: unknown): value is BrowStyle =>
   typeof value === 'string' && (BROW_STYLE_OPTIONS as string[]).includes(value)
 const isNoseStyle = (value: unknown): value is NoseStyle =>
   typeof value === 'string' && (NOSE_STYLE_OPTIONS as string[]).includes(value)
+const isBuildStyle = (value: unknown): value is BuildStyle =>
+  typeof value === 'string' && (BUILD_STYLE_OPTIONS as string[]).includes(value)
 
 /** Rounds and clamps into `[0, length)`. Never NaN — see `sanitiseAppearance`. */
 const clampIndex = (value: number, length: number): number => {
@@ -244,6 +249,12 @@ export const sanitiseAppearance = (raw: unknown): CharacterAppearance => {
   }
   if (isNoseStyle(data.nose)) {
     appearance.nose = data.nose
+  }
+  // Same rule again, and the same reason: `average` reproduces the shipped
+  // torso exactly, so a blob written before builds existed reloads as the body
+  // it was drawn with rather than gaining or losing mass.
+  if (isBuildStyle(data.build)) {
+    appearance.build = data.build
   }
   if (typeof data.skinTone === 'number') {
     appearance.skinTone = clampIndex(data.skinTone, SKIN_TONE_SWATCHES.length) as SkinTone
@@ -347,6 +358,7 @@ export const randomAppearance = (random: () => number = Math.random): CharacterA
     beard: random() < (sex === 'female' ? 0.05 : 0.6) ? pick(BEARD_STYLE_OPTIONS.slice(1)) : 'none',
     brows: pick(BROW_STYLE_OPTIONS),
     nose: pick(NOSE_STYLE_OPTIONS),
+    build: pick(BUILD_STYLE_OPTIONS),
     // Rolled too — a city of a hundred that all share one face is the thing the
     // ten eyes and five mouths exist to prevent.
     eyes: pick(EYE_STYLE_OPTIONS),

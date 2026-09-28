@@ -1,6 +1,6 @@
 import { Color, Vector3 } from 'three'
 import { C } from '../art/palette'
-import type { CharacterAppearance, HairStyle, HeadShape, Sex } from './equipment'
+import type { BuildStyle, CharacterAppearance, HairStyle, HeadShape, Sex } from './equipment'
 import { HEAD } from './face'
 import { limbMesh } from './limb'
 
@@ -105,7 +105,24 @@ export const HAIR_COLOURS: readonly ColourStop[] = [
   { base: C.sandstoneBase, dark: deriveDark(C.sandstoneBase) },
   { base: C.strawBase, dark: deriveDark(C.strawBase) },
   { base: C.rockShadow, dark: deriveDark(C.rockShadow) },
-  { base: C.birchBase, dark: deriveDark(C.birchBase) }
+  { base: C.birchBase, dark: deriveDark(C.birchBase) },
+  /**
+   * Dark blond.
+   *
+   * **Appended, never inserted**, and that is the whole reason this comment
+   * exists: an appearance blob stores `hairColour` as an *index*, so putting a
+   * new stop anywhere but the end silently recolours every character anyone has
+   * ever saved. Five was the shipped table and stays the shipped table; this is
+   * the sixth.
+   *
+   * It exists because the protagonist's hair is canon and the table could not
+   * express it. `Chroniken von Arlaan` gives Athalus "shoulder-length **dark
+   * blond** hair", which sits between `strawBase` (a light blond that reads as
+   * white at 20 m) and `sandstoneBase` (which is plainly red). `strawShadow` is
+   * the straw family's own dark end, so this is the same hair the table already
+   * had, two bands down — which is exactly what "dark blond" means.
+   */
+  { base: C.strawShadow, dark: deriveDark(C.strawShadow) }
 ]
 
 /**
@@ -355,6 +372,76 @@ export interface BuildProfile {
 export const BUILDS: Record<Sex, BuildProfile> = {
   male: { hipRadius: 0.15, chestRadius: 0.17, torsoCrossSection: [1.15, 0.85], limbScale: 1 },
   female: { hipRadius: 0.163, chestRadius: 0.15, torsoCrossSection: [1.08, 0.9], limbScale: 0.94 }
+}
+
+/**
+ * ─── Build, as a modifier on top of sex ─────────────────────────────────────
+ *
+ * Multipliers rather than a second table of absolutes, and that is the whole
+ * design: sex owns the *sign of the taper* — male narrows toward the hips,
+ * female widens — and build owns the *mass*. Expressing build as its own set of
+ * radii would let a "broad female" silently acquire a male torso's taper, which
+ * is the one cue `BUILDS` measured as load-bearing.
+ *
+ * ── The numbers, and what they buy on screen ────────────────────────────────
+ *
+ * `broad` is +11 % on the chest and +12 % on limb mass against `slight`'s −9 %
+ * and −8 %. On the male profile that is a chest half-width running 0.185 → 0.155
+ * — **30 mm of outline**, or about 1.5 px at 20 m and 6 px at 8 m — plus a
+ * visibly heavier arm, which is the part that actually reads because the A-pose
+ * puts the arm *outside* the torso in front view (`BUILDS` says so).
+ *
+ * The depth term moves with it and slightly further: a heavy figure is heaviest
+ * in profile, where the arms are not in the way, and that is the view a
+ * third-person camera spends most of its time near.
+ *
+ * ── What is deliberately not scaled ────────────────────────────────────────
+ *
+ * The **head**, for the reason `BUILDS` gives for not shrinking a female one:
+ * the head is the unit "three heads tall" is measured in, so scaling it changes
+ * how big the *figure* reads rather than how heavy it is. A broad character with
+ * a bigger head is not broader, it is closer.
+ *
+ * The **hips**, less than the chest (1.06 against 1.11). A build that widens
+ * hips and chest equally is a figure that has been scaled, not built; keeping
+ * the hips back is what turns mass into a shoulder line.
+ */
+export interface BuildModifier {
+  hip: number
+  chest: number
+  /** Scales `torsoCrossSection[0]`, which is depth. See `BuildProfile`. */
+  depth: number
+  limb: number
+}
+
+export const BUILD_STYLES: Record<BuildStyle, BuildModifier> = {
+  slight: { hip: 0.95, chest: 0.91, depth: 0.94, limb: 0.92 },
+  // Exactly 1 on every axis. `average` must reproduce `BUILDS[sex]` byte for
+  // byte — see the note on `DEFAULT_APPEARANCE.build`.
+  average: { hip: 1, chest: 1, depth: 1, limb: 1 },
+  broad: { hip: 1.06, chest: 1.11, depth: 1.08, limb: 1.12 }
+}
+
+/**
+ * The body a given appearance is built from.
+ *
+ * The single accessor `chibiGeometry` uses, so sex and build cannot be combined
+ * two different ways in two places. `BUILDS` stays exported because three suites
+ * measure clearances against `BUILDS.male` directly and those measurements are
+ * about the *shipped* figure, which is `average` by definition.
+ */
+export const buildFor = (sex: Sex, style: BuildStyle = 'average'): BuildProfile => {
+  const base = BUILDS[sex]
+  // Total by construction: a blob from a future build carrying an unknown style
+  // gets the shipped figure rather than a crash, which is the same rule
+  // `sanitiseAppearance` applies one layer up.
+  const modifier = BUILD_STYLES[style] ?? BUILD_STYLES.average!
+  return {
+    hipRadius: base.hipRadius * modifier.hip,
+    chestRadius: base.chestRadius * modifier.chest,
+    torsoCrossSection: [base.torsoCrossSection[0]! * modifier.depth, base.torsoCrossSection[1]!],
+    limbScale: base.limbScale * modifier.limb
+  }
 }
 
 // ─── Head shape ─────────────────────────────────────────────────────────────

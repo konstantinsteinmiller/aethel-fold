@@ -25,16 +25,31 @@ import {
   maxPatchesPerChunk,
   setGrassPalette
 } from '@/world/grass/grassPlacement'
-import { DEFAULT_HEIGHTFIELD_PARAMS, type HeightfieldParams } from '@/world/terrain/heightfieldCore'
+import {
+  DEFAULT_HEIGHTFIELD_PARAMS,
+  type HeightfieldParams,
+  TERRAIN_PALETTE_SLOTS
+} from '@/world/terrain/heightfieldCore'
 
 /**
- * Six flat greens standing in for the terrain palette. The real one is built
- * from `THREE.Color` in `World`, which this module deliberately cannot import —
- * `grassPlacement.ts` is three.js-free so it can move onto a worker.
+ * Flat stand-ins for the terrain palette, one triple per `TERRAIN_PALETTE_SLOTS`
+ * entry. The real one is built from `THREE.Color` in `World`, which this module
+ * deliberately cannot import — `grassPlacement.ts` is three.js-free so it can
+ * move onto a worker.
+ *
+ * Sized from the slot list rather than written out to a length, because the list
+ * grows: `sandWet` was appended for the shoreline band, and a hand-counted array
+ * would have gone on passing while feeding `groundColorCore` an `undefined` it
+ * turns into `NaN` — which every comparison then silently accepts (AAA-graphics
+ * §3). The assertion below is the guard.
  */
 const palette = new Float32Array([
-  0.35, 0.5, 0.14, 0.19, 0.28, 0.08, 0.06, 0.11, 0.05, 0.38, 0.4, 0.14, 0.28, 0.14, 0.06, 0.58, 0.45, 0.26
+  0.35, 0.5, 0.14, 0.19, 0.28, 0.08, 0.06, 0.11, 0.05, 0.38, 0.4, 0.14, 0.28, 0.14, 0.06, 0.58, 0.45, 0.26, 0.27, 0.23,
+  0.14
 ])
+if (palette.length !== TERRAIN_PALETTE_SLOTS.length * 3) {
+  throw new Error(`test palette has ${palette.length / 3} slots, TERRAIN_PALETTE_SLOTS has ${TERRAIN_PALETTE_SLOTS.length}`)
+}
 setGrassPalette(palette)
 
 const params: HeightfieldParams = { ...DEFAULT_HEIGHTFIELD_PARAMS }

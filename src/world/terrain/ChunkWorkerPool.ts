@@ -139,6 +139,24 @@ export class ChunkWorkerPool {
     }
   }
 
+  /**
+   * Broadcasts the packed water table (`waterLevel.ts`) to every worker.
+   *
+   * Same FIFO ordering guarantee `setSculptDelta` relies on, and the same
+   * nothing-to-do for the inline fallback — that path runs `groundColorCore` in
+   * *this* module graph, whose `waterLevel` state the caller has already set.
+   *
+   * The table is cloned per worker rather than transferred. Transferring would
+   * detach it after the first `postMessage` and hand the second worker a
+   * zero-length array — a shoreline that exists on some chunks and not others,
+   * depending on which worker happened to build them.
+   */
+  setWaterTable(table: Float32Array): void {
+    for (const worker of this.workers) {
+      worker.postMessage({ type: 'water', table })
+    }
+  }
+
   private buildInline(id: number, requests: ChunkRequest[]): TerrainWorkerResult {
     const started = performance.now()
     return {

@@ -34,7 +34,7 @@ import { RUN_KEY } from '@/keys'
 import { pushFx } from '@/use/useTowerVfx'
 
 /**
- * ─── 3d-world — simulation ───────────────────────────────────────────────
+ * ─── aethel-fold — simulation ───────────────────────────────────────────────
  *
  * Owns the tower, the enemies, the projectiles and the wave clock. Runs on a
  * fixed 60 Hz accumulator so behaviour is frame-rate independent and a

@@ -3,7 +3,7 @@ import { prependBaseUrl } from '@/utils/function'
 /**
  * ─── Art contract ───────────────────────────────────────────────────────────
  *
- * 3d-world ships with ZERO gameplay bitmaps: every block, enemy and
+ * aethel-fold ships with ZERO gameplay bitmaps: every block, enemy and
  * background layer is drawn procedurally in `useTowerArt.ts` from the palettes
  * below. That keeps the download tiny, makes the art resolution-independent
  * (crisp at any DPR and any zoom), and means the game is playable the instant

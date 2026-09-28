@@ -120,6 +120,8 @@ export class PlayerCollisionWorld implements CollisionWorld {
   private lastSource: Placement[] | null = null
   private lastLength = -1
   private dirty = true
+  /** Refills the transient batch around a point — see `setTransientSource`. */
+  private transientSource: ((x: number, z: number) => void) | null = null
 
   constructor(options: CollisionWorldOptions) {
     this.heightAt = options.heightAt
@@ -168,6 +170,34 @@ export class PlayerCollisionWorld implements CollisionWorld {
   }
 
   /**
+   * Installs the thing that refills the transient batch, per query.
+   *
+   * ── Why this is pulled and not pushed ──────────────────────────────────────
+   *
+   * It used to be pushed: `World.frame()` called `beginTransientColliders()` and
+   * then queried the scatter index around the *player*, once a frame, inside the
+   * `firstPerson` branch. That is correct exactly when there is one mover and
+   * the world knows where it is — and the chapter has neither. `/story` runs the
+   * `story` camera mode, so the push never happened at all and every actor in
+   * the chapter, the player included, walked through every trunk in the wood
+   * while the sandbox two routes away collided perfectly. Worse, the crowd path
+   * had already had to work around it, re-querying by hand per character.
+   *
+   * Pulling instead makes the collision world self-sufficient: whoever asks a
+   * question gets the scatter around **the point they asked about**, so fourteen
+   * combatants spread over a clearing each collide against their own
+   * surroundings rather than against the player's, and no caller has to remember
+   * to prime anything. `null` restores the manual behaviour, which is what the
+   * unit tests use.
+   *
+   * The source must not allocate: it is called once per `resolveMove`, i.e. once
+   * per actor per frame (GDD §5.2).
+   */
+  setTransientSource(source: ((x: number, z: number) => void) | null): void {
+    this.transientSource = source
+  }
+
+  /**
    * Adds one upright cylinder for this frame.
    *
    * Never walkable. A tree trunk is something to walk *around*; making it
@@ -192,6 +222,24 @@ export class PlayerCollisionWorld implements CollisionWorld {
     this.transientCount++
   }
 
+  /**
+   * Settles the placement list and refills the transients around (x, z).
+   *
+   * Deliberately unconditional — no "the last refill was close enough" cache.
+   * The centres genuinely differ (one per actor per frame), and a cache would
+   * also have to be invalidated whenever a terrain chunk streamed out from under
+   * it, which is a second thing to keep in step for a saving of a few thousand
+   * multiplies. Measured shape: nine map lookups and ~500 rejected instances per
+   * call, ~20 calls a frame in the chapter.
+   */
+  private refreshTransients(x: number, z: number): void {
+    this.sync()
+    if (!this.transientSource) {
+      return
+    }
+    this.transientCount = 0
+    this.transientSource(x, z)
+  }
 
   /** Kept in sync with the controller so the vertical overlap test stays honest. */
   setPlayerMetrics(playerHeight: number, stepHeight: number): void {
@@ -270,7 +318,9 @@ export class PlayerCollisionWorld implements CollisionWorld {
     radius: number,
     y: number
   ): { x: number; z: number } {
-    this.sync()
+    // Scatter around **where the mover is**, not around whoever asked last. See
+    // `setTransientSource`.
+    this.refreshTransients(fromX, fromZ)
 
     // Colliders the player can simply step onto never block; ones that start
     // above the head are irrelevant. Both bounds are computed once, outside the
@@ -324,6 +374,82 @@ export class PlayerCollisionWorld implements CollisionWorld {
   // ── Depenetration ────────────────────────────────────────────────────────
 
   /** Pushes `_resolved` out of one collider. Returns true if it had to. */
+  /**
+   * First blocking hit along a segment, as a fraction of it. 1 when clear.
+   *
+   * ── A slab test, in the collider's own frame ──────────────────────────────
+   *
+   * Every collider here is either an oriented box or a vertical cylinder, and
+   * both reduce to a slab test once the segment is rotated into the collider's
+   * frame — which is the same trick `pushOut` uses, for the same reason: the box
+   * is an AABB there and the test is four compares.
+   *
+   * Walkable colliders are skipped. A bridge deck blocks a *walk* and does not
+   * block a *look*, and treating the two the same would have the camera refuse
+   * to see across the Arla.
+   *
+   * Allocation-free and called a few times a frame by `DialogueCamera`. The
+   * broadphase is the same `bound` circle the move path uses, rejected against
+   * the segment's own bounding circle rather than against a point.
+   */
+  segmentHit(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): number {
+    // The collider list is rebuilt lazily from the placement store, and every
+    // other public entry point opens with this. Leaving it out cost an
+    // afternoon: `segmentHit` reported a clear line through the storyteller's
+    // hut because it was reading an array that had never been filled — the
+    // dialogue camera then had *better* information than before and still put
+    // itself inside a wall, which is the most confusing shape a bug can take.
+    //
+    // Transients are refreshed around the segment's **start**, which for the
+    // dialogue camera is the speaker's head — the one end guaranteed not to be
+    // inside anything. Without it this test would read whatever batch the last
+    // `resolveMove` happened to leave behind, so the same question would get
+    // different answers depending on which actor moved last.
+    this.refreshTransients(x0, z0)
+
+    const dx = x1 - x0
+    const dy = y1 - y0
+    const dz = z1 - z0
+    // Segment bounding circle in XZ, for the broadphase.
+    const midX = (x0 + x1) * 0.5
+    const midZ = (z0 + z1) * 0.5
+    const halfLength = Math.sqrt(dx * dx + dz * dz) * 0.5
+    const loY = y0 < y1 ? y0 : y1
+    const hiY = y0 < y1 ? y1 : y0
+
+    let nearest = 1
+    const total = this.count + this.transientCount
+    for (let i = 0; i < total; i++) {
+      const collider = this.colliders[i]!
+      if (collider.walkable) {
+        continue
+      }
+      // Vertical reject first: it is one compare and throws out the ground
+      // clutter a horizontal shot flies over.
+      if (collider.topY <= loY || collider.baseY >= hiY) {
+        continue
+      }
+      const toX = collider.x - midX
+      const toZ = collider.z - midZ
+      const reach = collider.bound + halfLength
+      if (toX * toX + toZ * toZ > reach * reach) {
+        continue
+      }
+
+      const hit =
+        collider.kind === KIND_CYLINDER
+          ? segmentVsCylinder(collider, x0, y0, z0, dx, dy, dz)
+          : segmentVsBox(collider, x0, y0, z0, dx, dy, dz)
+      if (hit < nearest) {
+        nearest = hit
+        if (nearest <= 0) {
+          return 0
+        }
+      }
+    }
+    return nearest
+  }
+
   private pushOut(collider: Collider, radius: number, dx: number, dz: number): boolean {
     if (collider.kind === KIND_CYLINDER) {
       const reach = collider.radius + radius
@@ -486,3 +612,156 @@ const containsPoint = (collider: Collider, dx: number, dz: number): boolean => {
 
 export const createCollisionWorld = (options: CollisionWorldOptions): PlayerCollisionWorld =>
   new PlayerCollisionWorld(options)
+
+/**
+ * ─── Segment tests, shared by `segmentHit` ──────────────────────────────────
+ *
+ * Both return the entry fraction in `[0, 1]`, or 1 for a miss. Both are written
+ * as free functions rather than methods so the hot loop above does not carry a
+ * `this` through a branch it takes tens of times per call.
+ *
+ * A segment that *starts inside* the volume returns 0. That is the right answer
+ * for a camera — a lens already inside a wall is maximally blocked — and it is
+ * the case a naive slab test gets wrong by reporting the exit face.
+ */
+
+/** Slab test in the box's own frame, where it is an AABB. */
+const segmentVsBox = (
+  collider: Collider,
+  x0: number,
+  y0: number,
+  z0: number,
+  dx: number,
+  dy: number,
+  dz: number
+): number => {
+  // Into the collider's frame: translate to its centre, then rotate.
+  const relX = x0 - collider.x
+  const relZ = z0 - collider.z
+  const localX = collider.cos * relX - collider.sin * relZ
+  const localZ = collider.sin * relX + collider.cos * relZ
+  const localDx = collider.cos * dx - collider.sin * dz
+  const localDz = collider.sin * dx + collider.cos * dz
+
+  let enter = 0
+  let exit = 1
+
+  // X slab.
+  if (localDx > -1e-9 && localDx < 1e-9) {
+    if (localX < -collider.halfX || localX > collider.halfX) {
+      return 1
+    }
+  } else {
+    const inverse = 1 / localDx
+    let t0 = (-collider.halfX - localX) * inverse
+    let t1 = (collider.halfX - localX) * inverse
+    if (t0 > t1) {
+      const swap = t0
+      t0 = t1
+      t1 = swap
+    }
+    if (t0 > enter) enter = t0
+    if (t1 < exit) exit = t1
+    if (enter > exit) return 1
+  }
+
+  // Z slab.
+  if (localDz > -1e-9 && localDz < 1e-9) {
+    if (localZ < -collider.halfZ || localZ > collider.halfZ) {
+      return 1
+    }
+  } else {
+    const inverse = 1 / localDz
+    let t0 = (-collider.halfZ - localZ) * inverse
+    let t1 = (collider.halfZ - localZ) * inverse
+    if (t0 > t1) {
+      const swap = t0
+      t0 = t1
+      t1 = swap
+    }
+    if (t0 > enter) enter = t0
+    if (t1 < exit) exit = t1
+    if (enter > exit) return 1
+  }
+
+  // Y slab. Not rotated — the collider's Y axis is the world's.
+  if (dy > -1e-9 && dy < 1e-9) {
+    if (y0 < collider.baseY || y0 > collider.topY) {
+      return 1
+    }
+  } else {
+    const inverse = 1 / dy
+    let t0 = (collider.baseY - y0) * inverse
+    let t1 = (collider.topY - y0) * inverse
+    if (t0 > t1) {
+      const swap = t0
+      t0 = t1
+      t1 = swap
+    }
+    if (t0 > enter) enter = t0
+    if (t1 < exit) exit = t1
+    if (enter > exit) return 1
+  }
+
+  return enter
+}
+
+/** Ray vs infinite cylinder in XZ, clipped by the collider's own Y slab. */
+const segmentVsCylinder = (
+  collider: Collider,
+  x0: number,
+  y0: number,
+  z0: number,
+  dx: number,
+  dy: number,
+  dz: number
+): number => {
+  const relX = x0 - collider.x
+  const relZ = z0 - collider.z
+  const a = dx * dx + dz * dz
+  const radiusSquared = collider.radius * collider.radius
+
+  let enter = 0
+  let exit = 1
+
+  if (a < 1e-12) {
+    // Vertical segment: either inside the circle for its whole length or never.
+    if (relX * relX + relZ * relZ > radiusSquared) {
+      return 1
+    }
+  } else {
+    const b = 2 * (relX * dx + relZ * dz)
+    const c = relX * relX + relZ * relZ - radiusSquared
+    const discriminant = b * b - 4 * a * c
+    if (discriminant < 0) {
+      return 1
+    }
+    const root = Math.sqrt(discriminant)
+    const inverse = 1 / (2 * a)
+    const t0 = (-b - root) * inverse
+    const t1 = (-b + root) * inverse
+    if (t0 > enter) enter = t0
+    if (t1 < exit) exit = t1
+    if (enter > exit) return 1
+  }
+
+  if (dy > -1e-9 && dy < 1e-9) {
+    if (y0 < collider.baseY || y0 > collider.topY) {
+      return 1
+    }
+  } else {
+    const inverse = 1 / dy
+    let t0 = (collider.baseY - y0) * inverse
+    let t1 = (collider.topY - y0) * inverse
+    if (t0 > t1) {
+      const swap = t0
+      t0 = t1
+      t1 = swap
+    }
+    if (t0 > enter) enter = t0
+    if (t1 < exit) exit = t1
+    if (enter > exit) return 1
+  }
+
+  return enter
+}

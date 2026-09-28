@@ -2,6 +2,7 @@ import type { Object3D, PerspectiveCamera } from 'three'
 import { Group, Vector3 } from 'three'
 import type { CollisionWorld, Placement } from '../level/types'
 import type { CharacterAppearance, EquipmentLoadout } from '../characters/equipment'
+import type { SeatKind } from '../combat/postures'
 import { createCapsuleMesh, type PlayerCapsule } from './capsuleMesh'
 import { createChibiBody, type PlayerBody } from './chibiBody'
 import { type ColliderDefinition, createCollisionWorld, type PlayerCollisionWorld } from './collision'
@@ -107,10 +108,32 @@ export interface Player {
   setEnabled(enabled: boolean): void
   /** Shows the capsule and swings the camera onto a boom behind it. */
   setThirdPerson(active: boolean): void
+  /**
+   * Holds a seated pose on the player's body, or lets it go.
+   *
+   * The sandbox's half of `world/interaction/`: `SitController` says which seat
+   * and how far into it, and this puts it on the bones. A no-op for the capsule
+   * body, which has no skeleton to pose — a debug cylinder cannot sit down and
+   * pretending it can would be a silent lie about where the player is.
+   *
+   * `seatAboveGround` is the seat's top face over the ground the player stands
+   * on; it buys the root lift a *scaled* figure needs, and the sandbox's figure
+   * is scaled (1.8 m capsule against a 1.56 m rig). See `chibiBody.setPosture`.
+   */
+  setPosture(seat: SeatKind | null, blend: number, seatAboveGround?: number): void
   setColliderSource(source: (() => Placement[]) | null): void
   /** Call after mutating a placement in place — see `PlayerCollisionWorld`. */
   invalidateColliders(): void
   teleport(x: number, y: number, z: number): void
+  /**
+   * Slides the feet horizontally without disturbing the fall.
+   *
+   * The seam `world/interaction/SitController` needs: the last half metre onto
+   * a seat is interpolated rather than walked, and `teleport` clears the
+   * grounded flag — which, called every frame, re-enters the fall on every one
+   * of them. See `PlayerController.slideTo`.
+   */
+  slideTo(x: number, z: number): void
   dispose(): void
 }
 
@@ -310,6 +333,9 @@ export const createPlayer = (options: CreatePlayerOptions): Player => {
       }
       syncMesh()
     },
+    setPosture: (seat: SeatKind | null, blend: number, seatAboveGround = 0): void => {
+      chibi?.setPosture(seat, blend, seatAboveGround)
+    },
     setColliderSource: (source: (() => Placement[]) | null): void => {
       propCollision?.setColliderSource(source)
     },
@@ -318,6 +344,10 @@ export const createPlayer = (options: CreatePlayerOptions): Player => {
     },
     teleport: (x: number, y: number, z: number): void => {
       controller.teleport(x, y, z)
+      syncMesh()
+    },
+    slideTo: (x: number, z: number): void => {
+      controller.slideTo(x, z)
       syncMesh()
     },
     dispose: (): void => {

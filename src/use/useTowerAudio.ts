@@ -4,7 +4,7 @@ import useUser from '@/use/useUser'
 import useSounds from '@/use/useSound'
 
 /**
- * ─── 3d-world audio ──────────────────────────────────────────────────────
+ * ─── aethel-fold audio ──────────────────────────────────────────────────────
  *
  * Two sources, one entry point (`playFx`):
  *

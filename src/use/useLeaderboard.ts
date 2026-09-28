@@ -22,7 +22,7 @@ import { submitNativeScore } from '@/use/useNativeLeaderboard'
  *     one personal best per player.
  */
 
-/** Endpoint root, e.g. `https://3d-world-leaderboard.you.workers.dev`. */
+/** Endpoint root, e.g. `https://aethel-fold-leaderboard.you.workers.dev`. */
 const ENDPOINT = (import.meta.env.VITE_LEADERBOARD_URL ?? '').replace(/\/+$/, '')
 /** Optional shared secret; must match the Worker's `SCORE_SECRET`. */
 const SECRET = import.meta.env.VITE_LEADERBOARD_SECRET ?? ''

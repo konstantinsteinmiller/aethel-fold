@@ -69,3 +69,16 @@ __screenshots__/
 # iOS xcframeworks downloaded by tauri-plugin-levelplay/build.rs
 /src-tauri/plugins/tauri-plugin-levelplay/ios/Frameworks/
 /src/assets/art/
+
+# Piper TTS voice models pulled down by `pnpm voice-over:setup` — a few hundred
+# MB of binary ONNX, reproducible in one command from the casting table in
+# `src/world/story/voices.ts`. The scratch WAVs the generator writes live in
+# `tools/piper/_wav/` and are deleted at the end of every run.
+tools/piper/
+
+# NOTE: `public/speech/**` is deliberately NOT ignored. Those .ogg files are
+# content, not build output: the hand-recorded lines live in the same folders as
+# the generated placeholders and are indistinguishable from them on disk, so an
+# ignore rule here would silently swallow the one kind of file nobody can
+# regenerate. They also have to be in the repo for a platform build to contain
+# any voice-over at all.

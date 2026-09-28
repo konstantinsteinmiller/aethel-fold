@@ -15,7 +15,7 @@ import { limbMesh } from './limb'
 import { BONE_NAMES, type BoneName, boneDefinition } from './rig'
 import { featureMesh, type FeatureScope } from './features'
 import {
-  BUILDS,
+  buildFor,
   HAIRLINE,
   type HairMesh,
   type HeadWarp,
@@ -651,7 +651,7 @@ const parts = (
   profile: ChibiTierProfile = CHIBI_TIERS[0]!
 ): PartSpec[] => {
   const paint = bodyPalette(appearance)
-  const build = BUILDS[appearance.sex]
+  const build = buildFor(appearance.sex, appearance.build)
   const limb = build.limbScale
   const raw: PartSpec[] = []
   /**
@@ -2067,7 +2067,7 @@ export const buildChibiGeometry = (
       if (!grips[side]) {
         continue
       }
-      appendFist(side, BUILDS[appearance.sex].limbScale, paint.skin, {
+      appendFist(side, buildFor(appearance.sex, appearance.build).limbScale, paint.skin, {
         positions,
         normals,
         colors,

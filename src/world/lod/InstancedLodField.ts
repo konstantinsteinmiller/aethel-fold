@@ -189,6 +189,16 @@ export class InstancedLodField {
 
   private instanceCount = 0
   private outlinesEnabled = true
+
+  /**
+   * How much of this field is drawn, in [0, 1]. 1 is solid.
+   *
+   * Multiplied into every instance's dither coverage each frame. It exists for
+   * one thing and is general enough to be worth the two lines: the storyteller's
+   * roof, which has to dissolve while the player is under it (`hut-roof`), and
+   * which is an instanced placement like everything else in a level.
+   */
+  private veil = 1
   private readonly tiers: Tier[] = []
   private readonly sourceMatrices: Float32Array
   private readonly sourcePositions: Float32Array
@@ -635,8 +645,32 @@ export class InstancedLodField {
         }
 
         if (mask !== this.masks[i]) {
-          // Every tier that gained or lost this instance needs a matrix rebuild.
-          dirty |= mask ^ this.masks[i]!
+          // ── Every tier that gained or lost this instance, and it must be OR ─
+          //
+          // This was `mask ^ this.masks[i]`, which is the set of tiers whose
+          // membership *changed* — and which is wrong for exactly one case,
+          // the one `addCell` creates deliberately.
+          //
+          // A new slot is seeded `0xff` ("force a rebuild of whichever tier
+          // claims it on the first update"). On that first update the mask
+          // becomes, say, 1, and `1 ^ 0xff` is `0xfe`: **bit 0 is clear**,
+          // because tier 0 is in both the old value and the new one. So the one
+          // tier that actually gained the instance is the one tier pass 2 skips,
+          // and the instance is left holding the identity matrix — i.e. drawn at
+          // the world origin.
+          //
+          // It self-heals the moment the instance changes tier, which is why it
+          // survived so long: walk toward a prop and it snaps into place. What
+          // it does not survive is a prop that is spawned at a fixed distance and
+          // never crossed a LOD boundary — which is every building in the
+          // storyteller's hamlet, seen from the mark the chapter starts on. The
+          // room was there, its walls, its rafters and its roof were reported as
+          // drawn, and all three were being rendered 1.7 km away at (0, 0, 0).
+          //
+          // `|` is correct in every case and costs a repack of the tier being
+          // left as well as the tier being joined, on a frame where one of them
+          // is being repacked anyway.
+          dirty |= mask | this.masks[i]!
           this.masks[i] = mask
         }
 
@@ -649,7 +683,21 @@ export class InstancedLodField {
             continue
           }
           const tierState = tiers[t]!
-          const coverage = _coverage[t]!
+          // ── The veil rides on the crossfade, not beside it ──────────────
+          //
+          // `coverage` is the *signed* dither coverage this tier is showing:
+          // the crossfading pair carry equal and opposite signs so their two
+          // halves of the ordered pattern tile exactly (see `FADE_FRAGMENT_GLSL`
+          // and the note on `aFade`). Scaling both magnitudes by the same factor
+          // keeps them disjoint and simply shrinks their union, so multiplying
+          // here makes the whole prop see-through *through the mechanism that
+          // is already there* — no second uniform, no transparency, no sorting,
+          // and no extra program.
+          //
+          // It has to be a multiply and not a min or a replace, for exactly that
+          // reason: either of those would break the complementarity and a prop
+          // caught mid-crossfade would show both tiers through each other.
+          const coverage = _coverage[t]! * this.veil
           tierState.fadeArray[tierState.count] = coverage
           tierState.count++
           if (coverage !== 1) {
@@ -718,6 +766,47 @@ export class InstancedLodField {
    * to live as a flag consulted there — setting `.visible = false` from outside
    * would be overwritten on the very next update.
    */
+  /**
+   * Sets the field's veil. See the field itself.
+   *
+   * No `needsUpdate` bookkeeping is required: a veil below 1 makes every
+   * instance's coverage differ from 1, which sets `fading` on its tier, which is
+   * already the condition for uploading the attribute — and the frame the veil
+   * returns to 1, `wasFading` carries one last upload. That is the same
+   * mechanism the crossfade uses and it is why this is two lines rather than a
+   * dirty flag.
+   */
+  setVeil(value: number): void {
+    const next = value < 0 ? 0 : value > 1 ? 1 : value
+    if (next === this.veil) {
+      return
+    }
+    this.veil = next
+    // ── A veiled prop must stop casting a shadow ─────────────────────────
+    //
+    // The dither discard lives in `FADE_FRAGMENT_GLSL`, which is patched into
+    // the *toon* material. The shadow pass does not use that material — three
+    // renders depth with its own `MeshDepthMaterial`, which has none of this
+    // world's patches — so a roof faded to a quarter coverage goes on throwing a
+    // solid, opaque shadow.
+    //
+    // That is not a subtlety. The storyteller's roof covers a 12.8 by 10.8 m
+    // room, the chapter's sun sits high at 0.58 of the day cycle, and the whole
+    // frame act is played underneath it: opening the roof and leaving the shadow
+    // means the player walks into a room they can see the inside of and still
+    // cannot see anything in.
+    //
+    // Threshold rather than a ramp, because `castShadow` is a boolean and the
+    // veil is eased over about a third of a second either way — half coverage is
+    // the frame to switch on, and at that point the roof is already visibly
+    // dissolving.
+    const casts = next > 0.5
+    for (let t = 0; t < this.tiers.length; t++) {
+      const tier = this.tiers[t]!
+      tier.mesh.castShadow = casts && t <= this.options.shadowMaxTier
+    }
+  }
+
   setOutlinesEnabled(enabled: boolean): void {
     this.outlinesEnabled = enabled
     if (!enabled) {

@@ -7,6 +7,33 @@
 
     WorldPerfPanel(:world="world")
 
+    //- The "[E] Sit" prompt over a bench, a stool or a chair the player is
+    //- looking at. Same component and same seat layer the chapter uses; `World`
+    //- owns the scan and this polls it. See `world/interaction/`.
+    SeatBillboard(:target="seatLabel" :screen="seatPoint")
+
+    //- ── And the way back up, which cannot be a billboard here ────────────
+    //-
+    //- The chapter draws "press E or Esc to stand" over the seat, because its
+    //- camera is behind the player and the seat is in front of it. This route is
+    //- **first person**, so sitting down puts the seat's anchor 1.03 m directly
+    //- below the camera -- under the player's own chin -- where it projects
+    //- off-screen (measured; the projection actually comes back NaN, the
+    //- degenerate case of a point on the lens). A world-space label is simply
+    //- the wrong tool once the thing being labelled is the thing you are sitting
+    //- on.
+    //-
+    //- So the seated hint is chrome: fixed, bottom centre, in the same place the
+    //- controls hint above already puts a line of text the player needs and does
+    //- not need to aim at.
+    transition(name="hint")
+      div(
+        v-if="seatedHint"
+        class="pointer-events-none absolute inset-x-0 bottom-16 z-20 flex justify-center px-4"
+      )
+        div(class="seat-hint rounded-full bg-slate-950/65 px-3 py-1.5 text-xs font-medium text-white ring-1 ring-amber-200/45 backdrop-blur-[2px]")
+          | {{ t('story.seated', { key: interactKeyLabel }) }}
+
     //- Self-gating on the editor mode, so this renders nothing until "cmonc"
     //- is typed and costs nothing while it's off.
     LevelEditorPanel
@@ -62,15 +89,18 @@
 -->
 
 <script setup lang="ts">
-import { markRaw, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef } from 'vue'
+import { computed, markRaw, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EditorFocusCard from '@/components/organisms/EditorFocusCard.vue'
 import LevelEditorPanel from '@/components/organisms/LevelEditorPanel.vue'
+import SeatBillboard from '@/components/organisms/SeatBillboard.vue'
 import TerrainSculptPanel from '@/components/organisms/TerrainSculptPanel.vue'
 import WaterEditorPanel from '@/components/organisms/WaterEditorPanel.vue'
 import WorldPerfPanel from '@/components/organisms/WorldPerfPanel.vue'
 import WorldSettingsPanel from '@/components/organisms/WorldSettingsPanel.vue'
 import { World } from '@/world/core/World'
+import { bindingFor, keyLabel } from '@/use/useKeybindings'
+import { makeScreenPoint, projectToScreen, type ScreenPoint } from '@/world/story/project'
 
 const { t } = useI18n()
 
@@ -93,6 +123,91 @@ const toggleCameraMode = (): void => {
 
 let observer: ResizeObserver | null = null
 let hintTimer: number | null = null
+
+/**
+ * The seat prompt's projection, as a mutated struct behind a tick.
+ *
+ * The same trade `StoryScene` makes and for the same reason: a new object a
+ * frame for one indicator is 60 allocations a second for a label that changes
+ * what it says twice a minute. The `World` is never handed to Vue (see the
+ * header) -- this polls `world.seatPrompt` and copies three numbers out.
+ */
+const seatRaw = makeScreenPoint()
+const screenTick = ref(0)
+const hasSeat = ref(false)
+const seated = ref(false)
+let seatRaf = 0
+
+const seatPoint = computed<ScreenPoint | null>(() => {
+  screenTick.value
+  return hasSeat.value ? { ...seatRaw } : null
+})
+/**
+ * The billboard only ever draws the **standing** prompt now.
+ *
+ * `seated` is deliberately not routed through it: see the template's note on
+ * why a first-person seated hint cannot be a world-space label.
+ */
+const seatLabel = computed(() => (hasSeat.value && !seated.value ? { seated: false } : null))
+/** The fixed "press E or Esc to stand" line. True whenever the player is on a seat. */
+const seatedHint = computed(() => seated.value)
+/** Read live, so a rebind is reflected in the hint. Matches `NpcBillboard`. */
+const interactKeyLabel = computed(() => {
+  const label = keyLabel(bindingFor('interact'))
+  return label.text ?? (label.i18n ? t(label.i18n) : bindingFor('interact'))
+})
+
+/**
+ * Its own rAF rather than `World.onUpdate`.
+ *
+ * `onUpdate` is called only in story mode -- its comment says so, and the story
+ * depends on where in the frame it lands. `EditorFocusCard` already sets the
+ * precedent for a self-gating poll in this shell, and this is the same shape:
+ * it bumps the tick only when there is something on screen, so a session with
+ * no bench in sight costs Vue nothing.
+ */
+const pumpSeat = (): void => {
+  const instance = world.value
+  if (instance) {
+    const prompt = instance.seatPrompt
+    if (prompt) {
+      projectToScreen(instance.camera, prompt.at.x, prompt.at.y, prompt.at.z, seatRaw)
+      // `onScreen` gates the *billboard* only. The seated hint is fixed chrome
+      // and must not inherit that gate -- while seated the anchor is on the lens
+      // and never passes it, which is exactly the case the hint exists for.
+      hasSeat.value = seatRaw.onScreen
+      seated.value = prompt.seated
+      screenTick.value++
+    } else if (hasSeat.value || seated.value) {
+      hasSeat.value = false
+      seated.value = false
+    }
+  }
+  seatRaf = requestAnimationFrame(pumpSeat)
+}
+
+/**
+ * The two keys the sandbox shell owns for sitting.
+ *
+ * `interact` is latched into the world and consumed on its next frame -- the
+ * same shape `StoryPlayer.takeInteract` has, so a held key cannot request a seat
+ * sixty times a second. Escape only ever stands the player up; `/` has no pause
+ * menu for it to argue with.
+ */
+const onSeatKey = (event: KeyboardEvent): void => {
+  if (event.repeat) {
+    return
+  }
+  const instance = world.value
+  if (!instance) {
+    return
+  }
+  if (event.code === bindingFor('interact')) {
+    instance.requestSit()
+  } else if (event.code === 'Escape') {
+    instance.standUp()
+  }
+}
 
 onMounted(() => {
   const canvasElement = canvas.value
@@ -159,6 +274,8 @@ onMounted(() => {
   )
   instance.attach(canvasElement)
   world.value = instance
+  window.addEventListener('keydown', onSeatKey)
+  seatRaf = requestAnimationFrame(pumpSeat)
 
   if (import.meta.env.DEV) {
     // Dev-only handle so a headless CDP session (and the console) can read
@@ -220,12 +337,20 @@ onBeforeUnmount(() => {
   if (hintTimer !== null) {
     window.clearTimeout(hintTimer)
   }
+  window.removeEventListener('keydown', onSeatKey)
+  cancelAnimationFrame(seatRaf)
   world.value?.dispose()
   world.value = null
 })
 </script>
 
 <style scoped lang="sass">
+// Same reasoning as `NpcBillboard`: this is drawn over a sunlit meadow, and a
+// text shadow is what keeps the glyph edges readable where the panel's own alpha
+// lets a bright background through.
+.seat-hint
+  text-shadow: 0 1px 2px rgba(2, 6, 23, 0.9), 0 0 6px rgba(2, 6, 23, 0.55)
+
 .hint-enter-active,
 .hint-leave-active
   transition: opacity 600ms ease

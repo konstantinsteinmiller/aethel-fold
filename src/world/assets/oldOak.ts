@@ -24,7 +24,7 @@ import {
 } from '../geometry/vertexColor'
 import { createOutlineMaterial } from '../shading/outlineMaterial'
 import { getFoliageRamp } from '../shading/ramp'
-import { createToonMaterial } from '../shading/toonMaterial'
+import { FOLIAGE_RIM, createToonMaterial } from '../shading/toonMaterial'
 import { mergeParts, partRanges } from './common'
 import {
   buildRingList,
@@ -931,7 +931,10 @@ export const createOldOakAsset = (options: OldOakOptions = {}): WorldAsset => {
       // Heavy and slow. The scatter tree runs at 0.075; a bole this size that
       // swayed as much as a sapling would undo everything the silhouette says.
       windStrength: 0.05,
-      rimStrength: 0.42
+      // Matte foliage rim (GDD R5 kept, gloss removed): tinted toward leaf,
+      // tightened, and gated by the sun so it stops wrapping the whole clump.
+      // See `FOLIAGE_RIM`.
+      ...FOLIAGE_RIM
     }),
     outline: createOutlineMaterial({ pixelWidth: 1.6, wind: true, windStrength: 0.05, name: 'old-oak-outline' }),
     outlineMaxTier: 1,

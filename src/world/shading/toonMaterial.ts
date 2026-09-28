@@ -47,10 +47,40 @@ export interface ToonMaterialOptions {
   shadowTintMix?: number
   rimStrength?: number
   rimPower?: number
+  /**
+   * Rim tint. `C.rim` (the sky colour, GDD R5) unless the surface is one the
+   * near-white additive would desaturate — see `FOLIAGE_RIM`.
+   */
+  rimColor?: Color
+  /**
+   * How far the rim is gated by `N·L` — 0 is a pure view fresnel (the project
+   * default and every non-foliage material), 1 is a rim that only exists where
+   * the key light grazes. See `SURFACE_FRAGMENT_GLSL`.
+   */
+  rimWrap?: number
   /** Props carry all their detail in vertex colours, so this defaults to true. */
   vertexColors?: boolean
   side?: Side
   name?: string
+  /**
+   * ── Alpha, and why it costs no program ────────────────────────────────────
+   *
+   * There is exactly one surface in this world that is *seen through* rather
+   * than dithered away — the glass in the storyteller's windows — and it needs
+   * real blending, because a permanent dither on a 40 cm pane read as noise
+   * rather than as glazing next to the LOD crossfade using the same pattern
+   * three metres away.
+   *
+   * `transparent` is **not** part of three's program cache key
+   * (`getProgramCacheKeyBooleans` lists `alphaTest` and `premultipliedAlpha`
+   * and not this), so a translucent toon material compiles into the same
+   * program as an opaque one and the GDD §5 program budget is untouched. What
+   * it does cost is a render-order pass and depth sorting, which is why this is
+   * a deliberate opt-in and not a general facility.
+   */
+  transparent?: boolean
+  opacity?: number
+  depthWrite?: boolean
 }
 
 export class ToonMaterial extends MeshToonMaterial {
@@ -64,6 +94,7 @@ export class ToonMaterial extends MeshToonMaterial {
   protected readonly uRimColor: IUniform<Color>
   protected readonly uRimPower: IUniform<number>
   protected readonly uRimStrength: IUniform<number>
+  protected readonly uRimWrap: IUniform<number>
   protected readonly uWindStrength: IUniform<number>
   protected readonly windEnabled: boolean
 
@@ -73,7 +104,13 @@ export class ToonMaterial extends MeshToonMaterial {
       gradientMap: options.ramp ?? getDefaultRamp(),
       vertexColors: options.vertexColors ?? true,
       side: options.side ?? FrontSide,
-      fog: true
+      fog: true,
+      transparent: options.transparent ?? false,
+      opacity: options.opacity ?? 1,
+      // A translucent pane must not write depth or the two panes of one window
+      // occlude each other in whichever order they happen to be drawn. Opaque
+      // materials keep three's default.
+      depthWrite: options.depthWrite ?? !(options.transparent ?? false)
     })
 
     this.name = options.name ?? 'toon'
@@ -81,9 +118,10 @@ export class ToonMaterial extends MeshToonMaterial {
 
     this.uShadowTint = { value: C.shadowTint.clone() }
     this.uShadowTintMix = { value: options.shadowTintMix ?? SHADOW_TINT_MIX }
-    this.uRimColor = { value: C.rim.clone() }
+    this.uRimColor = { value: (options.rimColor ?? C.rim).clone() }
     this.uRimPower = { value: options.rimPower ?? RIM_POWER }
     this.uRimStrength = { value: options.rimStrength ?? RIM_STRENGTH }
+    this.uRimWrap = { value: options.rimWrap ?? 0 }
     this.uWindStrength = { value: options.windStrength ?? 0.06 }
 
     if (this.windEnabled) {
@@ -124,6 +162,7 @@ export class ToonMaterial extends MeshToonMaterial {
     shader.uniforms.uRimColor = this.uRimColor
     shader.uniforms.uRimPower = this.uRimPower
     shader.uniforms.uRimStrength = this.uRimStrength
+    shader.uniforms.uRimWrap = this.uRimWrap
 
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -182,9 +221,21 @@ export class ToonMaterial extends MeshToonMaterial {
       shadowTintMix: this.uShadowTintMix.value,
       rimStrength: this.uRimStrength.value,
       rimPower: this.uRimPower.value,
+      // Carried for the same reason `transparent` is: `InstancedLodField`
+      // clones the asset's material once per tier, and a clone that dropped
+      // these would put the old wrapping near-white rim back on LOD1..3 —
+      // i.e. on exactly the tiers a whole forest is drawn with.
+      rimColor: this.uRimColor.value,
+      rimWrap: this.uRimWrap.value,
       vertexColors: this.vertexColors,
       side: this.side,
-      name: this.name
+      name: this.name,
+      // Carried, because `InstancedLodField` clones the asset's material once
+      // per tier and a clone that silently dropped these would render the
+      // window glass as an opaque board at every distance but LOD0.
+      transparent: this.transparent,
+      opacity: this.opacity,
+      depthWrite: this.depthWrite
     })
     copy.uFade.value = this.uFade.value
     return copy as this
@@ -192,3 +243,58 @@ export class ToonMaterial extends MeshToonMaterial {
 }
 
 export const createToonMaterial = (options: ToonMaterialOptions = {}): ToonMaterial => new ToonMaterial(options)
+
+/**
+ * ─── Matte rims ─────────────────────────────────────────────────────────────
+ *
+ * GDD R5 is not negotiable — every lit object carries a rim, and on foliage it
+ * is what keeps a dark canopy off a dark hill and one tree off the next at
+ * 40 m. What *was* negotiable is that the rim was a near-white additive with no
+ * idea where the sun is, and on a surface whose normals are spherical by law
+ * (GDD R3) that paints the whole outline. Three things were wrong at once, and
+ * all three are per-material options, so nothing outside foliage moves:
+ *
+ * 1. **It was ungated.** `rimWrap` at 0.85 leaves 15 % of the rim on the
+ *    unlit side — enough that a backlit tree still has an edge against the sky,
+ *    not enough to light the underside of a canopy brighter than its top, which
+ *    is what a spruce at 9 m was doing.
+ *
+ * 2. **It was wide.** `pow(1 - N·V, 3.2)` reaches half strength at 98 % of a
+ *    sphere's screen radius but only a quarter at 94 %, and on the *pine* — a
+ *    cone whose normals sweep toward one axis point — that quarter-strength
+ *    swath covers the entire visible flank. Measured across a spruce whorl
+ *    115 px wide, the highlight ran 25 px in from the outline. At 4.6 the same
+ *    quarter-strength point sits at 97 %, which halves it.
+ *
+ * 3. **It was white.** `C.rim` (#dff1ff) added at 0.4 to a canopy sitting at
+ *    `rgb(10,57,22)` took the edge to `rgb(70,95,87)`: every channel lifted,
+ *    the hue gone. An additive that is half the foliage's own lit green raises
+ *    value without collapsing saturation, so the edge reads as a leaf catching
+ *    the sky rather than as a wet highlight. The mix is 0.5 and not 1.0 because
+ *    a rim that is purely the surface's own colour stops separating it from the
+ *    tree behind it, which is the one job the rim has at distance.
+ *
+ * These stay here rather than in `art/palette.ts` because they are a *shading*
+ * response, not a colour: `rimWrap` and `rimPower` have no meaning in a palette,
+ * and splitting the three across two files is how one of them drifts.
+ */
+export const FOLIAGE_RIM = {
+  rimColor: C.rim.clone().lerp(C.foliageLit, 0.5),
+  rimPower: 4.6,
+  rimStrength: 0.3,
+  rimWrap: 0.85
+} as const satisfies ToonMaterialOptions
+
+/**
+ * Bare wood — snags, stumps, deadfall. Same argument, milder: a trunk is a
+ * cylinder, so its fresnel band is narrow to begin with and the gloss only
+ * showed on the thin dead branches, where the band is the *whole* branch. Tint
+ * goes to bark rather than to leaf, and the gate is looser (0.7) because a
+ * silvered snag genuinely does catch skylight on its shaded side.
+ */
+export const BARK_RIM = {
+  rimColor: C.rim.clone().lerp(C.barkBase, 0.4),
+  rimPower: 4.0,
+  rimStrength: 0.34,
+  rimWrap: 0.7
+} as const satisfies ToonMaterialOptions

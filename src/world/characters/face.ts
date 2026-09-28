@@ -371,7 +371,7 @@ const SCLERA_MIX = 0.4
 // the lot) are deliberately **not** here: the suite asserts left-right symmetry
 // across the whole face, and breaking it for one mouth would retire an assertion
 // that protects every other feature.
-const MOUTH_COLUMNS = 4
+export const MOUTH_COLUMNS = 4
 
 interface MouthSpec {
   /** Centre height, relative to the face anchor. */

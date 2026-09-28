@@ -14,8 +14,7 @@ import { initAds } from '@/use/useAds'
 import { installGamePauseAudio } from '@/use/useGamePauseAudio'
 import useUser, { isCrazyWeb, isWaveDash, isItch, isGlitch, isGameDistribution, isPlaygama, isGamepix, isGameMonetize, isYandex } from '@/use/useUser'
 import { isDebug } from '@/use/useMatch.ts'
-import { hasState, reloadTowerState } from '@/use/useTowerState'
-import { LANGUAGE_KEY } from '@/keys'
+import { reloadTowerState } from '@/use/useTowerState'
 import { SaveManager } from '@/utils/save/SaveManager'
 import { resolveSaveStrategy } from '@/platforms/resolveSaveStrategy'
 import { installSaveStatus } from '@/use/useSaveStatus'
@@ -49,7 +48,7 @@ const bootstrap = async () => {
   // `setVConsoleMounter` so vConsole stays out of the main chunk
   // and off the hot path.
   //
-  // Why this matters: 3d-world's main bundle ballooned by ~250KB
+  // Why this matters: aethel-fold's main bundle ballooned by ~250KB
   // gzipped when vConsole was statically imported. CrazyGames flagged
   // the regression. Putting the dynamic-import here fixes it without
   // breaking the trigger paths.
@@ -69,7 +68,7 @@ const bootstrap = async () => {
     import.meta.env.VITE_APP_NATIVE === 'true'
     || import.meta.env.VITE_APP_INCLUDE_VCONSOLE === 'true'
   ) {
-    // vConsole removed from this project (was a 3d-world native-build
+    // vConsole removed from this project (was a aethel-fold native-build
     // dependency). To restore on-device debugging, reintroduce the
     // `vconsole` package and wire it back to `setVConsoleMounter`.
     bootstrapVConsoleFromUrl()
@@ -109,6 +108,10 @@ const bootstrap = async () => {
   // never download the SDK glue. Captured `cgLocale` is read inside the
   // CG arm so the locale-seeding code further down doesn't have to
   // re-import useCrazyGames.
+  // Captured but no longer used to pick a language — see the note further down
+  // on `portalLocale`. Kept because the init arms are the only place the
+  // portal's answer exists, and restoring the seed is then a one-line change
+  // rather than re-deriving how to ask each SDK.
   let cgLocale: string | null = null
   let yaLocale: string | null = null
   if (isCrazyWeb) {
@@ -323,13 +326,31 @@ const bootstrap = async () => {
 
   // CG QA: NO locally-saved data on CG builds — we no longer mirror the
   // CrazyGames-reported locale into sessionStorage. The portal locale is
-  // passed straight into resolveInitialLocale below so it influences the
-  // first-paint i18n bundle without touching any storage surface.
-  // `cgLocale` / `yaLocale` were captured up in their init arms; null on
-  // other builds. Yandex returns ISO-639-1 (`en`, `ru`, `tr`, etc.);
-  // anything we don't ship maps to the resolver's fallback chain.
-  const portalLocaleHint = cgLocale ?? yaLocale
-  const portalLocale = portalLocaleHint && LANGUAGES.includes(portalLocaleHint) ? portalLocaleHint : null
+  // ── The portal locale no longer picks the language ──────────────────────
+  //
+  // It used to, twice: as the first-paint hint into `resolveInitialLocale`, and
+  // as a seed written into `ts_user_language` for anyone with no stored choice.
+  // Both are switched off, and the reason is the same one already written into
+  // `i18n/index.ts` when the `navigator.language` sniff was removed:
+  //
+  //   *for a German game with a German script, the browser is the wrong
+  //   arbiter of what language the game is in.*
+  //
+  // A portal is the same class of arbiter, and it was worse in one specific
+  // way — `VITE_APP_CRAZY_WEB` is `true` in the **dev** build, so the local CG
+  // stub reported `en` and every developer, and every first-time player on any
+  // CrazyGames locale but German, opened Chroniken von Arlaan in translation.
+  // `DEFAULT_LOCALE` said German and nothing that ran ever agreed with it.
+  //
+  // The cost, stated plainly: a first-time player on an English CrazyGames
+  // profile now boots into German and has to pick English in the options. That
+  // is the trade the project owner asked for ("make german the default
+  // language"), and the game ships exactly two languages, so the picker is one
+  // click.
+  //
+  // To restore the old behaviour, both lines below come back and the
+  // `portalSeed` block further down goes back to writing the hint.
+  const portalLocale: string | null = null
 
   const { default: App } = await import('@/App.vue')
 
@@ -357,13 +378,16 @@ const bootstrap = async () => {
   // Apply the player's saved language once hydrate finishes. The portal
   // locale (CG / Yandex) is used ONLY to seed first-time players — it
   // never overrides an explicit OptionsModal choice. After hydrate has
-  // populated localStorage from cloud, a null value at
-  // `ts_user_language` means "this player has never picked a
-  // language on any device" and we can safely seed the portal locale.
-  // useUser.ts deliberately does NOT seed a language default, so the
-  // null/non-null probe here is a reliable signal.
+  // populated localStorage from cloud, so this is where an explicitly
+  // chosen language — possibly picked on another device — finally lands.
+  //
+  // `userLanguage` is never null: `useUser.ts` initialises it to
+  // `DEFAULT_LOCALE`. So for a player who has never touched the picker this
+  // applies German over German and does nothing. It used to initialise to a
+  // hardcoded 'en' and this line was what quietly overrode the German default
+  // for every first-time player in the game.
   {
-    const { userLanguage: storedLang, setSettingValue } = useUser()
+    const { userLanguage: storedLang } = useUser()
     const { isDbInitialized: dbReady } = await import('@/use/useMatch')
     let stopLangSync: (() => void) | null = null
     stopLangSync = watch(
@@ -377,15 +401,9 @@ const bootstrap = async () => {
         // resolves a cloud value AFTER the early reload (Glitch's HTTP
         // strategy resolves out-of-band in some flows, etc.). Idempotent.
         reloadTowerState()
-        const hasStoredLanguage = hasState(LANGUAGE_KEY)
-        const portalSeed = cgLocale ?? yaLocale
-        if (!hasStoredLanguage && portalSeed && LANGUAGES.includes(portalSeed)) {
-          setSettingValue('language', portalSeed)
-        }
-        // Apply whichever language is now authoritative — the stored
-        // value (cloud-hydrated or just-seeded). Never the portal locale
-        // unconditionally, because that's what was overwriting an
-        // explicit Spanish choice on every English-portal refresh.
+        // Apply whichever language is now authoritative: the player's own
+        // stored choice, or `DEFAULT_LOCALE` if they have never made one. No
+        // portal seed — see the note on `portalLocale` above.
         if (isSupportedLocale(storedLang.value)) {
           setI18nLocale(i18n, storedLang.value)
         }

@@ -119,6 +119,35 @@ export type BrowStyle = 'fine' | 'bushy'
  */
 export type NoseStyle = 'none' | 'button' | 'round' | 'hooked' | 'broad'
 
+/**
+ * How heavily built the figure is, independent of sex.
+ *
+ * ── Why this exists, and why it is three values rather than a slider ────────
+ *
+ * `variants.ts::BUILDS` already varies the torso by sex, and it is careful to
+ * say what it measured: at three heads tall, the *only* thing that separates
+ * two bodies at any distance is the torso's taper and its depth. Everything
+ * else — anatomy, proportion, muscle — is under a pixel at 20 m.
+ *
+ * That same measurement is what makes a build axis worth having. `cast.ts` has
+ * to tell four teenagers apart from behind while they walk, and it lists its
+ * levers in order of strength: what they carry, how tall they are, their
+ * garment's hem, their hair. Build slots in second — a broad figure and a slight
+ * one differ by 34 mm of half-width at the chest, which is 1.7 px at 20 m, and
+ * unlike a face that is 1.7 px *of outline* rather than of interior detail.
+ *
+ * Three values, not a range, for the reason `BrowStyle` gives for being a bit
+ * rather than a dial: the intermediate settings of a slider are all already
+ * expressible (sex already provides two torso profiles), and what is missing is
+ * the two ends. A continuous value would also make an appearance blob impossible
+ * to compare for equality without an epsilon.
+ *
+ * `average` is the shipped figure and produces **exactly** today's numbers, so
+ * every character ever saved deserialises to the body it was drawn with — the
+ * same rule `beard`, `brows` and `nose` follow.
+ */
+export type BuildStyle = 'slight' | 'average' | 'broad'
+
 /** Index into the palette's `skinTone0..4` ramp. */
 export type SkinTone = 0 | 1 | 2 | 3 | 4
 
@@ -153,6 +182,15 @@ export interface CharacterAppearance {
    */
   eyes: EyeStyle
   mouth: MouthStyle
+  /**
+   * Torso mass, on top of whatever `sex` already sets. See `BuildStyle`.
+   *
+   * The second-strongest silhouette lever on this figure after height, and the
+   * one the story cast leans on hardest: a smith's son and a boy who grinds
+   * blades for a living are the same height in the book and are not the same
+   * shape.
+   */
+  build: BuildStyle
   skinTone: SkinTone
   /** Index into `HAIR_COLOURS`. Kept separate from skin so they vary freely. */
   hairColour: number
@@ -192,6 +230,10 @@ export const DEFAULT_APPEARANCE: CharacterAppearance = {
   nose: 'none',
   eyes: 'bright',
   mouth: 'smile',
+  // The fourth absent value, and enforced for the same reason as the other
+  // three: `characterVariants.test.ts` hashes the shipped figure byte for byte,
+  // so `average` has to reproduce `BUILDS[sex]` exactly.
+  build: 'average',
   skinTone: 1,
   hairColour: 0,
   tunicColour: 0,
@@ -213,6 +255,41 @@ export type ItemKind =
   | 'greatsword'
   | 'bow'
   | 'crossbow'
+  // ── The arms of Arlaan ────────────────────────────────────────────────────
+  //
+  // Six kinds, one per named character in Chapter 1, and the reason they are
+  // separate kinds rather than colourways of the four above is the *silhouette*
+  // rule this project applies to everything else. `gearSeed` already gives a
+  // weapon five palettes and changes nothing about its outline, so a "sword,
+  // seed 3" in Theodor's hand is Athalus's sword in a different brown. Four
+  // teenagers who have to be told apart from behind at fifteen metres need four
+  // different outlines, and that is geometry.
+  //
+  // The book names each of them, which is what settles the list:
+  //
+  //   * **scrantis** — Jester's. Six hinged sabre blades on a chain, thrown like
+  //     a whip. It is the most unusual object in the chapter and the only weapon
+  //     in the world with a *chain* silhouette.
+  //   * **scrantisPair** — the two folded ones he keeps on his belt while the
+  //     third is in his hand. Chapter 1: "two six-bladed folded Scrantis of
+  //     steel, always on his belt."
+  //   * **warAxe** — Gearn's berserker axe. A circular blade an ell across with
+  //     a half-moon notch top and bottom, which he uses to trap and strip a
+  //     blade out of a hand.
+  //   * **huntingBow** — Kareen's, cut from trollcherry by her father Lothar,
+  //     the best bowyer in the kingdom. Double-recurved and a head longer than
+  //     the standard bow, so an archer reads as *the* archer.
+  //   * **broadsword** — Theodor's militia sword, with a shield. Wide, plain,
+  //     issue rather than owned.
+  //   * **dagger** — Athalus's hunting knife, which is all he has when the boar
+  //     picks him. The chapter turns on him not having his sword.
+  | 'scrantis'
+  | 'scrantisPair'
+  | 'warAxe'
+  | 'huntingBow'
+  | 'broadsword'
+  | 'dagger'
+  | 'quiver'
   // ── Profession wardrobe ───────────────────────────────────────────────────
   //
   // Nine torso garments and six head items, chosen for **silhouette spread**
@@ -266,9 +343,33 @@ export type ItemKind =
  * (`STOW_SOCKET`), which is what lets the animation layer ask "is anything on
  * the back" without enumerating item kinds.
  */
-export type EquipSlot = 'mainHand' | 'offHand' | 'back' | 'head' | 'torso' | 'legs'
+export type EquipSlot = 'mainHand' | 'offHand' | 'back' | 'head' | 'torso' | 'legs' | 'belt'
 
-export const EQUIP_SLOTS: readonly EquipSlot[] = ['mainHand', 'offHand', 'back', 'head', 'torso', 'legs']
+export const EQUIP_SLOTS: readonly EquipSlot[] = [
+  'mainHand',
+  'offHand',
+  'back',
+  'head',
+  'torso',
+  'legs',
+  // ── Why a seventh slot rather than reusing `offHand` ────────────────────────
+  //
+  // A quiver is the obvious test case and it fails in `offHand` for a reason
+  // that is mechanical, not stylistic: drawing a bow requires both hands, so
+  // `drawFault` rejects the draw whenever the off hand holds anything. An archer
+  // with a quiver in that slot could never draw the bow the quiver is *for*.
+  //
+  // The back slot is no better — it already holds the bow — so the quiver needs
+  // somewhere that is neither a hand nor the spine, which is exactly what a belt
+  // is. It earns its keep twice over: Jester's two folded Scrantis hang there
+  // while the third is in his fist, and that pair is one of the few details
+  // Chapter 1 states outright about how a character looks.
+  //
+  // Additive by construction. Every existing loadout deserialises with
+  // `belt: null`, every consumer iterates `EQUIP_SLOTS`, and `BODY_SLOTS` is
+  // unchanged — so nothing that already worked has to know this exists.
+  'belt'
+]
 
 /**
  * The two slots whose item is **not** worn on the body but *is* the body.
@@ -288,6 +389,18 @@ export const ITEM_SLOT: Record<ItemKind, EquipSlot> = {
   greatsword: 'back',
   bow: 'back',
   crossbow: 'back',
+  // The Arlaan arms. `warAxe` goes on the **back** with the greatsword rather
+  // than on the hip with the swords, and that is dictated by its head: the blade
+  // is an ell across, so hung at `hipR` it reaches through the thigh and out the
+  // far side of the leg. `huntingBow` follows `bow` for the same reason a bow
+  // does — it is a thin arc and hugs the spine.
+  scrantis: 'mainHand',
+  warAxe: 'back',
+  huntingBow: 'back',
+  broadsword: 'mainHand',
+  dagger: 'mainHand',
+  quiver: 'belt',
+  scrantisPair: 'belt',
   shield: 'offHand',
   hat: 'head',
   torsoArmour: 'torso',
@@ -330,6 +443,8 @@ export interface EquipmentLoadout {
   head: ItemKind | null
   torso: ItemKind | null
   legs: ItemKind | null
+  /** Quiver, pouch, or Jester's pair of folded Scrantis. See `EQUIP_SLOTS`. */
+  belt: ItemKind | null
   drawn: DrawnState
 }
 
@@ -340,6 +455,7 @@ export const EMPTY_LOADOUT: EquipmentLoadout = {
   head: null,
   torso: null,
   legs: null,
+  belt: null,
   drawn: 'sheathed'
 }
 
@@ -389,6 +505,7 @@ export type SocketName =
   | 'backOver'
   | 'backFlat'
   | 'headTop'
+  | 'beltL'
 
 /**
  * The socket table.
@@ -464,7 +581,25 @@ export const SOCKETS: Record<SocketName, Socket> = {
    * origin. Anchoring at the crown instead would make every hat's geometry
    * carry a 0.27 m offset that exists solely to undo this socket.
    */
-  headTop: { bone: 'head', position: [0, 0.15, 0], rotation: [0, 0, 0] }
+  headTop: { bone: 'head', position: [0, 0.15, 0], rotation: [0, 0, 0] },
+  /**
+   * The belt, on the character's **left** hip — which is +X (see the header:
+   * +X is the figure's left).
+   *
+   * Deliberately the mirror of `hipR` and deliberately *not* its exact mirror.
+   * `hipR` stands 185 mm outboard because it has to hold a 470 mm blade clear of
+   * a swinging arm; a quiver and a pair of folded Scrantis are both short, so
+   * this sits 40 mm closer in — far enough out to clear the thigh at the top of
+   * a stride, near enough in that a quiver does not read as being carried at
+   * arm's length.
+   *
+   * The cant is the other half. `hipR` leans −0.17 about Z so a hanging blade
+   * swings its tip *outboard* of the thigh. A quiver has the opposite problem:
+   * its mouth has to lean **back and out** so the fletchings clear the elbow, so
+   * this leans +0.26 about Z and −0.3 about X, which stands the mouth behind the
+   * hip where a hand can reach it.
+   */
+  beltL: { bone: 'hips', position: [0.145, 0.02, -0.06], rotation: [-0.3, 0, 0.26] }
 }
 
 /** Where each item kind sits when stowed. */
@@ -473,6 +608,15 @@ export const STOW_SOCKET: Record<ItemKind, SocketName | null> = {
   greatsword: 'backOver',
   bow: 'backFlat',
   crossbow: 'backOver',
+  scrantis: 'hipR',
+  warAxe: 'backOver',
+  huntingBow: 'backFlat',
+  broadsword: 'hipR',
+  dagger: 'hipR',
+  // The two belt items are never anywhere else — their stow socket *is* their
+  // only socket, and `DRAWN_SOCKET` gives them null below.
+  quiver: 'beltL',
+  scrantisPair: 'beltL',
   // A shield is carried, never stowed — see the note on `offHand` carriage in
   // the animation layer. Slinging it on the back as well would need a fourth
   // back socket and would collide with everything already there.
@@ -581,6 +725,19 @@ export const GRIP_ROTATION: Record<ItemKind, readonly [number, number, number]> 
   }
   table.sword = bladeUp
   table.greatsword = bladeUp
+  // The three sword-shaped Arlaan arms take the same hammer grip, because they
+  // are gripped the same way: flats against the palm, edge square to the
+  // knuckles. The scrantis is in the list on purpose — its chain hangs from the
+  // fist exactly as a blade does, and the whole point of the weapon is that it
+  // is *thrown* from a hand that starts in a normal guard.
+  table.broadsword = bladeUp
+  table.dagger = bladeUp
+  table.scrantis = bladeUp
+  // The axe hangs from the same over-the-shoulder socket as the greatsword and
+  // is drawn into the same fist, so it takes the same quarter turn. Its head is
+  // authored on the item's ±Z, which is what keeps it in the socket's cant plane
+  // — the same clause that keeps a sword's guard off the forearm.
+  table.warAxe = bladeUp
   /**
    * The bow takes the *opposite* quarter turn, because its length runs both ways
    * from the riser and the limb that has to point **up** is +Y, not −Y. Same
@@ -595,6 +752,7 @@ export const GRIP_ROTATION: Record<ItemKind, readonly [number, number, number]> 
    * table.
    */
   table.bow = [Math.PI * 0.5, 0, 0]
+  table.huntingBow = [Math.PI * 0.5, 0, 0]
   /**
    * ── The crossbow's quarter turn is about its **aim line**, not across it ────
    *
@@ -641,6 +799,14 @@ export const DRAWN_SOCKET: Record<ItemKind, SocketName | null> = {
   greatsword: 'handR',
   bow: 'handL',
   crossbow: 'handR',
+  scrantis: 'handR',
+  warAxe: 'handR',
+  huntingBow: 'handL',
+  broadsword: 'handR',
+  dagger: 'handR',
+  // Worn, never held. A quiver in the hand is a bug, not a state.
+  quiver: null,
+  scrantisPair: null,
   shield: 'handL',
   hat: null,
   torsoArmour: null,
@@ -703,6 +869,29 @@ export const EQUIPMENT_BUDGET: Record<ItemKind, number> = {
   sword: 200,
   greatsword: 280,
   bow: 220,
+  // ── The Arlaan arms ───────────────────────────────────────────────────────
+  //
+  // Two of these sit well above the sword's 200 and both increases are bought
+  // by silhouette rather than by detail:
+  //
+  //   * **scrantis, 460.** Six blades and five hinges is eleven parts where a
+  //     sword has three, and the *gaps between them* are the entire read. There
+  //     is no cheaper description of a chain: collapse it to one swept blade and
+  //     it is a sabre, which is the one thing it must not look like.
+  //   * **warAxe, 340.** The half-moon notches in the head are the feature the
+  //     book names — Gearn traps a blade in one — and a notch is a place the
+  //     section has to come back on itself, which no amount of paint gives.
+  //
+  // The other four are ordinary. `dagger` is under half the sword because it is
+  // a third the length at the same section, and `quiver`/`scrantisPair` are
+  // small belt objects that are never nearer than a hip.
+  scrantis: 460,
+  scrantisPair: 190,
+  warAxe: 340,
+  huntingBow: 260,
+  broadsword: 230,
+  dagger: 160,
+  quiver: 200,
   crossbow: 300,
   shield: 240,
   hat: 180,

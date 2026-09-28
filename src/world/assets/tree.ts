@@ -16,8 +16,8 @@ import {
 } from '../geometry/vertexColor'
 import { createOutlineMaterial } from '../shading/outlineMaterial'
 import { getFoliageRamp } from '../shading/ramp'
-import { createToonMaterial } from '../shading/toonMaterial'
-import { mergeParts, partRanges } from './common'
+import { FOLIAGE_RIM, createToonMaterial } from '../shading/toonMaterial'
+import { measuredRadius, mergeParts, partRanges } from './common'
 import type { WorldAsset } from './types'
 
 /**
@@ -53,11 +53,37 @@ import type { WorldAsset } from './types'
  * `barkBase`/`barkDark` for both — they are the same genus, and a recoloured
  * trunk reads as a different *material* rather than as a different tree.
  *
- * Budget ladder (GDD §4.1): 200 / 110 / 56 / 16, one ladder for both forms.
- * See `clumpSegmentBias` for what pays for the maple's extra clump.
+ * ── Three more rows, and why they are shapes rather than seeds ──────────────
+ *
+ * `oakBroad`, `oakTall` and `oakLean` exist because a procedural wood built from
+ * three *seeds* of `broadleaf` reads as one tree stamped three times, which is
+ * exactly what it was reported as. Reseeding moves the lumps and the clump
+ * bearings; it does not move the **canopy's mass distribution** or the **trunk's
+ * lean**, and those two are the only things left at the distance a stand is
+ * actually read from. `characters/equipment.ts` records the same measurement
+ * from the other end of the project — "silhouette is the only thing that
+ * survives 20 m" — and a tree is read from four times that.
+ *
+ * So the three differ in where the mass sits, not in what it is made of:
+ *
+ * | form | height | split at | spread | squash | lean | reads as |
+ * |---|---:|---:|---|---:|---:|---|
+ * | `oakBroad` | 4.8 | 40 % | wide  | 0.55 | small | a wide low dome |
+ * | `oakTall`  | 8.6 | 74 % | tight | 1.03 | none  | a narrow column |
+ * | `oakLean`  | 6.2 | 54 % | wide  | 0.73 | **large** | wind-shaped |
+ *
+ * **None of them may exceed four clumps**, and that is a budget fact rather than
+ * an art one — the note on `crown`'s `clumpSegmentBias` works it out: at five
+ * clumps LOD2 wants 66 triangles against 56, and the only way back under is a
+ * 2-segment clump, which is a flat quad. The variation therefore has to come out
+ * of `spread`, `squash`, `trunkTop` and `leanAmount`, which is lucky, because
+ * those are also the four that survive distance.
+ *
+ * Budget ladder (GDD §4.1): 200 / 110 / 56 / 16, one ladder for every form.
+ * See `clumpSegmentBias` for what pays for a fourth clump.
  */
 
-export type TreeForm = 'broadleaf' | 'crown'
+export type TreeForm = 'broadleaf' | 'crown' | 'oakBroad' | 'oakTall' | 'oakLean'
 
 export interface TreeOptions {
   seed?: number
@@ -163,6 +189,95 @@ const FORMS: Record<TreeForm, FormSpec> = {
     // only way back under is a 2-segment clump, which is a flat quad.
     clumpSegmentBias: -1,
     foliage: { lit: C.foliageWarmLit, base: C.foliageWarmBase, deep: C.foliageWarmDeep }
+  },
+  // ── The broad oak: a wide low dome on a short stocky bole ────────────────
+  //
+  // Split at 40 % of the height against `broadleaf`'s 58 %, spread half as wide
+  // again, and squashed to 0.55 — the flattest canopy in the catalogue. The
+  // result is 4.8 m tall and ~5 m across, which is the one silhouette in this
+  // wood that is genuinely wider than it is high, and therefore the one that
+  // still separates from its neighbours when a stand has become a green band on
+  // a ridge 200 m away.
+  //
+  // The trunk is *thicker* than the taller forms', not thinner. A field oak
+  // spends its growth on girth rather than on height, and 4.8 m of tree on
+  // `broadleaf`'s 0.29 m bole reads as a sapling that stopped early.
+  oakBroad: {
+    height: 4.8,
+    trunkRadius: 0.36,
+    clumpCount: 3,
+    trunkTop: [0.36, 0.44],
+    leanAmount: [0.06, 0.2],
+    spread: [0.95, 1.5],
+    rise: [0.2, 0.7],
+    clumpRadius: [1.3, 1.7],
+    lumpAmp: [0.1, 0.26],
+    lumpPower: [1.1, 2.4],
+    squash: [0.5, 0.62],
+    impostorSquash: 0.56,
+    clumpSegmentBias: 0,
+    foliage: { lit: C.foliageLit, base: C.foliageBase, deep: C.foliageDeep }
+  },
+  // ── The tall oak: a narrow column, split high ────────────────────────────
+  //
+  // Four clumps packed tight around the axis and squashed *above* 1, so the
+  // canopy is taller than it is wide — the only form in the file where that is
+  // true. `blobGeometry`'s `scale` takes a squash over 1 without complaint; the
+  // clumps simply come out prolate.
+  //
+  // It takes the **warm** foliage set. Three oaks in three shapes and one green
+  // is still three of one thing at the distance where the shape has collapsed to
+  // a blob, and the warm set is what this file already uses to separate two
+  // broadleaves that stand together (see `crown`).
+  oakTall: {
+    height: 8.6,
+    trunkRadius: 0.26,
+    clumpCount: 4,
+    trunkTop: [0.7, 0.78],
+    // Almost none. A lean is applied as `t^1.7` of a *fixed distance*, so the
+    // top of a taller trunk travels the same absolute metres over a longer and
+    // much more visible span — the `crown` row records that trap at 7.2 m, and
+    // this form is another metre and a half up.
+    leanAmount: [0.02, 0.07],
+    spread: [0.18, 0.4],
+    rise: [0.15, 0.85],
+    clumpRadius: [0.72, 0.98],
+    lumpAmp: [0.08, 0.2],
+    lumpPower: [1.3, 2.6],
+    squash: [0.95, 1.12],
+    impostorSquash: 1.05,
+    // The fourth clump paid for out of the clumps' own resolution, exactly as
+    // `crown` pays for its fourth: 180 / 84 / 54 against 200 / 110 / 56.
+    clumpSegmentBias: -1,
+    foliage: { lit: C.foliageWarmLit, base: C.foliageWarmBase, deep: C.foliageWarmDeep }
+  },
+  // ── The leaning oak: wind-shaped ─────────────────────────────────────────
+  //
+  // The lean is the whole row, and it is deliberately the thing `crown` warns
+  // against: "a 0.28 offset that reads as character on a 5 m tree reads as storm
+  // damage on a 7 m one". Storm damage is the brief. 0.62–1.05 m of offset on a
+  // ~3.4 m trunk is a 17° tilt, and because `buildShape` adds `trunkLean(1)` to
+  // every clump centre the whole canopy travels with it — which is what
+  // separates "grew into a prevailing wind" from "fell over".
+  //
+  // Scattered rarer than the other two for the reason a real one is rare: it is
+  // a strong asymmetric silhouette, and a wood where every tree leans the same
+  // way reads as a bug in the placement rather than as weather.
+  oakLean: {
+    height: 6.2,
+    trunkRadius: 0.3,
+    clumpCount: 3,
+    trunkTop: [0.5, 0.58],
+    leanAmount: [0.62, 1.05],
+    spread: [0.55, 1.15],
+    rise: [0.2, 0.8],
+    clumpRadius: [1.05, 1.4],
+    lumpAmp: [0.1, 0.26],
+    lumpPower: [1.1, 2.4],
+    squash: [0.66, 0.8],
+    impostorSquash: 0.74,
+    clumpSegmentBias: 0,
+    foliage: { lit: C.foliageLit, base: C.foliageBase, deep: C.foliageDeep }
   }
 }
 
@@ -433,7 +548,23 @@ export const createTreeAsset = (options: TreeOptions = {}): WorldAsset => {
   const tiers: BufferGeometry[] = TIERS.map((tier, i) => buildTier(shape, tier, `${name}/LOD${i}`))
   tiers.push(buildImpostor(shape, `${name}/LOD3`))
 
-  const radius = Math.max(shape.canopyCenter.y + shape.canopyRadius, shape.canopyRadius * 1.2)
+  // Measured off the generated tiers rather than derived from the shape.
+  //
+  // The derivation this replaced — `max(canopyCenter.y + canopyRadius, …)` —
+  // misses the horizontal reach entirely, because `canopyRadius` is measured
+  // *about the canopy's own centre* while the cull radius is measured from the
+  // object origin. On the forms that barely lean the vertical term dominated and
+  // it was close enough; on `oakLean` it is not, because the canopy sits up to a
+  // metre off the axis. A radius short by that much culls the tree while a
+  // quarter of it is still inside the frustum, which reads as a streaming
+  // failure rather than as a culling one.
+  //
+  // The catalogue already widens every *registered* prop's radius this way
+  // (`assets/index.ts::buildOne`, where ten of twenty-nine were found short, the
+  // worst by 27.7 %) — but the scatter builds its species by calling this
+  // function directly and never passes through that correction, so for a
+  // scattered tree here is the only place it can happen.
+  const radius = measuredRadius(tiers)
 
   return {
     name,
@@ -448,7 +579,10 @@ export const createTreeAsset = (options: TreeOptions = {}): WorldAsset => {
       ramp: getFoliageRamp(),
       wind: true,
       windStrength: 0.075,
-      rimStrength: 0.4
+      // Matte foliage rim (GDD R5 kept, gloss removed): tinted toward leaf,
+      // tightened, and gated by the sun so it stops wrapping the whole clump.
+      // See `FOLIAGE_RIM`.
+      ...FOLIAGE_RIM
     }),
     outline: createOutlineMaterial({ pixelWidth: 1.6, wind: true, windStrength: 0.075, name: 'tree-outline' }),
     outlineMaxTier: 1,

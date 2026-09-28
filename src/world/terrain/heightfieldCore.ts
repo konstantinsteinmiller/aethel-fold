@@ -1,4 +1,5 @@
 import { fbm2D, valueNoise2D } from '../geometry/rng'
+import { SHORE_DAMP_TOP, SHORE_DRY_TOP, SHORE_SAND_FULL, SHORE_SAND_TOP, shoreHeightAbove } from './waterLevel'
 
 /**
  * ─── Worker-safe heightfield core ───────────────────────────────────────────
@@ -142,7 +143,8 @@ export const TERRAIN_PALETTE_SLOTS = [
   'grassShadow',
   'grassDry',
   'dirt',
-  'sand'
+  'sand',
+  'sandWet'
 ] as const
 
 export type TerrainPaletteSlot = (typeof TERRAIN_PALETTE_SLOTS)[number]
@@ -210,6 +212,40 @@ export const groundColorCore = (
   // Hollows stay cooler and darker — moisture reads as depth.
   if (height < 2) {
     lerpTowards(out, offset, palette, SLOT.grassShadow, Math.min(1, (2 - height) / 9) * 0.5)
+  }
+
+  // ── The shore ─────────────────────────────────────────────────────────────
+  //
+  // Three overlapping ramps on one quantity — height above the water surface,
+  // wandered by noise so the boundary is not a contour (`waterLevel.ts` carries
+  // the measurements and the widths). Outward from the meadow: a dry-grass
+  // collar, then sand, then damp sand at the waterline and below it.
+  //
+  // Painted **before** the slope rules below, not after, so a shore that is
+  // actually a cliff still goes to dirt. Sand on a vertical face is the same
+  // mistake the `height < -3.5 && normalY > 0.9` test at the bottom of this
+  // function already guards against, and doing it by ordering costs nothing.
+  //
+  // On a world with no water table installed `shoreHeightAbove` returns
+  // `+Infinity`, every ramp clamps to zero, and this block is three compares.
+  const shore = shoreHeightAbove(x, z, height, seed)
+  if (shore < SHORE_DRY_TOP) {
+    // The collar. Grass that has been standing in salt and sun, between the
+    // meadow and the sand — without it the beach has a green rim and reads as
+    // turf that was cut rather than turf that gave out.
+    const collar = clamp01((SHORE_DRY_TOP - shore) / (SHORE_DRY_TOP - SHORE_SAND_FULL))
+    lerpTowards(out, offset, palette, SLOT.grassDry, collar * 0.85)
+    if (shore < SHORE_SAND_TOP) {
+      const dry = clamp01((SHORE_SAND_TOP - shore) / (SHORE_SAND_TOP - SHORE_SAND_FULL))
+      lerpTowards(out, offset, palette, SLOT.sand, dry)
+      if (shore < SHORE_DAMP_TOP) {
+        // Full at and below the waterline, so the seabed is wet sand and the
+        // strip the waves sit on is the darkest part of the beach. This is the
+        // band that actually says "shore" — a dry beach alone reads as a desert
+        // that happens to end at water.
+        lerpTowards(out, offset, palette, SLOT.sandWet, clamp01((SHORE_DAMP_TOP - shore) / SHORE_DAMP_TOP) * 0.9)
+      }
+    }
   }
 
   // Dirt from a *gentle* incline upward, not from a cliff: that gradient is a

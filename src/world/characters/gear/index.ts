@@ -1,4 +1,13 @@
 import type { ItemKind, SkinTone } from '../equipment'
+import {
+  buildBroadsword,
+  buildDagger,
+  buildHuntingBow,
+  buildQuiver,
+  buildScrantis,
+  buildScrantisPair,
+  buildWarAxe
+} from './arlaanArms'
 import { buildBow } from './bow'
 import { buildCrossbow } from './crossbow'
 import type { GearModel } from './gearKit'
@@ -93,6 +102,15 @@ import { buildHose, buildLooseTrousers, buildPlateLegs, buildRolledTrousers } fr
  */
 
 export type { GearModel } from './gearKit'
+export {
+  buildBroadsword,
+  buildDagger,
+  buildHuntingBow,
+  buildQuiver,
+  buildScrantis,
+  buildScrantisPair,
+  buildWarAxe
+} from './arlaanArms'
 export { buildBow } from './bow'
 export { buildCrossbow } from './crossbow'
 export { buildGreatsword } from './greatsword'
@@ -163,6 +181,19 @@ export const GEAR_BUILDERS: Record<ItemKind, GearBuilder> = {
   greatsword: buildGreatsword,
   bow: buildBow,
   crossbow: buildCrossbow,
+  // ── The arms of Arlaan ────────────────────────────────────────────────────
+  //
+  // Six rows and nothing else — which is the whole payoff of this table being
+  // exhaustive by type. Adding a weapon is a row in `ItemKind`, four rows in the
+  // socket and budget tables, and this. Forgetting any of them is a compile
+  // error rather than a character walking around holding a grey billet.
+  scrantis: buildScrantis,
+  scrantisPair: buildScrantisPair,
+  warAxe: buildWarAxe,
+  huntingBow: buildHuntingBow,
+  broadsword: buildBroadsword,
+  dagger: buildDagger,
+  quiver: buildQuiver,
   shield: buildShield,
   hat: buildHat,
   torsoArmour: buildTorsoArmour,

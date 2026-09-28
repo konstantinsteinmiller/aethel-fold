@@ -1,7 +1,7 @@
 import { computed, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { mobileCheck } from '@/utils/function'
-import { DIFFICULTY, type Difficulties } from '@/utils/enums'
+import { DEFAULT_LOCALE, DIFFICULTY, type Difficulties } from '@/utils/enums'
 import { isDbInitialized, isSplashScreenVisible } from '@/use/useMatch'
 import { saveDataVersion } from '@/use/useSaveStatus'
 import { getState, setState, hasState } from '@/use/useTowerState'
@@ -46,7 +46,7 @@ export const version: string = APP_VERSION
 
 // ─── Persisted settings ────────────────────────────────────────────────────
 //
-// 3d-world persists FIVE user settings — difficulty, sound volume, music
+// aethel-fold persists FIVE user settings — difficulty, sound volume, music
 // volume, locale, music track — as fields inside the single `tower_state`
 // blob (keys catalogued in `src/keys.ts`), never as their own localStorage
 // entries. On a platform build the blob goes through the patched
@@ -85,7 +85,11 @@ export const DEFAULT_MUSIC_VOLUME = 0.6
 
 const userSoundVolume: Ref<number> = ref(readNumber(SOUND_KEY, DEFAULT_SOUND_VOLUME))
 const userMusicVolume: Ref<number> = ref(readNumber(MUSIC_KEY, DEFAULT_MUSIC_VOLUME))
-const userLanguage: Ref<string> = ref(readString(LANGUAGE_KEY, 'en'))
+// The fallback is the game's default language, not a hardcoded 'en'. This ref
+// is what `main.ts` applies once hydrate settles, so whatever is written here
+// *overrides* `resolveInitialLocale` for every player who has never opened the
+// language picker — which is all of them, on a first run.
+const userLanguage: Ref<string> = ref(readString(LANGUAGE_KEY, DEFAULT_LOCALE))
 // Difficulty defaults to MEDIUM. It scales enemy HP + wave budget (Easy −20%,
 // Hard +25%) via `difficultyFactor()` below, read by the wave director.
 const userDifficulty: Ref<Difficulties> = ref(readString<Difficulties>(DIFFICULTY_KEY, DIFFICULTY.MEDIUM))

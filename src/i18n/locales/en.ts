@@ -3,7 +3,7 @@
 // this folder mirror the shape. Vite ships each non-English locale as its own
 // lazy chunk (see `src/i18n/index.ts`).
 export default {
-  'gameName': '3d-world',
+  'gameName': 'aethel-fold',
   'cancel': 'Cancel',
   'close': 'Close',
   'ok': 'Ok',
@@ -547,5 +547,162 @@ export default {
     'unsavedChanges': 'You have unsaved changes.',
     'saveAndContinue': 'Save and continue',
     'discard': 'Discard'
+  },
+
+  // ─── Chroniken von Arlaan, chapter 1 (/story) ─────────────────────────────
+  //
+  // **Chrome only.** The chapter's own dialogue is not here and must not come
+  // here: it is an author's prose in German with an English translation, it
+  // lives beside the level it belongs to in `src/world/story/script.ts`, and
+  // `storyLine()` falls back to English for every other locale. See that file's
+  // header for the argument. What *is* below is the functional text around it —
+  // objectives, a control list, two buttons — which is exactly the kind of
+  // string a 21-locale bundle is for.
+  // ─── The shell: pause, settings, saves ────────────────────────────────────
+  //
+  // Chrome, not story. The chapter's own prose lives in
+  // `src/world/story/script.ts` as German with an English translation beside it
+  // — see that file's header for why a novel does not go through a UI bundle.
+  // Everything here is functional text and belongs in one.
+  'menu': {
+    'paused': 'Paused',
+    'continue': 'Continue',
+    'newGame': 'New game',
+    'loadGame': 'Load game',
+    'saveGame': 'Save game',
+    'settings': 'Settings',
+    'back': 'Back',
+    'close': 'Close',
+    'newGameConfirm': 'Start a new game? Unsaved progress in this chapter is lost.',
+    'confirm': 'Start over',
+    'cancel': 'Cancel',
+    'slot': 'Slot {n}',
+    'quickSlot': 'Quick save',
+    'emptySlot': 'Empty',
+    'save': 'Save',
+    'load': 'Load',
+    'overwrite': 'Overwrite',
+    'saved': 'Game saved',
+    'loaded': 'Game loaded',
+    'saveFailed': 'Could not save',
+    'noSave': 'Nothing saved yet',
+    'savedChapter': 'Chapter {chapter} · {beat}'
+  },
+  'settings': {
+    'title': 'Settings',
+    'audio': 'Audio',
+    'graphics': 'Graphics',
+    'keybindings': 'Controls',
+    'master': 'Master volume',
+    'music': 'Music',
+    'effects': 'Effects',
+    'voice': 'Voices',
+    'mute': 'Mute everything',
+    'grass': 'Grass detail',
+    'grassHint': 'Thicker grass, drawn further away. Lower this if the game stutters.',
+    'renderScale': 'Render scale',
+    'renderScaleHint': 'Renders smaller and scales up. The cheapest way to buy frame rate.',
+    'shadows': 'Shadows',
+    'outlines': 'Outlines',
+    'wind': 'Wind',
+    'adaptive': 'Adaptive quality',
+    'adaptiveHint': 'Let the game lower detail on its own when the frame rate drops.',
+    'fpsMonitor': 'Show frame rate',
+    'reset': 'Reset to defaults',
+    'rebind': 'Click a key to change it',
+    'pressKey': 'Press a key…',
+    'mouseNotAllowed': 'That one needs a keyboard key',
+    'resetBindings': 'Reset controls',
+    'fps': '{n} fps',
+    'percent': '{n}%'
+  },
+  'controls': {
+    'title': 'Controls',
+    'minimise': 'Minimise',
+    'expand': 'Show controls',
+    'unbound': '—',
+    'mouseLeft': 'LMB',
+    'mouseMiddle': 'MMB',
+    'mouseRight': 'RMB',
+    'group': {
+      'move': 'Movement',
+      'fight': 'Combat',
+      'world': 'World',
+      'system': 'Game'
+    },
+    'action': {
+      'moveForward': 'Forward',
+      'moveBack': 'Back',
+      'moveLeft': 'Left',
+      'moveRight': 'Right',
+      'sprint': 'Sprint',
+      'dodge': 'Dodge roll',
+      'attackLight': 'Attack',
+      'attackHeavy': 'Heavy attack',
+      'guardOrAim': 'Guard / Aim',
+      'guardMelee': 'Guard · parry on time',
+      'guardBow': 'Aim the bow',
+      'drawWeapon': 'Draw / sheathe',
+      'interact': 'Interact',
+      'pause': 'Pause',
+      'quickSave': 'Quick save',
+      'quickLoad': 'Quick load',
+      'toggleControls': 'Hide these'
+    },
+    'look': 'Look around',
+    'mouse': 'Mouse'
+  },
+  'story': {
+    'objectives': 'Objectives',
+    'metres': '{n} m',
+    'talk': 'Talk',
+    'sit': 'Sit',
+    'standUp': 'Stand up',
+    'seated': 'Press {key} or Esc to stand',
+    'aiming': 'Aiming',
+    'guarding': 'Guard up',
+    'objectiveLabel': 'Objective',
+    'foes': '{n} left',
+    'interact': 'Interact',
+    'advance': 'Click or press Space',
+    'clickToPlay': 'Click to take control',
+    'fallen': 'You have fallen.',
+    'retry': 'Try again',
+    'chapter': 'Chapter {n}',
+    'chapterOneTitle': 'The Trollschwein Hunt',
+    'chapterComplete': 'Nimmerschein sleeps. Not far from the village, the bandits are laying a new plan.',
+    'playAgain': 'Play again',
+    'objective': {
+      // ── Chapter 2: Brutos ─────────────────────────────────────────────
+      // Played as the bandit leader. See `story/chapter2.ts` on why.
+      'banditsCamp': 'Hear Dorgo out',
+      'banditsGold': 'Cross to Jergo',
+      'banditsJergo': 'Listen to Jergo',
+      'banditsPace': 'Walk it off and think',
+      'banditsPlan': 'Give the men your answer',
+      'banditsPurse': 'Hand Dorgo the purse',
+      'banditsRide': 'See Dorgo off down the track',
+      'banditsPositions': 'Take up the watch on Nimmerschein',
+      // The frame act -- the storyteller's island, sixty years later.
+      // Played as Arthus, aged nine.
+      'frameRunIn': 'Run to Grandfather',
+      'frameCushion': 'Fetch a cushion for his back',
+      'frameFather': 'Fetch Father from the forge',
+      'frameCall': 'Fetch Mother and Lena from the road',
+      'frameSit': 'Sit down at the table',
+      'trapListen': 'Listen to the plan',
+      'trapPosition': 'Take your place at the trap',
+      'trapCut': 'Cut the rope',
+      'reachOak': 'Get to the old oak',
+      'shootBoar': 'Hold on — your friends are shooting',
+      'recoverKit': 'Recover your bow and knife',
+      'walkHome': 'Carry the boar toward the river',
+      'crossBridge': 'Cross the Arla',
+      'rest': 'Rest in the meadow',
+      'fightBandits': 'Drive off the bandits',
+      'reachGate': 'Run for the gate',
+      'toTreff': 'Take the boar to the Treff',
+      'goHome': 'Go home'
+    }
   }
 }

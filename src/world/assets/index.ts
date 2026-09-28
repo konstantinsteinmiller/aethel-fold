@@ -4,6 +4,9 @@ import { basaltMetrics, createBasaltAsset } from './basalt'
 import { birchMetrics, createBirchAsset } from './birch'
 import { cliffMetrics, createCliffAsset } from './cliff'
 import { measuredRadius } from './common'
+import { createDeadTreeAsset, deadTreeMetrics } from './deadTree'
+import { createShrubAsset } from './shrub'
+import { createStumpAsset, stumpMetrics } from './stump'
 import { createGrassRockAsset, grassRockMetrics } from './grassRock'
 import { createHoodooAsset, hoodooMetrics } from './hoodoo'
 import { createMesaAsset, mesaMetrics } from './mesa'
@@ -17,6 +20,57 @@ import { createSlabAsset, slabMetrics } from './slab'
 import { DESERT_STONE } from './stone'
 import { createTreeAsset, treeMetrics } from './tree'
 import { createWaterfallAsset, waterfallMetrics } from '../water/waterfall'
+import {
+  createBarnAsset,
+  createBridgeAsset,
+  createCottageAsset,
+  createGateAsset,
+  createLonghouseAsset,
+  createPalisadeAsset,
+  createSmithyAsset,
+  PALISADE_RUN
+} from './village'
+import {
+  createAnvilAsset,
+  createBarrelAsset,
+  createBenchAsset,
+  createCartAsset,
+  createCrateStackAsset,
+  createFenceAsset,
+  createFirePitAsset,
+  createHayStackAsset,
+  createHuntNetAsset,
+  createLogPileAsset,
+  createMarketStallAsset,
+  createStaveRackAsset,
+  createTroughAsset,
+  createWellAsset,
+  FENCE_RUN
+} from './villageProps'
+import {
+  createHutAntlersAsset,
+  createHutBedAsset,
+  createHutChairAsset,
+  createHutChestAsset,
+  createHutDaggerBlockAsset,
+  createHutFloorAsset,
+  createHutGlassAsset,
+  createHutHammersAsset,
+  createHutHearthAsset,
+  createHutPailAsset,
+  createHutPeltAsset,
+  createHutPortraitAsset,
+  createHutRaftersAsset,
+  createHutRoofAsset,
+  createHutShelfAsset,
+  createHutStoolAsset,
+  createHutTableAsset,
+  createHutWallFlankAsset,
+  createHutWallLongAsset,
+  createHutWallSideAsset,
+  createHutWindowBayAsset,
+  createHutWineAsset
+} from './interior'
 
 /**
  * ─── The placeable catalogue ────────────────────────────────────────────────
@@ -67,7 +121,46 @@ const FIR_SEED = 59
 const PINE_SNOW_SEED = 73
 const BIRCH_SEED = 41
 const OLD_OAK_SEED = 7
+// -- The wood's second layer: oak shapes, dead wood, understorey -------------
+//
+// Nine rows that exist because a procedural forest of three seeds of one tree
+// reads as wallpaper. They are grouped here rather than merged into the block
+// above so the *set* is visible: three oak silhouettes, two states of dead wood,
+// two stumps, and the layer under four metres.
+const TREE_OAK_BROAD_SEED = 227
+const TREE_OAK_TALL_SEED = 229
+const TREE_OAK_LEAN_SEED = 233
+const STUMP_SAWN_SEED = 239
+const STUMP_NOTCHED_SEED = 241
+const DEAD_SNAG_SEED = 251
+const FALLEN_LOG_SEED = 257
+const SHRUB_SEED = 263
+const SAPLING_SEED = 269
+const THICKET_SEED = 271
 const MESA_SEED = 113
+// -- Nimmerschein ------------------------------------------------------------
+const HOUSE_COTTAGE_SEED = 401
+const HOUSE_COTTAGE_B_SEED = 409
+const HOUSE_LONG_SEED = 419
+const HOUSE_BARN_SEED = 421
+const HOUSE_SMITHY_SEED = 431
+const PALISADE_SEED = 433
+const GATE_SEED = 439
+const BRIDGE_SEED = 443
+const WELL_SEED = 449
+const FIRE_PIT_SEED = 457
+const BENCH_SEED = 461
+const LOG_PILE_SEED = 463
+const HAY_SEED = 467
+const BARREL_SEED = 479
+const CRATE_SEED = 487
+const CART_SEED = 491
+const STALL_SEED = 499
+const FENCE_SEED = 503
+const ANVIL_SEED = 509
+const STAVE_SEED = 521
+const TROUGH_SEED = 523
+const NET_SEED = 541
 const BUTTE_SEED = 127
 const MESA_DESERT_SEED = 131
 const BUTTE_DESERT_SEED = 137
@@ -136,6 +229,22 @@ const definitionFactories = (): DefinitionFactory[] => {
   const pineSnow = { seed: PINE_SNOW_SEED, form: 'spruce' as const, snow: true }
   const birch = { seed: BIRCH_SEED }
   const oldOak = { seed: OLD_OAK_SEED }
+
+  const oakBroad = { seed: TREE_OAK_BROAD_SEED, form: 'oakBroad' as const }
+  const oakTall = { seed: TREE_OAK_TALL_SEED, form: 'oakTall' as const }
+  const oakLean = { seed: TREE_OAK_LEAN_SEED, form: 'oakLean' as const }
+  const stumpSawn = { seed: STUMP_SAWN_SEED }
+  const stumpNotched = { seed: STUMP_NOTCHED_SEED, form: 'notched' as const }
+  const deadSnag = { seed: DEAD_SNAG_SEED }
+  const fallenLog = { seed: FALLEN_LOG_SEED, form: 'log' as const }
+
+  const broadTrunk = treeMetrics(oakBroad)
+  const tallTrunk = treeMetrics(oakTall)
+  const leanTrunk = treeMetrics(oakLean)
+  const sawnBole = stumpMetrics(stumpSawn)
+  const notchedBole = stumpMetrics(stumpNotched)
+  const snagBole = deadTreeMetrics(deadSnag)
+  const logBox = deadTreeMetrics(fallenLog)
 
   const crownTrunk = treeMetrics(treeCrown)
   const spruce = pineMetrics(pine)
@@ -432,6 +541,156 @@ const definitionFactories = (): DefinitionFactory[] => {
       scaleRange: [0.85, 1.2]
     }),
 
+    // ── Flora: the wood's second layer ───────────────────────────────────────
+    //
+    // Three oak *shapes* (not three seeds — see `tree.ts`), the two states of
+    // dead wood, two stumps, and everything under four metres. Every one of
+    // these is also a scatter species in `core/World.ts`; they are registered
+    // here because the catalogue is the only way anything reaches the level
+    // editor's palette, and because a scattered prop that is *moved* becomes an
+    // ordinary placement and needs a `defId` to become (`ScatterSpecies.editorDefId`).
+    () => ({
+      id: 'tree-oak-broad',
+      label: 'Oak (broad)',
+      category: 'flora',
+      asset: createTreeAsset(oakBroad),
+      // Trunk only, as every tree here is: the canopy starts at head height and
+      // colliding with it stops the player dead in what looks like open ground.
+      // The 1.12 reproduces the hand-tuned 0.46 `tree-oak` has carried since
+      // before `treeMetrics` existed — and note this form's bole is the thickest
+      // in the file, because a 4.8 m field oak spends its growth on girth.
+      collider: { kind: 'cylinder', radius: broadTrunk.trunkRadius * 1.12, height: broadTrunk.trunkHeight },
+      walkable: false,
+      groundOffset: -0.1,
+      defaultScale: 1,
+      scaleRange: [0.8, 1.3]
+    }),
+    () => ({
+      id: 'tree-oak-tall',
+      label: 'Oak (tall)',
+      category: 'flora',
+      asset: createTreeAsset(oakTall),
+      collider: { kind: 'cylinder', radius: tallTrunk.trunkRadius * 1.12, height: tallTrunk.trunkHeight },
+      walkable: false,
+      groundOffset: -0.1,
+      defaultScale: 1,
+      scaleRange: [0.85, 1.2]
+    }),
+    () => ({
+      id: 'tree-oak-lean',
+      label: 'Oak (leaning)',
+      category: 'flora',
+      asset: createTreeAsset(oakLean),
+      // Stops at the split, which on this form is where the trunk has already
+      // travelled ~0.8 m sideways. The collider is a vertical cylinder on the
+      // *base*, so it under-claims the top of the bole rather than over-claiming
+      // it — the right way round for a blocker whose lean the player can see.
+      collider: { kind: 'cylinder', radius: leanTrunk.trunkRadius * 1.12, height: leanTrunk.trunkHeight },
+      walkable: false,
+      groundOffset: -0.1,
+      defaultScale: 1,
+      scaleRange: [0.8, 1.25]
+    }),
+    () => ({
+      id: 'tree-stump',
+      label: 'Tree stump (sawn)',
+      category: 'flora',
+      asset: createStumpAsset(stumpSawn),
+      collider: { kind: 'cylinder', radius: sawnBole.radius, height: sawnBole.height },
+      // Not walkable. It is 0.74 m of flat top and standing on it would be
+      // lovely, and the collider is a cylinder while the top is a shallow dome
+      // over a fluted section — the proxy would claim flat ground a hand's width
+      // outside the wood on three bearings. `assets/index.ts`'s own rule: a
+      // collider slightly too large puts the player on thin air, and only one of
+      // the two failure modes gets reported as a bug.
+      walkable: false,
+      groundOffset: -0.06,
+      defaultScale: 1,
+      scaleRange: [0.75, 1.35]
+    }),
+    () => ({
+      id: 'tree-stump-notched',
+      label: 'Tree stump (axe-notched)',
+      category: 'flora',
+      asset: createStumpAsset(stumpNotched),
+      collider: { kind: 'cylinder', radius: notchedBole.radius, height: notchedBole.height },
+      walkable: false,
+      groundOffset: -0.06,
+      defaultScale: 1,
+      scaleRange: [0.75, 1.35]
+    }),
+    () => ({
+      id: 'tree-dead',
+      label: 'Dead tree (standing)',
+      category: 'flora',
+      asset: createDeadTreeAsset(deadSnag),
+      // Stops under the lowest limb stub. The stubs are geometry the cylinder
+      // does not describe, and a collider tall enough to include them would stop
+      // the player a metre out from a trunk they can walk right up to.
+      collider: { kind: 'cylinder', radius: snagBole.radius, height: snagBole.height },
+      walkable: false,
+      groundOffset: -0.12,
+      defaultScale: 1,
+      scaleRange: [0.8, 1.25]
+    }),
+    () => ({
+      id: 'tree-log',
+      label: 'Fallen log',
+      category: 'flora',
+      asset: createDeadTreeAsset(fallenLog),
+      // A **box**, for `shard-wall`'s reason: this is the only piece of flora in
+      // the catalogue that is a *line* rather than a surface of revolution, and
+      // a cylinder around a 3.6 m trunk lying on its side would be mostly thin
+      // air with the player stopped 1.8 m from the wood. The generator fixes the
+      // log's axis to object +X so the box means something before the
+      // placement's Y-rotation.
+      collider: { kind: 'box', halfX: logBox.halfX, halfZ: logBox.halfZ, height: logBox.height },
+      walkable: false,
+      groundOffset: -0.02,
+      defaultScale: 1,
+      scaleRange: [0.8, 1.3]
+    }),
+    () => ({
+      id: 'shrub',
+      label: 'Shrub',
+      category: 'flora',
+      asset: createShrubAsset({ seed: SHRUB_SEED }),
+      // No collider, and that is the considered answer rather than the lazy one.
+      // A bush is foliage the player pushes through; blocking on it is what makes
+      // a world feel like it is made of glue — the same call `rock-stone` makes
+      // for ankle-high rubble, and the reason its comment gives.
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: -0.08,
+      defaultScale: 1,
+      scaleRange: [0.6, 1.4]
+    }),
+    () => ({
+      id: 'tree-sapling',
+      label: 'Sapling',
+      category: 'flora',
+      asset: createShrubAsset({ seed: SAPLING_SEED, form: 'sapling' }),
+      // Also none: the stem is 24 mm and a whip that thin bends rather than
+      // stops, so a collider on it would be a 2 cm invisible post in the middle
+      // of walkable ground.
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: -0.05,
+      defaultScale: 1,
+      scaleRange: [0.7, 1.3]
+    }),
+    () => ({
+      id: 'thicket',
+      label: 'Thicket',
+      category: 'flora',
+      asset: createShrubAsset({ seed: THICKET_SEED, form: 'thicket' }),
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: -0.08,
+      defaultScale: 1,
+      scaleRange: [0.7, 1.3]
+    }),
+
     // ── Platforms: the pale stone family ─────────────────────────────────────
     () => ({
       id: 'mesa-wide',
@@ -661,6 +920,624 @@ const definitionFactories = (): DefinitionFactory[] => {
       groundOffset: -0.08,
       defaultScale: 1,
       scaleRange: [0.65, 1.55]
+    }),
+
+    // -- Nimmerschein --------------------------------------------------------
+    //
+    // Colliders here are **boxes**, not cylinders, and that is the one place
+    // the village differs from every family above it. A rock is round enough
+    // that a cylinder is the honest proxy; a house is emphatically not, and a
+    // cylinder around a 6.4 x 4.5 m cottage either lets the player walk into
+    // the middle of the long wall or stops them two metres short of the gable.
+    // A box rotates with the placement's own yaw (`level/types.ts`), which is
+    // exactly what a building needs and what nothing before this did.
+    //
+    // None of them is `walkable`. A roof the player can stand on is a promise
+    // the collision proxy cannot keep -- the top face of a house's box is at
+    // eaves height while the actual roof is a pitch, so standing on it means
+    // hovering in mid-air over the ridge.
+    () => ({
+            // ── The height is the *roof*, not the wall ──────────────────────────
+      //
+      // `ScatterColliderSpec` says a blocking height "only has to exceed the
+      // player's step height to block", and for a player capsule that is true.
+      // Three other things ray-cast against these boxes and none of them is a
+      // capsule: `Projectiles` (an arrow that flies through a roof), the
+      // dialogue camera's spring arm, and — since the follow camera got one —
+      // `StoryPlayer.shortenArm`.
+      //
+      // The follow camera rides `BASE_HEIGHT` = 2.85 m above the character's
+      // feet. Against a 2.4 m box it sails straight over the proxy and into the
+      // roof space, back-face culling removes the near wall, and the building
+      // appears to vanish. That is what "this house disappears on camera
+      // rotation" actually was.
+      //
+      // So the boxes now reach the roof apex: eaves + rise x 1.035, which is
+      // where `THATCH_SECTION` puts its ridge. The chimney is left out — it is a
+      // 0.5 m spike and a proxy that included it would stop the camera a foot
+      // further out for the whole building.
+      id: 'house-cottage',
+      label: 'Cottage',
+      category: 'village',
+      asset: createCottageAsset(HOUSE_COTTAGE_SEED),
+      collider: { kind: 'box', halfX: 3.05, halfZ: 2.15, height: 4.58 },
+      walkable: false,
+      groundOffset: -0.1,
+      defaultScale: 1,
+      scaleRange: [0.92, 1.12]
+    }),
+    () => ({
+      id: 'house-cottage-b',
+      label: 'Cottage (second)',
+      category: 'village',
+      // A different seed, and that is the whole difference -- shape is authored
+      // and `seed` only jitters albedo (see `structure.ts`). Two rows rather
+      // than one so a street is not one house repeated, without paying for a
+      // second set of tiers' worth of authoring.
+      asset: createCottageAsset(HOUSE_COTTAGE_B_SEED),
+      // Roof apex, not the wall — see `house-cottage` above on why a 2.4 m
+      // proxy made the building vanish when the camera swung behind it.
+      collider: { kind: 'box', halfX: 3.05, halfZ: 2.15, height: 4.58 },
+      walkable: false,
+      groundOffset: -0.1,
+      defaultScale: 1,
+      scaleRange: [0.92, 1.12]
+    }),
+    () => ({
+      id: 'house-long',
+      label: 'Longhouse',
+      category: 'village',
+      asset: createLonghouseAsset(HOUSE_LONG_SEED),
+      // Roof apex, not the wall — see `house-cottage` above.
+      collider: { kind: 'box', halfX: 4.45, halfZ: 2.35, height: 4.88 },
+      walkable: false,
+      groundOffset: -0.1,
+      defaultScale: 1,
+      scaleRange: [0.94, 1.1]
+    }),
+    () => ({
+      id: 'house-barn',
+      label: 'Barn',
+      category: 'village',
+      asset: createBarnAsset(HOUSE_BARN_SEED),
+      // Roof apex, not the wall — see `house-cottage` above. A barn's roof
+      // reaches the ground, so its eaves are at 0.85 and almost all of this is
+      // roof.
+      collider: { kind: 'box', halfX: 3.7, halfZ: 2.7, height: 4.06 },
+      walkable: false,
+      groundOffset: -0.1,
+      defaultScale: 1,
+      scaleRange: [0.9, 1.15]
+    }),
+    () => ({
+      id: 'house-smithy',
+      label: 'Smithy (the hero house)',
+      category: 'village',
+      asset: createSmithyAsset(HOUSE_SMITHY_SEED),
+      // Wide enough to take in the forge lean-to on the -X gable, which is why
+      // this box is not centred on the building's own origin. The placement
+      // rotates it, so an off-centre proxy still tracks the building.
+      //
+      // Roof apex, not the wall — see `house-cottage` above. Two storeys, so
+      // this is the tallest proxy in the catalogue.
+      collider: { kind: 'box', halfX: 5.2, halfZ: 3.0, height: 6.83 },
+      walkable: false,
+      groundOffset: -0.12,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'palisade-run',
+      label: 'Palisade run',
+      category: 'village',
+      asset: createPalisadeAsset(PALISADE_SEED),
+      collider: { kind: 'box', halfX: PALISADE_RUN * 0.5, halfZ: 0.3, height: 2.9 },
+      walkable: false,
+      groundOffset: -0.25,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'palisade-gate',
+      label: 'Village gate',
+      category: 'village',
+      asset: createGateAsset(GATE_SEED),
+      // Two boxes would be right -- the opening between the towers is walkable
+      // and the towers are not -- and the schema has room for exactly one. So
+      // the proxy is the *left tower only*, and the right tower gets its own
+      // `palisade-run` placement behind it in the level. Blocking the whole
+      // span would wall off the gate the chapter ends by walking through, which
+      // is the one failure this prop cannot have.
+      collider: { kind: 'box', halfX: 0.95, halfZ: 1.0, height: 4.1 },
+      walkable: false,
+      groundOffset: -0.22,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'bridge-arla',
+      label: 'Bridge over the Arla',
+      category: 'village',
+      asset: createBridgeAsset(BRIDGE_SEED),
+      // The one **walkable** village prop, and the only one that has to be: the
+      // chapter crosses it. The box top is the deck at its lowest, so the player
+      // walks the camber rather than floating over it.
+      collider: { kind: 'box', halfX: 3.6, halfZ: 0.92, height: 0.44 },
+      walkable: true,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'village-well',
+      label: 'Well',
+      category: 'village',
+      asset: createWellAsset(WELL_SEED),
+      collider: { kind: 'cylinder', radius: 0.82, height: 0.72 },
+      walkable: false,
+      groundOffset: -0.05,
+      defaultScale: 1,
+      scaleRange: [0.95, 1.05]
+    }),
+    () => ({
+      id: 'village-firepit',
+      label: 'Fire pit',
+      category: 'village',
+      asset: createFirePitAsset(FIRE_PIT_SEED),
+      // Deliberately not blocking: it is 34 cm of stone kerb, the player steps
+      // over it, and a fire pit that stops you dead is a fire pit nobody can
+      // stand around -- which is the one thing der Treff is for.
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: -0.04,
+      defaultScale: 1,
+      scaleRange: [0.9, 1.15]
+    }),
+    () => ({
+      id: 'village-bench',
+      label: 'Bench',
+      category: 'village',
+      asset: createBenchAsset(BENCH_SEED),
+      // 0.34 is the plank's top face, not a guess: the bench came down from a
+      // human-scale 0.495 to the rig's own seat height when it became sittable
+      // (see `interaction/seats.ts` and the arithmetic in `combat/postures.ts`),
+      // and a collider left at the old 0.46 states a bench 12 cm taller than the
+      // one being drawn. Nothing currently notices -- every mover tests against a
+      // step ceiling of at least y+0.6 -- which is exactly why it would have sat
+      // here wrong indefinitely.
+      collider: { kind: 'box', halfX: 0.95, halfZ: 0.24, height: 0.34 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.9, 1.1]
+    }),
+    () => ({
+      id: 'village-logpile',
+      label: 'Log pile',
+      category: 'village',
+      asset: createLogPileAsset(LOG_PILE_SEED),
+      collider: { kind: 'box', halfX: 0.65, halfZ: 0.75, height: 1.0 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.85, 1.2]
+    }),
+    () => ({
+      id: 'village-haystack',
+      label: 'Hay stack',
+      category: 'village',
+      asset: createHayStackAsset(HAY_SEED),
+      collider: { kind: 'cylinder', radius: 1.05, height: 1.5 },
+      walkable: false,
+      groundOffset: -0.06,
+      defaultScale: 1,
+      scaleRange: [0.85, 1.25]
+    }),
+    () => ({
+      id: 'village-barrel',
+      label: 'Barrel',
+      category: 'village',
+      asset: createBarrelAsset(BARREL_SEED),
+      collider: { kind: 'cylinder', radius: 0.36, height: 0.86 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.85, 1.15]
+    }),
+    () => ({
+      id: 'village-crates',
+      label: 'Crate stack',
+      category: 'village',
+      asset: createCrateStackAsset(CRATE_SEED),
+      collider: { kind: 'box', halfX: 0.38, halfZ: 0.34, height: 0.58 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.85, 1.15]
+    }),
+    () => ({
+      id: 'village-cart',
+      label: 'Hand cart',
+      category: 'village',
+      asset: createCartAsset(CART_SEED),
+      collider: { kind: 'box', halfX: 1.1, halfZ: 0.62, height: 0.95 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.95, 1.05]
+    }),
+    () => ({
+      id: 'village-stall',
+      label: 'Market stall',
+      category: 'village',
+      asset: createMarketStallAsset(STALL_SEED),
+      collider: { kind: 'box', halfX: 1.2, halfZ: 0.46, height: 0.94 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.95, 1.08]
+    }),
+    () => ({
+      id: 'village-fence',
+      label: 'Fence run',
+      category: 'village',
+      asset: createFenceAsset(FENCE_SEED),
+      collider: { kind: 'box', halfX: FENCE_RUN * 0.5, halfZ: 0.12, height: 1.0 },
+      walkable: false,
+      groundOffset: -0.2,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'village-anvil',
+      label: 'Anvil',
+      category: 'village',
+      asset: createAnvilAsset(ANVIL_SEED),
+      collider: { kind: 'cylinder', radius: 0.34, height: 0.9 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.95, 1.05]
+    }),
+    () => ({
+      id: 'village-staverack',
+      label: 'Stave rack',
+      category: 'village',
+      asset: createStaveRackAsset(STAVE_SEED),
+      collider: { kind: 'box', halfX: 0.78, halfZ: 0.32, height: 1.5 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.95, 1.05]
+    }),
+    () => ({
+      id: 'village-trough',
+      label: 'Water trough',
+      category: 'village',
+      asset: createTroughAsset(TROUGH_SEED),
+      collider: { kind: 'box', halfX: 0.92, halfZ: 0.29, height: 0.5 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.95, 1.05]
+    }),
+
+    // -- The storyteller's hut ------------------------------------------------
+    //
+    // A room, as parts. `assets/interior.ts` explains why it is not one prop:
+    // a `Placement` carries exactly one collider, and one box around a room is
+    // either solid or empty and neither is a room. So the shell is four wall
+    // slabs with their own box colliders, a walkable floor and an uncollided
+    // rafter set, and the level assembles them.
+    //
+    // The wall colliders are **0.16 half-thick against a 0.12 slab**, which is a
+    // 4 cm skin of air on each face. That is deliberate and it is the one number
+    // here worth defending: a collider flush with a wall lets a player's capsule
+    // touch the render surface, and at a grazing angle the near plane then cuts
+    // into it and you can see through your own house.
+    () => ({
+      id: 'hut-wall-long',
+      label: 'Hut wall (6.4 m)',
+      category: 'village',
+      asset: createHutWallLongAsset(),
+      collider: { kind: 'box', halfX: 3.2, halfZ: 0.16, height: 2.86 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-wall-side',
+      label: 'Hut wall (5.4 m)',
+      category: 'village',
+      asset: createHutWallSideAsset(),
+      collider: { kind: 'box', halfX: 2.7, halfZ: 0.16, height: 2.86 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-wall-flank',
+      label: 'Hut wall (2.6 m)',
+      category: 'village',
+      asset: createHutWallFlankAsset(),
+      collider: { kind: 'box', halfX: 1.3, halfZ: 0.16, height: 2.86 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-floor',
+      label: 'Hut floor',
+      category: 'village',
+      asset: createHutFloorAsset(),
+      // Walkable, and one of only two props in the whole catalogue that are
+      // (the other is the bridge). A room the player stands *beside* rather than
+      // in is not a room.
+      //
+      // 0.02, down from 0.4. `walkable` stands the player on `placement.y +
+      // height`, and 0.4 against a *visual* top of 0.1 had them walking the room
+      // 30 cm above its floorboards while the cast — placed on the terrain by
+      // `groundAt` — stood 10 cm under them. See the asset's own note; the
+      // boards are flush now and this is the matching number.
+      collider: { kind: 'box', halfX: 6.5, halfZ: 5.5, height: 0.02 },
+      walkable: true,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-rafters',
+      label: 'Hut rafters',
+      category: 'village',
+      // No collider at all: they are 2.4 m overhead, the player cannot reach
+      // them, and a box round them would be a ceiling you bump your head on
+      // while standing on the floor below.
+      asset: createHutRaftersAsset(),
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-table',
+      label: 'Table',
+      category: 'village',
+      asset: createHutTableAsset(),
+      collider: { kind: 'box', halfX: 1.2, halfZ: 0.52, height: 0.6 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-stool',
+      label: 'Stool',
+      category: 'village',
+      asset: createHutStoolAsset(),
+      collider: { kind: 'cylinder', radius: 0.24, height: 0.36 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.94, 1.06]
+    }),
+    () => ({
+      id: 'hut-hearth',
+      label: 'Hearth',
+      category: 'village',
+      asset: createHutHearthAsset(),
+      collider: { kind: 'box', halfX: 1.05, halfZ: 0.48, height: 2.3 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-chest',
+      label: 'Chest',
+      category: 'village',
+      asset: createHutChestAsset(),
+      collider: { kind: 'box', halfX: 0.66, halfZ: 0.4, height: 0.76 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-shelf',
+      label: 'Dresser',
+      category: 'village',
+      asset: createHutShelfAsset(),
+      collider: { kind: 'box', halfX: 0.8, halfZ: 0.2, height: 1.62 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-bed',
+      label: 'Bed',
+      category: 'village',
+      asset: createHutBedAsset(),
+      collider: { kind: 'box', halfX: 1.02, halfZ: 0.6, height: 0.46 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-pail',
+      label: 'Water pail',
+      category: 'village',
+      asset: createHutPailAsset(),
+      // ── It blocks now, and the doorway argument no longer holds ──────────
+      //
+      // This used to be `none`, on the grounds that two pails are set down in a
+      // doorway in the frame act and a pail blocking a doorway is a pail the
+      // player gets stuck behind. That was true of a 1.2 m doorway in a 6.4 m
+      // room; the door is 2.0 m now and `frame.ts` sets them down beside it
+      // rather than in it. A pail you walk *through* on your way in is worse
+      // than one you walk round — it is the first prop of the chapter and it
+      // tells the player, in the first three seconds, which rules this world
+      // runs on.
+      //
+      // 0.2 against the pail's own 0.19 top radius: a hair proud, like every
+      // other collider here, so the capsule never touches the render surface.
+      collider: { kind: 'cylinder', radius: 0.2, height: 0.42 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.95, 1.05]
+    }),
+    () => ({
+      id: 'hut-wine',
+      label: 'Wine and cups',
+      category: 'village',
+      asset: createHutWineAsset(),
+      // A collider is anchored at the *placement's* y (`collision.ts` sets
+      // `baseY = placement.y`), and this one is placed with `lift: 0.81` — on
+      // the table — so the box it makes is a box in the air 81 cm up, which is
+      // exactly where the jug is. It is inside the table's own collider from
+      // most directions, and not from the ends.
+      collider: { kind: 'cylinder', radius: 0.3, height: 0.34 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hunt-net',
+      label: 'Hunting net (set)',
+      category: 'village',
+      asset: createHuntNetAsset(NET_SEED),
+      // ── It blocks, and that is the point of it ──────────────────────────
+      //
+      // The trap is a barrier; a net the player walks through is a net that
+      // explains nothing about why the boar came *through* it. The box is the
+      // net panel only — 2.7 m of it — and stops short of the guys, which are
+      // rope on the ground and which the player has to be able to step over.
+      collider: { kind: 'box', halfX: 2.7, halfZ: 0.5, height: 2.1 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.95, 1.08]
+    }),
+    () => ({
+      id: 'hut-window-bay',
+      label: 'Hut wall with window (2.8 m)',
+      category: 'village',
+      asset: createHutWindowBayAsset(),
+      // Same 0.16 half-depth as the plain slabs — the 4 cm skin of air this
+      // section's header defends. The opening is *not* cut out of the collider:
+      // its sill is 1.02 m up, well above a capsule's waist, so a player who
+      // could walk through the hole would be walking through a wall.
+      collider: { kind: 'box', halfX: 1.4, halfZ: 0.16, height: 2.86 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-glass',
+      label: 'Hut window glass',
+      category: 'village',
+      asset: createHutGlassAsset(),
+      // None. The pane lives inside the bay's own collider, and glass you can
+      // walk into is glass you have broken.
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-roof',
+      label: 'Hut roof (shingled)',
+      category: 'village',
+      asset: createHutRoofAsset(),
+      // None, for the same reason the rafters have none: its lowest point is
+      // 2.9 m up and a box round it would be a ceiling the player bumps their
+      // head on while standing on the floor below.
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-chair',
+      label: "Chair (the storyteller's)",
+      category: 'village',
+      asset: createHutChairAsset(),
+      collider: { kind: 'box', halfX: 0.3, halfZ: 0.36, height: 0.38 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    // ── Wall pieces ───────────────────────────────────────────────────────
+    //
+    // All four hang between 1.6 m and 2.4 m on a wall that already has a
+    // collider, so none of them takes one: a second box up there is an
+    // invisible pillar you cannot walk under, and the wall behind it is what
+    // actually stops the player.
+    () => ({
+      id: 'hut-hammers',
+      label: "Smith's hammers (wall rack)",
+      category: 'village',
+      asset: createHutHammersAsset(),
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-pelt',
+      label: "Wolf pelt (wall)",
+      category: 'village',
+      asset: createHutPeltAsset(),
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.94, 1.06]
+    }),
+    () => ({
+      id: 'hut-antlers',
+      label: 'Deer antlers (wall)',
+      category: 'village',
+      asset: createHutAntlersAsset(),
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [0.94, 1.06]
+    }),
+    () => ({
+      id: 'hut-portrait',
+      label: 'Portrait of Athalus',
+      category: 'village',
+      asset: createHutPortraitAsset(),
+      collider: { kind: 'none' },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
+    }),
+    () => ({
+      id: 'hut-workblock',
+      label: "Work block (the count's dagger)",
+      category: 'village',
+      asset: createHutDaggerBlockAsset(),
+      collider: { kind: 'cylinder', radius: 0.3, height: 0.62 },
+      walkable: false,
+      groundOffset: 0,
+      defaultScale: 1,
+      scaleRange: [1, 1]
     })
   ]
 }
@@ -806,3 +1683,15 @@ export { createShardWallAsset } from './shardWall'
 export { createSlabAsset } from './slab'
 export { DESERT_STONE, PALE_STONE, type StonePalette } from './stone'
 export { createTreeAsset } from './tree'
+export {
+  createBarnAsset,
+  createBridgeAsset,
+  createCottageAsset,
+  createGateAsset,
+  createLonghouseAsset,
+  createPalisadeAsset,
+  createSmithyAsset,
+  PALISADE_RUN
+} from './village'
+export * from './villageProps'
+export * from './interior'

@@ -1,4 +1,4 @@
-# 3d-world — Game Design Document
+# aethel-fold — Game Design Document
 
 > **Working title:** *Meadowfall*
 > **Genre:** stylised 3D open-world action-adventure (hybrid-casual, web)
@@ -218,6 +218,10 @@ Every world object ships **exactly four LOD tiers**, plus a cull distance.
 | Pine (spruce/fir, ±snow) | 200 | 110 | 56 | 16 | 192 / 98 / 52 / 15 |
 | Birch | 180 | 100 | 50 | 14 | 172 / 90 / 44 / 14 |
 | Ancient oak | 340 | 190 | 95 | 26 | 320 / 184 / 92 / 22 |
+| Oak (broad / tall / leaning) | 200 | 110 | 56 | 16 | 162 / 80 / 54 / 16 · 180 / 84 / 54 / 16 · 162 / 80 / 54 / 16 |
+| Tree stump (sawn, axe-notched) | 120 | 66 | 34 | 12 | 102 / 54 / 30 / 9 |
+| Dead tree (snag / fallen log) | 110 | 56 | 30 | 14 | 90 / 42 / 24 / 9 · 84 / 44 / 24 / 12 |
+| Shrub / sapling / thicket | 100 | 60 | 32 | 18 | 72 / 48 / 24 / 10 · 64 / 40 / 22 / 16 · 88 / 56 / 30 / 16 |
 | Boulder | 180 | 96 | 44 | 12 | 140 / 80 / 36 / 12 |
 | Stone | 72 | 40 | 20 | 8 | 56 / 36 / 20 / 8 |
 | Plateau | 260 | 150 | 80 | 40 | 216 / 144 / 72 / 36 |
@@ -231,11 +235,95 @@ Every world object ships **exactly four LOD tiers**, plus a cull distance.
 | Hoodoo | 250 | 145 | 80 | 36 | 240 / 120 / 72 / 36 |
 | Terrain chunk (48 m) | 1400 | 400 | 128 | 24 | 1344 / 384 / 120 / 18 |
 | Grass patch (4 m) *(6 tiers)* | 6300 | 2800 | 720 | 110 / 44 / 20 | exact |
+| Cottage / longhouse | 860 | 420 | 200 | 100 | 844 / 382 / 168 / 92 |
+| Barn | 640 | 320 | 160 | 90 | 550 / 272 / 138 / 76 |
+| Smithy (2 storeys) | 1220 | 620 | 340 | 140 | 1150 / 560 / 306 / 124 |
+| Hut wall (interior shell, 2.6–6.4 m) | 340 | 200 | 110 | 60 | 228–292 / 132–164 / 58 / 40 |
+| Hut wall with window bay (2.8 m) | 460 | 260 | 140 | 80 | 252 / 132 / 66 / 44 |
+| Hut window glass *(translucent, no outline)* | 120 | 70 | 40 | 24 | 32 / 12 / 10 / 8 |
+| Hut roof (shingled, 12.8 × 11.8 m) | 340 | 200 | 110 | 60 | 304 / 146 / 90 / 44 |
+| Hut rafters (12.8 × 10.8 m room) | 700 | 380 | 170 | 100 | 426 / 228 / 100 / 32 |
+| Chair (ladder-back) | 400 | 230 | 120 | 64 | 176 / 88 / 50 / 24 |
+| Wall pieces (hammers · pelt · antlers · portrait) | 260–560 | 150–300 | 80–150 | 40–70 | 112 / 56 / 24 / 8 · 162 / 82 / 30 / 16 · 160 / 80 / 32 / 24 · 400 / 222 / 90 / 44 |
+| Hunting net (panel, stakes, four guys) | 820 | 420 | 200 | 90 | 576 / 296 / 120 / 64 |
+| Palisade run (4.8 m) | 540 | 290 | 120 | 60 | 462 / 256 / 30 / 16 |
+| Village gate | 1320 | 760 | 410 | 140 | 680 / 318 / 192 / 48 |
+| Bridge (7.2 m span) | 960 | 520 | 260 | 90 | 820 / 384 / 210 / 48 |
+| Well | 600 | 330 | 190 | 70 | 414 / 198 / 92 / 36 |
+| Cart / market stall | 680 | 380 | 200 | 70 | 344 / 172 / 58 / 16 (stall 280 / 136 / 60 / 32) |
+| Log pile | 760 | 430 | 90 | 34 | 612 / 200 / 30 / 16 |
+| Bench / trough | 280 | 160 | 80 | 30 | 108 / 60 / 30 / 8 |
+| Trollschwein *(1 tier)* | 1450 | — | — | — | 734 |
+| Sheep (ewe) | 560 | 280 | 130 | 80 | 516 / 242 / 108 / 66 |
 | *(future)* Monster | 900 | 420 | 180 | 40 | — |
 | Chibi human | 1380 | 700 | 430 | 320 | 896–1356 / 412–676 / 366–414 / 312 |
 
 Generators call `assertTriBudget(geometry, budget, name)` and **throw** in dev if
 they exceed it. The budget is a ceiling, not a target.
+
+**The house rows were raised to pay for a facade and a thatch roof that are
+actually there.** Cottage LOD0 went 720 → 860 (actual 582 → 812), LOD3 76 → 100.
+None of it went on making the building bigger; all of it went on two things
+paint had been failing to say, and both failures were measured rather than
+judged by eye.
+
+**The facade.** `box`'s path polygon put the cottage wall's seven LOD0 vertex
+rows at height fractions 0, 0.001, 0.161, 0.803, 0.991, 0.999, 1 — **64 % of the
+wall carried no vertex row at all** — so `timberFrame`'s "mid-rail at two thirds
+height" resolved to height 0.99 and painted the rail on the wall plate. Its
+corner posts were painted at v = 0, ¼, ½, ¾ while the section's corners are at
+1/12, 4/12, 7/12, 10/12, i.e. a sixth of the perimeter away, in the middle of
+each face. Fixing the polygon and giving the wall a ring schedule whose rows
+*are* the sill, mid-rail and plate is free (a tier costs rings × segments, not
+control points). What is not free is the 16-point wall section (100 → 160) and
+the twelve applied timbers — four corner posts, four mid-rails, four braces —
+at 16 triangles each. Those are modelled because vertex colour cannot express a
+feature narrower than the vertex spacing: on an 18.8 m perimeter at 16 samples
+the narrowest paintable vertical is 2.35 m, and buying it down to 1.2 m costs
+320 triangles against 64 for four real posts that also break the outline.
+
+**The roof got cheaper and fatter.** A 24-point `THATCH_SECTION` with a modelled
+ridge cap (15–19 cm proud of the coat, 0.86 m across) and a modelled eaves bead
+replaced a 16-point pitch whose "bead" measured *inside* its own slope line —
+a chamfer, not a bead. It is paid for by dropping the roof's ring schedule from
+`CURVED_RINGS`' 8 bands to 6: rings only shape the two gable half-hips, while
+the section shapes the ridge and the eaves along the whole length. **240
+triangles against the old 252.**
+
+**And then the ridge got liggers, inside the budget rather than over it.**
+
+Looked at in the browser from Nimmerschein's street, every thatched roof in the
+village read as a flat tan plane. Three things were wrong and only one of them
+was a matter of taste:
+
+* `thatchPaint`'s course term was **phase-inverted**. A vertex row sits at
+  `down = k/12`, so the old `q = ((down / THATCH_COURSE − 0.5) mod 1)` was 0 on
+  the odd rows — which are exactly the rows `THATCH_SECTION` pushes *proud* — so
+  the lap shadow was painted onto every butt edge and the paint cancelled the
+  relief instead of reinforcing it.
+* its `butts` term, a third of the roof's whole tonal range, was
+  `smoothstep(0.62, 1.0, q)` against a `q` that is only ever 0 or 0.5. It was
+  **identically zero at every vertex in every tier** and had never affected a
+  pixel.
+* the geometric lap was ±2.4 % of the rise, i.e. 3.6 cm and a 5° normal tilt on
+  a cottage, which does not cross a toon band edge anywhere on the slope. It is
+  ±3.2 % now: 4.8 cm, about 7°, and still 1.5 % of the slope, so still texture
+  rather than sag.
+
+The first two are free. What is not free is the **ridge fixing** — two hazel
+liggers, one `flatTimber` each — and it is modelled rather than painted for the
+reason the applied frame is: a painted ligger is a colour on a smooth surface,
+so it vanishes under any light but a head-on one and can never reach the
+silhouette. The ridge is the only part of a roof that is on the skyline from
+every approach.
+
+It is **two** members and not six because of this table. Crossed spars were
+authored with them and cut: six applied timbers cost 96 at LOD0, and a cottage
+is 812 against 860, a barn 550 against 640 and the smithy 1150 against 1220 —
+the tightest has 48 to spend. A spar is 2.8 cm and 34 cm long, legible from the
+doorstep and gone by ten metres; a ligger is a 8.4 cm line running the whole
+ridge. Two of them cost 32 at LOD0 and 16 at LOD1, so the cottage lands at
+844 / 382 and no cap in this table moved.
 
 **The chibi human row was raised from 700 to 850 to pay for customisation, from
 850 to 1060 to pay for hands, and from 1060 to 1380 to pay for a face with
@@ -388,6 +476,41 @@ cannot describe an anvil or a 2:1 taper with ledges in it, and the tier measured
 Slab and grass rock go the other way — they are stacked and scattered in
 quantity, so they are budgeted nearer the stone than the plateau.
 
+**The three new oak rows share the scatter tree's ladder exactly, and that is
+the point.** `oakBroad`, `oakTall` and `oakLean` are rows in `tree.ts`'s `FORMS`
+table, not new generators — one material, one ramp, one budget ladder, so a
+mixed wood still costs one draw call per tier per scatter field. What separates
+them is where the canopy's mass sits and how far the trunk leans, measured as
+bounding boxes at LOD0: **6.75 × 3.61 × 5.57 m** for the broad, **2.86 × 8.44 ×
+2.23** for the tall, **4.53 × 4.89 × 4.72** with the canopy centroid 0.98 m off
+the axis for the leaning one. Three *seeds* of one row differ by none of that,
+which is why a wood built from three seeds read as one tree stamped repeatedly.
+
+**None of them may exceed four clumps**, and that is arithmetic rather than
+taste: at five, LOD2 wants 66 triangles against 56 and the only way back under
+the ceiling is a 2-segment clump, which is a flat quad. The variation has to come
+from `spread`, `squash`, `trunkTop` and `leanAmount` — which is convenient, since
+those are also the four that survive distance.
+
+**The forest floor is budgeted below the boulder and above the stone**, and it
+buys three things the wood did not have. A **stump** says a person has been here,
+and 30 of its 102 triangles are the cut face alone — four concentric rings
+carrying painted growth rings and a pale sapwood band, because this is the one
+prop the player looks *down* at and its silhouette is a boulder's. A **snag**
+puts a bare vertical bar through the canopy line, which is the thing that makes a
+stand of trees read as procedural: every other tree here puts its mass between
+3 m and 9 m, so a wood is a continuous band of foliage over a continuous band of
+shadow, and reseeding does not change that. And the **shrub / sapling / thicket**
+row is the layer under four metres, without which a forest is a park — three
+forms out of one generator and one material, so the densest field in the world is
+one `InstancedLodField` rather than three.
+
+**The stump's coarse tiers keep the cut face longest**, which is the one tier
+ordering in this table that runs against size. LOD2 drops the bole to a triangle
+in section while the cut face still carries three radial rings: at this asset's
+LOD1→LOD2 switch (36 m at `distanceScale` 0.8) the bole is two pixels of bark and
+the cut face is the entire prop.
+
 **The ancient oak is budgeted as a landmark, not as flora.** 340 at LOD0 against
 the scatter tree's 200, on exactly the argument the cliff family already makes
 above: a scatter tree's budget is really a per-*field* budget, while the oak is
@@ -395,6 +518,34 @@ placed by hand in ones and twos and is the thing the player navigates by. What
 it buys is branch structure — three or four gnarled limbs — which is the one
 feature that separates an old tree from a big one, and which no amount of canopy
 lumping substitutes for.
+
+**The village is budgeted as landmark, not as scatter, and for the ancient
+oak's reason.** A cottage is 582 triangles against a scatter tree's 162 because
+it is placed by hand in twenties rather than by the thousand, it is the thing the
+player navigates by, and — unlike anything else in the catalogue — its
+*orientation* carries meaning. What its budget buys is set out in
+`assets/structure.ts`: the roof mass, the wall mass, the chimney, the door and
+the corner posts are modelled because every one of them changes the outline, and
+the timber frame, the daub panels, the thatch courses and the plank seams are
+**vertex colour**, because none of them does. The first pass modelled a full
+Fachwerk frame and measured 1 640 triangles for one house — three times the
+ancient oak — and read *worse* at 15 m, because paint has no bevel to lose.
+
+**The palisade is the catalogue's only asset whose coarse tiers are a different
+object.** LOD0 and LOD1 are twelve individually leaning split stakes; LOD2 and
+LOD3 are one battered slab with the stake rhythm painted on. The gaps between
+the stakes are the entire read of a stockade at close range, and past ~60 m a
+stake is under a pixel wide and twelve of them alias into a shimmering band for
+twelve times the triangles. `StructureMember.firstTier` is the field that exists
+for this, and it is the one place in the project where §4.3's "tiers must not be
+decimations of each other" is satisfied by *substitution* rather than by
+re-evaluating one shape more coarsely.
+
+**The Trollschwein ships one tier, not four.** It is the first claimant on the
+`Monster` row and it takes only the LOD0 number. A creature in a chapter is never
+further away than the fight it is part of, so a tier ladder would be four
+geometries of which three never draw — the same call `Character` makes, for the
+same reason its own tiers exist (a *crowd* recedes; a boss does not).
 
 **The desert props are not new budget rows for new shapes.** A hoodoo is the
 same lofted surface of revolution as a sea stack and a desert mesa is the same
@@ -509,6 +660,25 @@ this is invisible because tier silhouettes are matched by design (R1).
 
 * **Draw calls ≤ 180** in a typical view. Instancing is the default, not an
   optimisation — every scatter prop goes through `InstancedLodField`.
+
+  > **Chapter 1's hamlet does not meet this and it is measured, not ignored.**
+  > Measured on one build: **156** in the sandbox forest, **121** at the trap
+  > clearing, **217** standing in the storyteller's yard and ~225 inside his
+  > room. The room is where the instancing argument stops working — every prop
+  > in it is placed *once*, so a field per definition is a draw per definition,
+  > and there are 22 definitions in that room.
+  >
+  > Accounted for: the scene was already ~206 in that view before the room was
+  > rebuilt. The rework added ~8 to the level batch (a roof, four window bays,
+  > four panes, a chair and four wall pieces, against two wall slabs removed)
+  > and the flock adds **+4** (two main-pass, two shadow-cascade, no new
+  > program — five sheep are one skinned mesh). The water-aware scatter gives
+  > some back by thinning overlaps.
+  >
+  > The remedy is a merge pass — one asset per *wall*, not per object on it —
+  > and it is not a change to make while the room's layout is still moving.
+  > The glass carries no inverted hull, which is both why it looks like glass
+  > and one draw call per tier it does not spend (see `StructureSpec.outline`).
 * **Zero per-frame allocation** in `src/world/` update paths. Scratch
   `Vector3`/`Matrix4` objects are module-level singletons. This is checked by
   watching GC sawtooth in the perf panel.

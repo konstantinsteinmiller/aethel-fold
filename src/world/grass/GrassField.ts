@@ -860,6 +860,27 @@ export class GrassField {
   }
 
   /** `false` frees nothing but stops all work and drawing — the `off` setting. */
+  /**
+   * Throws away every built patch so the residency pass places them again.
+   *
+   * The candidate list is untouched — the *chunks* have not changed, only the
+   * rules for what may grow on them. That distinction is why this is not
+   * `dropChunk` in a loop: dropping a candidate would leave grass permanently
+   * absent from a chunk the terrain still has, and it would only come back if
+   * the player walked far enough away to unload and reload the terrain.
+   *
+   * Called once, when the story hands the placer its building footprints. Grass
+   * is placed per chunk and the chunks standing at that moment were built before
+   * the exclusions existed, so without this the first ring of village around the
+   * player keeps its blades coming up through the floorboards until they walk
+   * away and back.
+   */
+  rebuild(): void {
+    for (const key of [...this.cellByKey.keys()]) {
+      this.removeCell(key)
+    }
+  }
+
   setEnabled(enabled: boolean): void {
     this.enabled = enabled
     this.group.visible = enabled

@@ -49,6 +49,19 @@ export class PlacementBatcher {
   readonly stats: BatchStats = { fields: 0, instances: 0, unresolved: 0 }
 
   private fields: InstancedLodField[] = []
+  /**
+   * The field per definition id, so a caller can address one prop type.
+   *
+   * `fields` is enough for everything that applies to the whole batch — the
+   * occlusion source, the outline switch — and is useless for the one thing that
+   * does not: veiling `hut-roof` and nothing else. Built alongside `fields` in
+   * `build` rather than searched, because the alternative is a linear scan by
+   * `asset.name`, and an asset's name is not its `defId` (a cottage is
+   * `house-cottage-401`).
+   */
+  private readonly byDefinition = new Map<string, InstancedLodField>()
+  /** Veils applied before the field existed, replayed on the next build. */
+  private readonly pendingVeils = new Map<string, number>()
   private built = false
   /** Re-applied to every field on rebuild, since fields are recreated. */
   private occlusionSource: TerrainOcclusion | null = null
@@ -112,6 +125,11 @@ export class PlacementBatcher {
         field.addCell(cellKey, bucket)
       }
       field.setOcclusion(this.occlusionSource)
+      this.byDefinition.set(defId, field)
+      const veil = this.pendingVeils.get(defId)
+      if (veil !== undefined) {
+        field.setVeil(veil)
+      }
       this.group.add(field.group)
       this.fields.push(field)
       instances += capacity
@@ -127,6 +145,21 @@ export class PlacementBatcher {
     for (const field of this.fields) {
       field.update(camera, cameraPosition)
     }
+  }
+
+  /**
+   * Veils every instance of one definition. 1 is solid, 0 invisible.
+   *
+   * Remembered rather than dropped when the definition has no field yet: a
+   * chapter can ask for its roof to be see-through on any frame, and the batch
+   * is rebuilt from scratch whenever the level changes — including once at the
+   * end of the placeable drain. Without the memo a veil set during a
+   * conversation would be silently thrown away by the next rebuild, which is a
+   * roof that closes over the player's head mid-sentence.
+   */
+  setVeil(defId: string, value: number): void {
+    this.pendingVeils.set(defId, value)
+    this.byDefinition.get(defId)?.setVeil(value)
   }
 
   setOcclusion(occlusion: TerrainOcclusion | null): void {
@@ -159,6 +192,8 @@ export class PlacementBatcher {
       field.dispose()
     }
     this.fields.length = 0
+    // The index goes; `pendingVeils` deliberately does not. See `setVeil`.
+    this.byDefinition.clear()
     this.group.clear()
     this.stats.fields = 0
     this.stats.instances = 0

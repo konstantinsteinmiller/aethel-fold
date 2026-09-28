@@ -444,7 +444,22 @@ describe('the whole product fits the GDD row', () => {
     }
   })
 
-  it('has 24 triangles of headroom over the worst figure', () => {
+  /**
+   * The exhaustive one, and the only test in the repo that needs its own
+   * timeout.
+   *
+   * It builds a full chibi for every (hair x beard x nose x brow) combination —
+   * several hundred figures — because the claim is about the *worst* of them and
+   * there is no way to know which that is without building it. In isolation the
+   * file runs in 13 s; under the full suite's parallel load the same test sat at
+   * 29.2 s against vitest's 30 s default and then began timing out for real once
+   * two more suites joined the pool.
+   *
+   * Raised rather than sampled: taking a random subset would turn a proof that
+   * *no* combination exceeds `CHIBI_BUDGET` into a chance that the one which
+   * does was not drawn, and the whole point of the assertion is the "no".
+   */
+  it('has 24 triangles of headroom over the worst figure', { timeout: 120_000 }, () => {
     let worst = 0
     let worstAt = ''
     for (const hair of NPC_HAIR) {

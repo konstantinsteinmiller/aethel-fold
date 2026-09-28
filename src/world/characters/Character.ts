@@ -9,10 +9,20 @@ import { type CharacterAppearance, DEFAULT_APPEARANCE } from './equipment'
 import { sleeveColourForItem } from './gear/garments'
 import { installGear } from './gearRegistry'
 import { applyBank, applyGait, applyIdle, applyJump, RUN, WALK } from './poses'
-import { applyCarry, applyDraw, applyShield, isDrawable } from './combatPoses'
+import { Fidgets } from './fidgets'
+import { applyCarry, applyDraw, applyShield, poseFamilyOf } from './combatPoses'
 import type { DrawnState, EquipSlot, ItemKind } from './equipment'
 import { buildSkeleton } from './skeleton'
 import { BONE_NAMES, type BoneName } from './rig'
+import { applyMouth, captureMouth, type MouthRig } from './mouth'
+
+/**
+ * Bone-local metres from the head joint up to the middle of the head volume.
+ *
+ * `HEAD.centre[1] - rig head joint y` = 1.29 − 1.14. Written as the difference
+ * it is rather than as `0.15`, so that if either end moves this stays a face.
+ */
+const HEAD_CENTRE_OFFSET = 1.29 - 1.14
 
 /**
  * ─── A character in the scene ───────────────────────────────────────────────
@@ -75,6 +85,17 @@ const RUN_SPEED = 3.4
 const WALK_SPEED = 1.4
 /** Below this the character is standing. Hysteresis-free: idle blends in. */
 const STILL_SPEED = 0.12
+
+/**
+ * Fidget seeds, handed out in construction order.
+ *
+ * A counter rather than `Math.random()` so a scene is reproducible frame for
+ * frame — a screenshot review that cannot be repeated is not a review — and
+ * rather than the appearance seed because the whole point is that two figures
+ * built from the *same* cast row must not gesture in unison.
+ */
+let fidgetSeeds = 0
+const nextFidgetSeed = (): number => ++fidgetSeeds
 /** Radians per second the body can turn. A human pivots, it does not snap. */
 const TURN_RATE = 7.0
 /** How fast measured speed is smoothed, per second. */
@@ -236,6 +257,25 @@ export class Character {
    */
   private readonly fists: HandGrips = { L: false, R: false }
 
+  /**
+   * First vertex of the face block on **tier 0**, from `ChibiBlocks`.
+   *
+   * Kept because it is the only way back to the mouth after the build, and it
+   * moves: a beard, a hat or a different hairstyle all change how many vertices
+   * come before the face. Re-read on every rebuild, right beside the geometry
+   * swap that invalidates it.
+   */
+  private faceStart = -1
+  /**
+   * The eight mouth vertices, measured on first use.
+   *
+   * Three states, and they are all meaningful: `undefined` is "not looked at
+   * yet", `null` is "this geometry has no mouth" (a tier built without a face,
+   * which is every tier but 0), and a rig is a mouth that can be opened. The
+   * lazy capture is what keeps 19 characters who never say a word from paying
+   * for a `Float32Array` each.
+   */
+  private mouthRig: MouthRig | null | undefined = undefined
   private readonly material: ToonMaterial
   private readonly outlineMaterial: OutlineMaterial | null
   /**
@@ -285,12 +325,42 @@ export class Character {
    * ladder that engaged by default would quietly coarsen the turntable.
    */
   lodTier = 0
-  private readonly bones: Map<BoneName, Bone>
+  /**
+   * The rig, by name.
+   *
+   * **Read-only by convention, and the convention has one documented exception.**
+   * The note on `bone()` above says a caller parents to a bone rather than posing
+   * it, because a second writer to a rotation is a fight that resolves by update
+   * order. That still holds for equipment, for the editor and for anything that
+   * measures the figure.
+   *
+   * The exception is the *combat* layer, which is a second animation layer and
+   * has to be: an attack clip blends onto whatever the gait produced (see
+   * `combat/Combatant.ts::applyClip`), which is exactly what makes swinging while
+   * walking possible without a second set of clips for every gait. It is a
+   * legitimate writer, and the ordering is not ambiguous — it runs strictly after
+   * `update()`, every frame, from `CombatDirector`.
+   *
+   * Exposed rather than wrapped in an `applyClip` method on this class so the
+   * dependency points the right way: `characters/` knows nothing about combat,
+   * and combat is free to grow more layers without this file changing again.
+   */
+  readonly bones: Map<BoneName, Bone>
   private readonly cadence: number
   private phase = 0
   private elapsed = 0
   private jumpTime = -1
   private stateBeforeJump: CharacterState = 'idle'
+
+  /**
+   * The small one-shot gestures a standing figure makes. See `fidgets.ts`.
+   *
+   * Seeded from a module counter rather than from the appearance, so two
+   * characters built from the same cast row still fidget out of step — five
+   * people round a table scratching their heads on the same frame is worse than
+   * five people standing still.
+   */
+  private readonly fidgets = new Fidgets(nextFidgetSeed())
   private readonly previous = new Vector3()
   private hasPrevious = false
   private facing = 0
@@ -317,7 +387,8 @@ export class Character {
     this.appearance = { ...appearance }
     this.geometryName = geometryName
 
-    const { geometry, outlineGeometry } = buildChibiGeometry(undefined, geometryName, this.appearance)
+    const { geometry, outlineGeometry, blocks } = buildChibiGeometry(undefined, geometryName, this.appearance)
+    this.faceStart = blocks.face
     const { skeleton, root, byName } = buildSkeleton()
     this.bones = byName
 
@@ -632,7 +703,8 @@ export class Character {
 
   private rebuild(): void {
     const started = performance.now()
-    const { geometry, outlineGeometry } = this.buildGeometry(0)
+    const { geometry, outlineGeometry, blocks } = this.buildGeometry(0)
+    this.faceStart = blocks.face
     const previousBody = this.body.geometry
     const previousOutline = this.outline?.geometry ?? null
     this.body.geometry = geometry
@@ -645,6 +717,11 @@ export class Character {
     // one is a no-op.
     previousBody.dispose()
     previousOutline?.dispose()
+    // The rig indexes into a buffer that no longer exists, and `faceStart` may
+    // have moved — a cuirass adds vertices ahead of the face block. Dropping it
+    // here rather than trying to re-measure keeps the invalidation next to the
+    // thing that caused it; the next `setMouthOpen` re-captures.
+    this.mouthRig = undefined
     // **Every rung that exists, not just this one.** An equip that reached LOD0
     // alone would be invisible until the player walked away and then *appear*,
     // which is the exact class of bug the crossfade exists to prevent — and it
@@ -653,6 +730,57 @@ export class Character {
     // the change up on their first use, from the same `buildGeometry`.
     this.refreshTiers()
     this.lastRebuildMs = performance.now() - started
+  }
+
+  /**
+   * World position of the middle of the head, for a camera to aim at.
+   *
+   * ── Off the bone, not off the group ────────────────────────────────────────
+   *
+   * The head *bone* sits at y = 1.14 in bind space (`rig.ts`) and that is the
+   * base of the skull, not the face: the head volume's centre is at 1.29
+   * (`face.ts::HEAD`), 150 mm higher. A camera aimed at the bone frames a jaw.
+   *
+   * The offset is applied through the bone's own world matrix rather than as a
+   * world-up nudge, so it follows the head when the idle pose tilts it and it
+   * scales with the figure — `CAST` gives Theodor a `scale` and Nidane another,
+   * and a fixed 150 mm would aim at the chin of one and over the ear of the
+   * other.
+   */
+  headPosition(out: Vector3): Vector3 {
+    const head = this.bones.get('head')
+    if (!head) {
+      return out.copy(this.group.position)
+    }
+    return out.set(0, HEAD_CENTRE_OFFSET, 0).applyMatrix4(head.matrixWorld)
+  }
+
+  /**
+   * Opens the mouth — 0 shut, 1 a full open vowel.
+   *
+   * Safe to call every frame with the same value (it compares first) and safe to
+   * call on a figure that has no face (it does nothing). Driven by
+   * `story/lipSync.ts`, which turns the line on screen into this number.
+   *
+   * ── Tier 0 only, and deliberately not carried down the ladder ─────────────
+   *
+   * Only `CHIBI_TIERS[0]` has a face at all, so this writes to `this.body` and
+   * nothing else. A character who walks past LOD0's 18 m boundary mid-sentence
+   * loses their mouth along with their eyes, brows and nose — which is the
+   * correct answer, not a compromise: there is nothing left up there to move.
+   *
+   * Returns true if the geometry was touched, which is what the story layer
+   * uses to know a speaker is actually being animated rather than silently
+   * doing nothing because the figure is too far away.
+   */
+  setMouthOpen(amount: number): boolean {
+    if (this.mouthRig === undefined) {
+      this.mouthRig = this.faceStart >= 0 ? captureMouth(this.body.geometry, this.faceStart) : null
+    }
+    if (!this.mouthRig) {
+      return false
+    }
+    return applyMouth(this.mouthRig, this.body.geometry, amount)
   }
 
   /**
@@ -725,8 +853,12 @@ export class Character {
       const drawing = combat.drawnFrom === 'sheathed'
       const state = drawing ? this.combatTarget(combat) : combat.drawnFrom
       const kind = state === 'mainHand' ? combat.itemAt('mainHand') : combat.itemAt('back')
-      if (kind !== null && isDrawable(kind)) {
-        applyDraw(this.bones, kind, combat.drawProgress, drawing ? 'draw' : 'sheathe', effort)
+      // Through the pose family, not the kind: a scrantis, a broadsword and a
+      // dagger all leave the hip along the sword's arc, and a war axe comes off
+      // the back along the greatsword's. See `combatPoses.POSE_FAMILY`.
+      const family = kind === null ? null : poseFamilyOf(kind)
+      if (family !== null) {
+        applyDraw(this.bones, family, combat.drawProgress, drawing ? 'draw' : 'sheathe', effort)
       }
     }
 
@@ -798,6 +930,17 @@ export class Character {
     if (this.moving < 1) {
       this.blendTowardIdle(1 - this.moving)
     }
+
+    // ── And an idle that is not only a sine wave ──────────────────────────
+    //
+    // Before `applyCombat`, which is the layering rule this class already
+    // follows (`gait → bank → carry → draw → shield`), and that ordering does
+    // the gating for free: `carryArms` returns immediately on a sheathed
+    // weapon, so empty hands keep the gesture and a drawn blade overwrites the
+    // arms with its carry. See `fidgets.ts`.
+    const stillness = 1 - this.moving
+    this.fidgets.update(dt, stillness)
+    this.fidgets.apply(this.bones, stillness)
 
     applyBank(this.bones, this.bank)
     this.applyCombat(0)

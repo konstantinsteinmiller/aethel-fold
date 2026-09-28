@@ -27,27 +27,9 @@ import { BROW_VERTICES, FACE_VERTICES, HEAD } from '@/world/characters/face'
 import { limbMesh } from '@/world/characters/limb'
 import { BONE_NAMES, FIGURE_HEIGHT, boneDefinition } from '@/world/characters/rig'
 import { triangleCount } from '@/world/geometry/budget'
-import ar from '@/i18n/locales/ar'
 import de from '@/i18n/locales/de'
 import en from '@/i18n/locales/en'
-import es from '@/i18n/locales/es'
-import fr from '@/i18n/locales/fr'
-import hi from '@/i18n/locales/hi'
-import id from '@/i18n/locales/id'
-import itLocale from '@/i18n/locales/it'
-import ja from '@/i18n/locales/ja'
-import kk from '@/i18n/locales/kk'
-import ko from '@/i18n/locales/ko'
-import nl from '@/i18n/locales/nl'
-import pl from '@/i18n/locales/pl'
-import pt from '@/i18n/locales/pt'
-import ru from '@/i18n/locales/ru'
-import th from '@/i18n/locales/th'
-import tr from '@/i18n/locales/tr'
-import uk from '@/i18n/locales/uk'
-import uz from '@/i18n/locales/uz'
-import vi from '@/i18n/locales/vi'
-import zh from '@/i18n/locales/zh'
+import { LANGUAGES } from '@/utils/enums'
 
 /**
  * ─── The variant contract ───────────────────────────────────────────────────
@@ -1462,36 +1444,26 @@ describe('the brow colour', () => {
  * A missing key does not throw, does not warn in production and does not fail a
  * type-check: it ships as the literal string `characters.hairStyles.topknot` in
  * the middle of somebody's character-creation screen, in their language, and the
- * only way to find it is to switch to that language and look. Fifteen new styles
- * times twenty-one bundles is 315 opportunities for that, so it is asserted here
- * as well as in `characterCreator.test.ts` — that file checks the *picker's* list
- * against English, and the picker's list is derived from a `Record` somewhere
- * else, which is exactly the sort of indirection that lets a style go unlabelled
- * in twenty languages while every test stays green.
+ * only way to find it is to switch to that language and look. It is asserted
+ * here as well as in `characterCreator.test.ts` — that file checks the *picker's*
+ * list against English, and the picker's list is derived from a `Record`
+ * somewhere else, which is exactly the sort of indirection that lets a style go
+ * unlabelled in every language while every test stays green.
+ *
+ * ── Two languages, and the count is derived rather than written down ────────
+ *
+ * The game shipped 21 locales as a tower-defence game and ships **English and
+ * German** as Arlaan; the other 19 bundles were deleted. This block used to name
+ * all 21 and assert `toHaveLength(21)`, and when they were deleted the file
+ * stopped *collecting* — 1400 lines of geometry assertions that have nothing to
+ * do with i18n went dark because of an import at the top.
+ *
+ * So the roster is now checked against `LANGUAGES` (`utils/enums.ts`), the list
+ * the language picker itself is built from. Adding a language fails this test
+ * with "missing a bundle" instead of shipping an unlabelled picker, and removing
+ * one cannot break the file again.
  */
-const BUNDLES: Record<string, unknown> = {
-  ar,
-  de,
-  en,
-  es,
-  fr,
-  hi,
-  id,
-  it: itLocale,
-  ja,
-  kk,
-  ko,
-  nl,
-  pl,
-  pt,
-  ru,
-  th,
-  tr,
-  uk,
-  uz,
-  vi,
-  zh
-}
+const BUNDLES: Record<string, unknown> = { de, en }
 
 const hairStyleLabels = (bundle: unknown): Record<string, unknown> => {
   const characters = (bundle as { characters?: { hairStyles?: Record<string, unknown> } }).characters
@@ -1499,8 +1471,11 @@ const hairStyleLabels = (bundle: unknown): Record<string, unknown> => {
 }
 
 describe('hair style labels', () => {
-  it('ships all 21 locales', () => {
-    expect(Object.keys(BUNDLES)).toHaveLength(21)
+  it('has a bundle for every language the picker offers', () => {
+    for (const language of LANGUAGES) {
+      expect(BUNDLES[language], `${language} is offered but missing a bundle`).toBeDefined()
+    }
+    expect(Object.keys(BUNDLES).sort()).toEqual([...LANGUAGES].sort())
   })
 
   it('names every style in every language', () => {

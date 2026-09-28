@@ -506,9 +506,54 @@ what a real boundary looks like and costs nothing extra. A patch disappears only
 once its density falls under 6 %, below which it would be paying a full instance
 for ten visible blades.
 
-The criteria: surface normal (full at `normalY` 0.9, gone by 0.62), height above
-the water and sand line, an fbm clearing mask at ~62 m so the world has meadows
-and bare ground rather than a uniform carpet, and a high-frequency thinning octave.
+The criteria: surface normal (full at `normalY` 0.9, gone by 0.62), absolute
+height above the world's own sand line, **height above the nearest water
+surface** (§7.1), an fbm clearing mask at ~62 m so the world has meadows and bare
+ground rather than a uniform carpet, and a high-frequency thinning octave.
+
+### 7.1 The shore — no blades in the water, and none in the sand
+
+The absolute `minHeight` criterion says nothing about a *chapter's* water,
+because a chapter's water is not at zero. The storyteller's island puts its sea
+surface at **+2.0 m** over a seabed that bottoms out at **−0.9 m**, so every
+patch under the water passed a `minHeight` of −2.2, and the meadow ran down the
+beach, under the waterline and out the far side. Blades stood in open sea. It
+read as a lawn somebody had flooded, and nothing in the system could have caught
+it: every other criterion is a slope or a noise mask.
+
+The engine is now handed a **water table** — a list of rectangles with surface
+heights, `terrain/waterLevel.ts` — and the shore is one quantity derived from
+it, `height − waterLevelAt(x, z)`, wandered by a shared noise term.
+`shoreHeightAbove()` computes it, and **the terrain's sand band and the grass
+edge call the same function**. That is not tidiness. If each rolled its own
+noise the blades would stop where the sand stopped *on average* and cross it
+everywhere else, which is the original defect back again with extra steps.
+
+Grass ramps from zero at `GRASS_SHORE_START` (0.45 m above the water — which
+*is* `SHORE_SAND_FULL`, so a blade can only exist where the sand has already
+begun to give way) to full at 2.2 m. A ramp, not a cut, for the reason the whole
+of §7 gives.
+
+**Measured on the island's shore**, whose beach falls at 0.095 m/m:
+
+| | height above water | walking |
+|---|---:|---:|
+| no grass at all (patch dropped under 6 %) | below ~0.55 | 9.2 m of bare beach |
+| the density ramp | 0.45 … 2.2 | **6.7 m — 1.7 patches** |
+| full meadow | above 2.2 | |
+
+1.7 patches is the number to watch when tuning this. The density is a per-patch
+attribute on a 4 m grid, so a ramp much narrower than two patches steps visibly —
+the same failure §4.3b records for the *distance* ramp, at a different scale. It
+holds here for two reasons: the shared `SHORE_JITTER` moves the boundary by
+±1.7 m of shoreline so it is not a circle, and the high-frequency thinning octave
+already varies neighbouring patches by up to 38 %.
+
+The cost is one rectangle test and one `valueNoise2D` per patch, against the
+sixteen fbm evaluations placement already pays, and it is **skipped entirely**
+where there is no water: `shoreHeightAbove` returns `+Infinity` and every ramp
+clamps off before the noise is sampled. Meadowfall (`/`, no water table) places
+byte-identical grass to before this existed, which a test pins.
 
 **Corner heights come from a shared grid.** A 48 m chunk holds 12 × 12 patches;
 sampling four corners each is 576 `heightAtCore` calls, each of which is four fbm
@@ -537,6 +582,7 @@ budget-don't-burst rule the terrain uploads follow, with 1.25× hysteresis.
 | **Wide impostor blades at the far tiers** (6.4× width, 8/patch) | At 100 m the ground is seen at a grazing angle, so a 30 cm-wide triangle is not a tuft, it is a flag. The horizon came out as white speckles. What reads correctly there is a dense low fuzz — and the screen-width floor does that job better, because it sizes against the real framebuffer. |
 | **Inverted-hull outline** (GDD R6) | `outlineMaterial.ts` already names this failure when it explains why the outline is a hull rather than a screen-space edge pass: a sobel "would put an outline around every blade of grass". A hull does the same from the other direction — double the draws and triangles for a 1.6 px line around a 3 cm blade. |
 | **Casting shadows** | The shadow pass renders through three's depth material, which knows nothing about blades built in the colour shader — a caster would be the undrawn patch geometry sitting at the world origin. Same argument water makes in `assets/types.ts`. The shadow pass is already 63 % of GPU time in a constrained frame. |
+| **A hard cut at the waterline** | The obvious "no grass below `waterY`" test puts a perfect circle of bare ground around an island, on a 4 m patch grid, and leaves the blades stopping at a contour the terrain paint does not follow. Replaced by a ramp over 0.45–2.2 m of height above the surface, keyed to the *same* noise the sand band uses — §7.1. |
 | **Rebuilding tier geometry on a detail change** | 34 ms on the click, landing exactly when `auto` has decided the machine is struggling. Replaced by `setDrawRange` + a width uniform; see §6.5. |
 | **Uncapped `lodBias`** | Grass covers area, so stretching range by the bias multiplies patches by its square. On a phone at DPR 2 the uncapped 1.69 took grass from 57 k to 113 k triangles, buying detail at 130–170 m where exp² fog has erased 70–80 % of it — and reaching past the streamed terrain onto the distant ring, which sits 2 m low by design, so the extra grass would visibly hover. Clamped to 0.7–1.15. |
 | **A flat `density` multiplier across tiers** | Takes most of its saving from the far tiers, which were nearly free, and leaves LOD5 at four blades a patch on `minimum` — a bald horizon on the devices least able to afford one. Replaced by `TIER_DENSITY_EXPONENT`. |
@@ -624,6 +670,11 @@ that already happened once during this build.
   disabled cone.
 * **Watch draw calls stay at +6.** Any change that makes it +7 has added a tier or
   a material and needs a reason.
+* **A placement criterion that reads module state must be asserted with that
+  state installed.** `shoreHeightAbove` returns `+Infinity` with no water table,
+  so a loop that checks patches *after* the table is torn down passes on every
+  patch it never looked at. The first draft of `tests/world/shoreBand.test.ts`
+  did exactly that and reported a green tick.
 * **Check every tier with `Number.isFinite`** before its budget assertion.
   Comparisons against NaN are all false (AAA-graphics §3).
 * **Never assign `onBeforeCompile`** — `GrassMaterial` chains into `ToonMaterial`,

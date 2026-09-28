@@ -66,16 +66,24 @@ describe('placeable catalogue', () => {
 
   /**
    * GDD R6 is "outlines are LOD0 and LOD1 only", not "everything outlines".
-   * Water is the one family that opts out: an inverted hull around a
-   * translucent sheet reads as a decal, and R6's own colour rule (base × 0.22
-   * shifted cool) lands a near-black line around bright cyan. The opt-out is
-   * asserted rather than tolerated — if a *rock* ever arrives with no outline
-   * that is a bug, so the exemption is pinned to the category.
+   *
+   * What opts out is anything **translucent**: an inverted hull around a
+   * see-through sheet reads as a decal, and R6's own colour rule (base × 0.22
+   * shifted cool) lands a near-black line around it. Water was the only such
+   * family when this was written and the exemption was pinned to its
+   * *category*; the storyteller's window glass is the second, and it is not in
+   * the water category, so the rule is now pinned to the thing that actually
+   * justifies it — `material.transparent`.
+   *
+   * The exemption is still asserted rather than tolerated: if a *rock* ever
+   * arrives with no outline that is a bug, and an opaque prop that drops its
+   * outline still fails here.
    */
-  it('outlines LOD0 and LOD1 only, and only water opts out (GDD R6)', () => {
+  it('outlines LOD0 and LOD1 only, and only translucent props opt out (GDD R6)', () => {
     for (const definition of definitions) {
       if (definition.asset.outline === null) {
-        expect(definition.category, `${definition.id} has no outline`).toBe('water')
+        const translucent = definition.category === 'water' || definition.asset.material.transparent
+        expect(translucent, `${definition.id} is opaque and has no outline`).toBe(true)
         expect(definition.asset.outlineMaxTier).toBe(0)
         continue
       }

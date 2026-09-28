@@ -5,7 +5,7 @@ import { getState, setState } from '@/use/useTowerState'
 import { BATTLE_PASS_KEY } from '@/keys'
 
 /**
- * Lightweight battle pass for 3d-world. 30 tiers, 100 xp per tier.
+ * Lightweight battle pass for aethel-fold. 30 tiers, 100 xp per tier.
  *   - clear a wave  → +12 xp
  *   - finish a run  → +25 xp
  * Each level grants a coin payout on a linear ramp 30 → 600 across the

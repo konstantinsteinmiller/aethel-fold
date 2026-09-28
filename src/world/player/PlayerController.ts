@@ -281,6 +281,33 @@ export class PlayerController {
     this.writeCamera(0, 0)
   }
 
+  /**
+   * Slides the feet horizontally, leaving the fall alone.
+   *
+   * ── Why this is not `teleport` ─────────────────────────────────────────
+   *
+   * `teleport` is a *cut*: it clears the velocity, the vertical step, the eye
+   * lag, the bob, the coyote timer **and the grounded flag**, which is exactly
+   * right for putting somebody somewhere else and exactly wrong for nudging
+   * them 40 cm. Called every frame — which is what a scripted settle onto a
+   * seat does — clearing `grounded` sixty times a second re-enters the fall on
+   * every one of them, and the player lands with a step-down each time.
+   *
+   * This is the other half of that pair: the horizontal position moves, the
+   * camera follows it with no frame of lag, and nothing about the vertical
+   * state is touched. `world/interaction/SitController` is the caller — it owns
+   * the last half metre onto a seat and does not want a physics step for it.
+   */
+  slideTo(x: number, z: number): void {
+    this.position.x = x
+    this.position.z = z
+    // The move was authored, not walked. A leftover velocity would be spent on
+    // the frame the controls come back, in whatever direction the seat was.
+    this.velocity.x = 0
+    this.velocity.z = 0
+    this.writeCamera(0, 0)
+  }
+
   /** Absolute look angles, in radians. Yaw is unbounded; pitch is clamped. */
   setLook(yaw: number, pitch: number): void {
     this.yaw = yaw

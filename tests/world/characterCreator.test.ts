@@ -31,30 +31,11 @@ import {
 } from '@/world/characters/equipment'
 import { ITEM_KINDS, canDraw, playerInventory, resetPlayerInventory } from '@/world/characters/inventory'
 
-import ar from '@/i18n/locales/ar'
 import de from '@/i18n/locales/de'
 import en from '@/i18n/locales/en'
-import es from '@/i18n/locales/es'
-import fr from '@/i18n/locales/fr'
-import hi from '@/i18n/locales/hi'
-import id from '@/i18n/locales/id'
 // Aliased: `it` is vitest's own global, and importing the Italian bundle under
 // that name shadows it — every `it(...)` in this file then calls a message
 // object and the whole suite fails to collect.
-import itLocale from '@/i18n/locales/it'
-import ja from '@/i18n/locales/ja'
-import kk from '@/i18n/locales/kk'
-import ko from '@/i18n/locales/ko'
-import nl from '@/i18n/locales/nl'
-import pl from '@/i18n/locales/pl'
-import pt from '@/i18n/locales/pt'
-import ru from '@/i18n/locales/ru'
-import th from '@/i18n/locales/th'
-import tr from '@/i18n/locales/tr'
-import uk from '@/i18n/locales/uk'
-import uz from '@/i18n/locales/uz'
-import vi from '@/i18n/locales/vi'
-import zh from '@/i18n/locales/zh'
 
 /**
  * ─── /characters ────────────────────────────────────────────────────────────
@@ -74,9 +55,7 @@ import zh from '@/i18n/locales/zh'
  * the picker is generated from, and the winding of the one new surface here.
  */
 
-const BUNDLES: Record<string, unknown> = {
-  ar, de, en, es, fr, hi, id, it: itLocale, ja, kk, ko, nl, pl, pt, ru, th, tr, uk, uz, vi, zh
-}
+const BUNDLES: Record<string, unknown> = { de, en }
 
 const flatten = (value: unknown, prefix = '', into = new Map<string, string>()): Map<string, string> => {
   if (typeof value === 'string') {
@@ -100,7 +79,7 @@ const CHARACTER_KEYS = [...ENGLISH.keys()].filter(key => key.startsWith('charact
 
 describe('locale bundles', () => {
   it('covers every language the picker offers', () => {
-    // If a 22nd language is added to `LANGUAGES` and not imported above, the
+    // If a third language is added to `LANGUAGES` and not imported above, the
     // parity checks below would silently stop covering it.
     expect([...Object.keys(BUNDLES)].sort()).toEqual([...LANGUAGES].sort())
   })
@@ -116,7 +95,7 @@ describe('locale bundles', () => {
 
   it('translates every string on the character screen into every locale', () => {
     // Named explicitly rather than relying on the parity check alone: that one
-    // would still pass if this whole block were deleted from all 21 files at
+    // would still pass if this whole block were deleted from both files at
     // once, which is exactly what a bad merge does.
     expect(CHARACTER_KEYS.length).toBeGreaterThanOrEqual(45)
     for (const [code, messages] of Object.entries(FLAT)) {

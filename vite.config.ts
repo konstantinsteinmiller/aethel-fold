@@ -231,6 +231,12 @@ export default defineConfig(({ mode, command }) => {
         // rewrites import paths into array lookups that Vite can no longer
         // resolve, which breaks code splitting.
         exclude: [
+          // FIRST, and not optional: passing ANY `exclude` REPLACES the
+          // plugin's default of `[/node_modules/, /\.nuxt/]` — it does not
+          // add to it. Without this line every vendor library (Vue, vue-i18n,
+          // the portal SDK glue…) goes through the stringArray pass: a bigger,
+          // slower bundle for zero protection, since it is public code.
+          /node_modules/,
           /router\/index\.ts$/,
           /main\.ts$/,
           // i18n loader uses `import.meta.glob` for per-locale code

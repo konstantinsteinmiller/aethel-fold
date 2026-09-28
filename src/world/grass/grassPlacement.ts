@@ -1,5 +1,11 @@
 import { fbm2D, valueNoise2D } from '../geometry/rng'
-import { groundColorCore, heightAtCore, type HeightfieldParams } from '../terrain/heightfieldCore'
+import {
+  groundColorCore,
+  heightAtCore,
+  type HeightfieldParams,
+  TERRAIN_PALETTE_SLOTS
+} from '../terrain/heightfieldCore'
+import { GRASS_SHORE_FULL, GRASS_SHORE_START, shoreHeightAbove } from '../terrain/waterLevel'
 import { PATCH_SIZE } from './config'
 
 /**
@@ -110,11 +116,71 @@ const GRASS_GREEN_BIAS = 1.06
  * grass a colour space of its own — and would put hex literals outside the
  * palette, which the project bans outright.
  */
-let TERRAIN_PALETTE: Float32Array<ArrayBufferLike> = new Float32Array(18)
+let TERRAIN_PALETTE: Float32Array<ArrayBufferLike> = new Float32Array(TERRAIN_PALETTE_SLOTS.length * 3)
 
 export const setGrassPalette = (palette: Float32Array<ArrayBufferLike>): void => {
   TERRAIN_PALETTE = palette
 }
+
+/**
+ * ─── Where grass must not grow ──────────────────────────────────────────────
+ *
+ * Flat triples — `[x, z, radius, x, z, radius, …]` — of places a building
+ * stands.
+ *
+ * A `Float32Array` rather than an array of objects, and that is the same
+ * decision `setGrassPalette` above makes for the same reason: this module is
+ * deliberately three-free and worker-ready, so everything that crosses into it
+ * has to survive a structured clone without turning into a graph of objects.
+ *
+ * ── Why grass needs this at all ─────────────────────────────────────────────
+ *
+ * Grass is placed from the *terrain*, and the terrain has no idea a house is
+ * standing on it. So blades grow through floorboards, up through a hearth, and
+ * out of the middle of a market stall — and because a blade is built in the
+ * vertex shader there is nothing to depth-sort against, it simply intersects.
+ *
+ * The alternative was to test grass against the placement list, which is the
+ * obvious fix and the wrong layer: placements live in `level/`, they are a
+ * `Map` of objects, and grass would have had to import the level to grow.
+ */
+let EXCLUSIONS: Float32Array<ArrayBufferLike> = new Float32Array(0)
+
+export const setGrassExclusions = (zones: Float32Array<ArrayBufferLike>): void => {
+  EXCLUSIONS = zones
+}
+
+/**
+ * How much grass survives at a point, 0 inside a building and 1 well clear.
+ *
+ * Feathered over `EXCLUSION_FEATHER` rather than cut hard, because everything
+ * else in this function is a *density* and a hard edge would be the one place
+ * in the meadow where grass stops at a contour — which is exactly the tell the
+ * header says the density model exists to avoid.
+ */
+const exclusionDensity = (x: number, z: number): number => {
+  let lowest = 1
+  for (let i = 0; i + 2 < EXCLUSIONS.length; i += 3) {
+    const dx = x - EXCLUSIONS[i]!
+    const dz = z - EXCLUSIONS[i + 1]!
+    const radius = EXCLUSIONS[i + 2]!
+    const distance = Math.sqrt(dx * dx + dz * dz)
+    if (distance >= radius + EXCLUSION_FEATHER) {
+      continue
+    }
+    const weight = clamp01((distance - radius) / EXCLUSION_FEATHER)
+    if (weight < lowest) {
+      lowest = weight
+      if (lowest <= 0) {
+        return 0
+      }
+    }
+  }
+  return lowest
+}
+
+/** Metres over which grass returns to full density outside a building. */
+const EXCLUSION_FEATHER = 1.6
 
 /**
  * Fills `out` with the patches of one terrain chunk.
@@ -198,6 +264,27 @@ export const buildChunkPatches = (
         continue
       }
 
+      // ── The shore ────────────────────────────────────────────────────────
+      //
+      // `minHeight` above is an *absolute* height and therefore says nothing
+      // about a chapter's water: the storyteller's seabed bottoms out at −0.9 m
+      // against a sea surface at +2.0, so every criterion above it passed and
+      // the meadow grew straight down into the water and out of it again — a
+      // lawn somebody had flooded.
+      //
+      // The fix is the same quantity the terrain's sand band is painted from
+      // and, deliberately, the **same function** including its noise, so the
+      // blades stop inside the sand rather than crossing it wherever the two
+      // wanders disagreed. Below the waterline this is negative and the patch
+      // is dropped outright; through the beach it is a ramp, because `grass.md`
+      // §7 is explicit that suitability is a weight and never a test.
+      density *= clamp01(
+        (shoreHeightAbove(x, z, centerHeight, seed) - GRASS_SHORE_START) / (GRASS_SHORE_FULL - GRASS_SHORE_START)
+      )
+      if (density <= 0) {
+        continue
+      }
+
       // Meadows and clearings. Without this the world is uniformly carpeted,
       // which reads as procedural instantly — the same trick and the same reason
       // `scatter.ts` gives for its grove mask, one octave cheaper because grass
@@ -206,6 +293,15 @@ export const buildChunkPatches = (
       density *= clamp01((clearing - clearingThreshold) * 4.4)
       if (density <= 0) {
         continue
+      }
+
+      // Buildings. Last of the geometric criteria and cheapest to reject on,
+      // because the list is almost always empty away from a settlement.
+      if (EXCLUSIONS.length > 0) {
+        density *= exclusionDensity(x, z)
+        if (density <= 0) {
+          continue
+        }
       }
 
       // A little high-frequency thinning so a meadow is not one flat density.

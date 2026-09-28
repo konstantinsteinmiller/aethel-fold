@@ -1,5 +1,5 @@
 import type { I18n } from 'vue-i18n'
-import { LANGUAGES } from '@/utils/enums'
+import { DEFAULT_LOCALE, LANGUAGES } from '@/utils/enums'
 import { getState } from '@/use/useTowerState'
 import { LANGUAGE_KEY } from '@/keys'
 
@@ -85,6 +85,19 @@ export const setI18nLocale = async (
 }
 
 /**
+ * The game's own language.
+ *
+ * German, because that is what this game *is*: `Chroniken von Arlaan` is a
+ * German manuscript, the chapter's dialogue is the author's own German with an
+ * English translation beside it (`world/story/script.ts`), and the storyteller's
+ * frame is a German grandfather telling his grandchildren a story. English is
+ * still the **source of truth for the key shape** — `fallbackLocale` in
+ * `main.ts` stays 'en' and `tests/i18nParity.test.ts` still measures every
+ * locale against it — but it is no longer what the game opens in.
+ */
+export { DEFAULT_LOCALE }
+
+/**
  * Resolve the locale we should boot with, synchronously, before creating
  * the i18n instance so the first dynamic import targets only the right
  * locale file. Resolution order:
@@ -96,17 +109,27 @@ export const setI18nLocale = async (
  *   2. `tower_state.ts_user_language` — the cloud-hydrated player
  *      choice. On CG builds this has already been populated from
  *      `sdk.data` by `SaveManager.init()` before `main.ts` calls us.
- *   3. navigator.language short code — first-ever load with no portal
- *      or stored hint.
- *   4. 'en' fallback.
+ *   3. `DEFAULT_LOCALE` — German. See below.
+ *
+ * ── The navigator sniff used to be step 3, and is now gone ─────────────────
+ *
+ * `navigator.language` decided the boot locale for anyone with no portal hint
+ * and no saved choice, which is every first-time player outside CrazyGames and
+ * Yandex. That made the *browser* the arbiter of what language this game is in,
+ * and for a German game with a German script that is the wrong arbiter: a
+ * first-time player on an English-locale browser opened a German novel in
+ * English translation by default.
+ *
+ * The cost is real and worth stating: a Spanish player on itch.io now boots into
+ * German rather than Spanish until they pick a language. The two ways to get the
+ * old behaviour back are both one line — restore the `nav` branch above the
+ * return, or have `main.ts` pass `navigator.language` in as `preferred` on the
+ * builds where matching the audience matters more than matching the author.
+ * Neither is done here because neither was asked for.
  */
 export const resolveInitialLocale = (preferred?: string | null): string => {
   if (isSupportedLocale(preferred)) return preferred
   const stored = getState<string | undefined>(LANGUAGE_KEY)
   if (isSupportedLocale(stored)) return stored
-  const nav = typeof navigator !== 'undefined'
-    ? navigator.language?.split('-')[0]
-    : undefined
-  if (isSupportedLocale(nav)) return nav
-  return 'en'
+  return DEFAULT_LOCALE
 }

@@ -131,6 +131,38 @@ export const WIND_VERTEX_GLSL = /* glsl */ `
  *
  * Relies on `geometryNormal` and `geometryViewDir` being in scope — three
  * declares both in `lights_fragment_begin`, which runs earlier in main().
+ *
+ * ── `uRimWrap`, and why foliage needed it ───────────────────────────────────
+ *
+ * A pure view fresnel knows nothing about where the light is, so it paints the
+ * *entire* silhouette — including the parts facing away from the sun. On most
+ * of this world that is invisible, because a boulder's silhouette is a thin
+ * band a few pixels wide. On foliage it is not, and the reason is GDD R3: a
+ * canopy's normals are blended toward the clump centre (0.85, and on the pine
+ * 0.62 toward a point on the axis), so the clump shades *as a sphere* and
+ * `N·V` therefore falls to zero all the way round the outline. Every leaf blob
+ * came out ringed in near-white, matching the mesh outline rather than the
+ * light — measured on a spruce at 7 m, a canopy that reads `rgb(10,57,22)` at
+ * its centre reached `rgb(70,95,87)` at the edge: red ×7, blue ×4, and the
+ * saturation gone. That is a specular signature, and it is what "glossy
+ * plastic" means.
+ *
+ * `uRimWrap` mixes in a gate on `N·L` so the rim only lights the part of the
+ * silhouette the sun can actually graze. `0` reproduces the old term exactly
+ * (`mix(1.0, x, 0.0)` is 1.0 bit-for-bit), so every non-foliage material is
+ * untouched and no material had to be re-tuned to keep looking the same.
+ *
+ * The gate's edges track the ramp, not taste: `DEFAULT_RAMP`'s shadow band ends
+ * at `dot·0.5+0.5 = 0.42` (`N·L = -0.16`) and its mid band begins at `0.72`
+ * (`N·L = 0.44`). Ramping the gate over `[-0.3, 0.4]` therefore turns the rim on
+ * across roughly the same arc the lighting itself brightens over, so the rim
+ * never appears on a surface the bands are still calling shadow.
+ *
+ * `directionalLights[0]` is the key light — with cascaded shadows every cascade
+ * light carries the same direction, and CSM's own `lights_fragment_begin`
+ * indexes `[0]` the same way for its cascade select. `.direction` is view-space
+ * and normalised (`Vector3.transformDirection`), which is the space
+ * `geometryNormal` is in too.
  */
 export const SURFACE_PARS_FRAGMENT_GLSL = /* glsl */ `
 uniform vec3 uShadowTint;
@@ -138,6 +170,7 @@ uniform float uShadowTintMix;
 uniform vec3 uRimColor;
 uniform float uRimPower;
 uniform float uRimStrength;
+uniform float uRimWrap;
 `
 
 export const SURFACE_FRAGMENT_GLSL = /* glsl */ `
@@ -147,6 +180,13 @@ export const SURFACE_FRAGMENT_GLSL = /* glsl */ `
   outgoingLight = mix(outgoingLight, outgoingLight * uShadowTint, worldShadowMask * uShadowTintMix);
 
   float worldFresnel = pow(1.0 - clamp(dot(geometryNormal, geometryViewDir), 0.0, 1.0), uRimPower);
-  outgoingLight += uRimColor * (worldFresnel * uRimStrength * (0.3 + 0.7 * worldLum));
+  float worldRimGain = 0.3 + 0.7 * worldLum;
+
+  #if NUM_DIR_LIGHTS > 0
+    float worldRimNdotL = dot(geometryNormal, directionalLights[0].direction);
+    worldRimGain *= mix(1.0, smoothstep(-0.3, 0.4, worldRimNdotL), uRimWrap);
+  #endif
+
+  outgoingLight += uRimColor * (worldFresnel * uRimStrength * worldRimGain);
 }
 `

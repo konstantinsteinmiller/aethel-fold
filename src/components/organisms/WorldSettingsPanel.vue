@@ -6,9 +6,9 @@
     transition(name="settings")
       div(
         v-if="open"
-        class="w-64 max-w-[80vw] rounded-xl bg-slate-950/80 p-3 text-slate-200 shadow-lg backdrop-blur-sm"
+        class="max-h-[70vh] w-72 max-w-[85vw] overflow-y-auto rounded-xl bg-slate-950/80 p-3 text-slate-200 shadow-lg backdrop-blur-sm"
       )
-        div(class="mb-2 flex items-center justify-between")
+        div(class="mb-3 flex items-center justify-between")
           span(class="text-sm font-semibold") {{ t('world.settings.title') }}
           button(
             type="button"
@@ -16,21 +16,12 @@
             @click="open = false"
           ) {{ t('close') }}
 
-        label(class="mb-1 block text-xs text-slate-400" for="world-grass-detail") {{ t('world.settings.grass') }}
-        select(
-          id="world-grass-detail"
-          class="w-full rounded-lg bg-slate-800/90 px-2 py-1.5 text-sm text-slate-100 outline-none"
-          :value="detail"
-          @change="onDetail"
-        )
-          option(v-for="option in options" :key="option" :value="option") {{ label(option) }}
-
-        p(class="mt-1.5 text-[11px] leading-snug text-slate-400") {{ hint }}
+        GraphicsMenu
 
         //- Live cost, in the units a player can act on. Deliberately not draw
-        //- calls or milliseconds: "blades on screen" is the thing the slider
-        //- above actually moves, and it is legible without a glossary.
-        p(class="mt-2 border-t border-white/10 pt-2 text-[11px] tabular-nums text-slate-500")
+        //- calls or milliseconds: "blades on screen" is the thing the grass
+        //- selector actually moves, and it is legible without a glossary.
+        p(class="mt-3 border-t border-white/10 pt-2 text-[11px] tabular-nums text-slate-500")
           | {{ t('world.settings.drawnPatches', { n: patches, tris: triangles }) }}
 
     button(
@@ -42,38 +33,55 @@
 </template>
 
 <!--
-  Player-facing graphics settings for the 3D world.
+  The sandbox route's graphics flyout: a button bottom-left, `GraphicsMenu` in a
+  panel above it, and the one thing that needs a live `World` — what the current
+  settings are costing right now.
 
-  Separate from `WorldPerfPanel`, which is a dev overlay and exempt from i18n:
-  everything here is a player-visible string and goes through vue-i18n into every
-  locale the project ships.
+  ── Props / emits ───────────────────────────────────────────────────────────
+  Props:  `world: World | null`. Emits: none.
 
-  The world is the source of truth for the setting, not this component — the
-  `auto` mode is driven by `AdaptiveQuality` inside the frame loop, so a local
-  `ref` would drift the moment the machine changed the level under it. The
-  selector reads `world.settings.grassDetail` and writes through `applySettings`.
+  ── What moved out, and what this still owns ────────────────────────────────
+  Every control now lives in `GraphicsMenu` and writes to the `useGameSettings`
+  singleton; this file used to own the grass selector and wrote it straight into
+  `world.applySettings`. That was two bugs waiting:
+
+  * the choice lived on the `World`, which is **rebuilt** on every route change,
+    so walking to `/characters` and back reset it;
+  * it had its own `localStorage` key for one setting while the rest of the
+    settings screen had another.
+
+  What is left here is the half that genuinely needs the renderer: pushing the
+  player's settings into whichever `World` is mounted (`applySettingsTo`), and
+  reading the grass counters back out for the cost line. Any other host that
+  owns a `World` — `StoryScene` — has to make the same `applySettingsTo` call;
+  it is deliberately not hidden inside `useGameSettings`, because a settings
+  module that reached for a global "current world" would be a second source of
+  truth for which world that is.
+
+  ── One-time migration off the old key ──────────────────────────────────────
+  The one-time migration off this panel's old `world.grassDetail` key now lives
+  in `use/useGameSettings.ts`. It ran here, on mount — and this panel is no
+  longer mounted on `/story`, so a player who only opened the chapter would have
+  silently lost the grass level they had chosen.
 -->
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import GraphicsMenu from '@/components/organisms/GraphicsMenu.vue'
+import { applySettingsTo, settings } from '@/use/useGameSettings'
 import type { World } from '@/world/core/World'
-import { GRASS_DETAIL_SETTINGS, type GrassDetailSetting } from '@/world/grass/config'
 
 const props = defineProps<{ world: World | null }>()
 
 const { t } = useI18n()
 
-const STORAGE_KEY = 'world.grassDetail'
 /** Cost readout refresh. Slow on purpose — it is context, not an instrument. */
 const SAMPLE_INTERVAL_MS = 500
 
 const open = ref(false)
-const detail = ref<GrassDetailSetting>('auto')
 const patches = ref(0)
 const triangles = ref(0)
-
-const options = GRASS_DETAIL_SETTINGS
 
 // Safe-area insets, so the button clears the home indicator in landscape.
 const insetStyle = {
@@ -81,64 +89,37 @@ const insetStyle = {
   paddingLeft: 'env(safe-area-inset-left, 0px)'
 }
 
-/**
- * Restored from storage, because a graphics setting that resets on reload is one
- * the player has to find again every session. Guarded because storage throws
- * outright in a sandboxed iframe, which is how several of the portals this ships
- * to serve games.
- */
-const readStored = (): GrassDetailSetting | null => {
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY)
-    return stored && (GRASS_DETAIL_SETTINGS as readonly string[]).includes(stored)
-      ? (stored as GrassDetailSetting)
-      : null
-  } catch {
-    return null
+const push = (): void => {
+  const world = props.world
+  if (world) {
+    applySettingsTo(world)
   }
 }
-
-const label = (option: GrassDetailSetting): string => t(`world.settings.detail.${option}`)
-
-const hint = computed(() =>
-  detail.value === 'auto' ? t('world.settings.grassAutoHint') : t('world.settings.grassHint')
-)
-
-const apply = (next: GrassDetailSetting): void => {
-  detail.value = next
-  props.world?.applySettings({ grassDetail: next })
-  try {
-    window.localStorage.setItem(STORAGE_KEY, next)
-  } catch {
-    // Not worth surfacing — the setting still applies, it just forgets.
-  }
-}
-
-const onDetail = (event: Event): void => {
-  apply((event.target as HTMLSelectElement).value as GrassDetailSetting)
-}
-
-let timer: number | null = null
 
 const sample = (): void => {
   const world = props.world
   if (!world) {
     return
   }
-  // Read back rather than trusting the local ref: under `auto` the frame loop
-  // moves the level without anyone touching this component.
-  detail.value = world.settings.grassDetail
   patches.value = world.grass.stats.drawnPatches
   triangles.value = Math.round(world.grass.stats.triangles / 100) / 10
 }
 
+let timer: number | null = null
+
+/**
+ * `settings` is replaced wholesale by `setSetting`, so a shallow watch sees
+ * every change and a `deep: true` would only re-walk eleven fields for nothing.
+ */
+watch(settings, push)
+
+// The world arrives *after* this component mounts — a child's `onMounted` runs
+// before its parent's, and the parent is where `new World(...)` happens. Without
+// this the player's settings would only reach the renderer on their next change.
+watch(() => props.world, push)
+
 onMounted(() => {
-  const stored = readStored()
-  if (stored) {
-    apply(stored)
-  } else {
-    detail.value = props.world?.settings.grassDetail ?? 'auto'
-  }
+  push()
   timer = window.setInterval(sample, SAMPLE_INTERVAL_MS)
   sample()
 })

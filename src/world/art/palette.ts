@@ -46,6 +46,23 @@ export const HEX = {
   dirt: 0x8f6a49,
   sand: 0xc7b489,
   /**
+   * Sand with water still in it — the strip at and just below the waterline.
+   *
+   * A stop of its own rather than `sand` darkened, and rather than a lerp toward
+   * `dirt`, which is what the first pass did. Both fail, in opposite directions.
+   * A plain multiply keeps sand's hue and reads as sand *in shadow*, so the
+   * tideline looked like a cloud passing rather than like wet ground. `dirt` is
+   * 15° redder than `sand` and pulls the strip toward mud, which turns a beach
+   * into a riverbank — wrong for the sea the storyteller's island sits in, and
+   * wrong even for the Arla, whose banks are cut into turf rather than silt.
+   *
+   * Authored as sand at **0.71 value with the chroma held**, which is close to
+   * what water actually does to sand: it fills the air gaps between grains, so
+   * the surface stops scattering and goes darker at the same hue instead of
+   * greyer. Keeping the chroma is what makes it still read as the same material.
+   */
+  sandWet: 0x8f8264,
+  /**
    * Added — not mixed — into a grass blade's tip, weighted by t².
    *
    * Additive rather than a third stop on a ramp because a blade's base colour is
@@ -226,6 +243,45 @@ export const HEX = {
    * the same hue and the world went monochrome after dusk.
    */
   moon: 0xbcc9e8,
+
+  // ── The two bodies themselves ────────────────────────────────────────────
+  //
+  // `sun`/`sunLow`/`moon` above are *light* colours — what the rig emits. These
+  // three are what the discs in the sky are painted with, and they are separate
+  // constants because the two jobs disagree: a light colour is multiplied into
+  // every albedo it touches and so is authored well under white (see the note
+  // on the ground colours), while a disc is emissive, sits on the sky and is
+  // meant to be the brightest thing in frame.
+  /**
+   * The halo around the sun disc.
+   *
+   * Warmer and deeper than `sun`, because a halo is the sun's light seen
+   * *through* air and air scatters the blue out of it first. It is then lerped
+   * toward whatever the sun's own colour is at that moment, so at dawn the
+   * halo lands between this and `sunLow` rather than staying pale — the same
+   * warming the directional light does, one step behind it.
+   */
+  sunGlow: 0xffd79a,
+  /**
+   * The lit face of the moon.
+   *
+   * Not white, for the reason `snowLit` is not white and then one more: the
+   * moon's whole read is its **phase**, and the phase is a terminator crossing
+   * the disc. Clip the lit face and the mid band at the terminator clips with
+   * it, leaving a shape with two values where it needs three — a flat coin
+   * instead of a sphere.
+   */
+  moonDisc: 0xe4e9f5,
+  /**
+   * The unlit face. Earthshine, and the reason a crescent still reads as a ball.
+   *
+   * Periwinkle family (GDD R4 — shadows are never black), and deliberately a
+   * little *lighter* than `skyHorizonNight` so the dark limb separates from the
+   * sky it sits against instead of cutting a hole in it. A black dark side is
+   * indistinguishable from sky, which turns every phase into a disc of the
+   * wrong size rather than a sphere lit from one side.
+   */
+  moonDark: 0x3c4674,
   /** Night sky. Not black — a black zenith kills the silhouette of everything. */
   skyZenithNight: 0x0d1430,
   skyHorizonNight: 0x24304f,
@@ -239,6 +295,48 @@ export const HEX = {
   /** Hemisphere fill at night. Ground stays warmer than sky, as by day. */
   hemiSkyNight: 0x2c3a63,
   hemiGroundNight: 0x2a2b33,
+
+  // ── Clouds ───────────────────────────────────────────────────────────────
+  //
+  // Two colours per state and no more, because a cloud in this world is shaded
+  // the way everything else is: a lit face, a shaded face, and a soft boundary
+  // between them. `clouds.ts` derives the boundary from the density itself —
+  // thin edges take `cloudLit`, thick cores take `cloudShade` — so these two
+  // are the whole palette of a cumulus.
+  /**
+   * The sunlit top of a cloud.
+   *
+   * Off-white and faintly warm, not white. The rule that keeps `snowLit` off
+   * pure white applies with more force here: a cloud is the largest bright area
+   * in the frame, and at 0xffffff it clips to flat paper across half the sky and
+   * takes the sun's halo with it — the disc stops being the brightest thing in
+   * frame, which is the one job the disc has.
+   */
+  cloudLit: 0xf4f1ea,
+  /**
+   * The shaded underside.
+   *
+   * Periwinkle family, like every other shadow in this world (GDD R4), and
+   * light enough to stay clearly *above* `skyZenith` in value. A cloud base
+   * darker than the sky behind it reads as a hole rather than as a body, which
+   * is the same failure `moonDark` is written to avoid.
+   */
+  cloudShade: 0xb9c2da,
+  /**
+   * Dawn and dusk. Clouds are the first thing the low sun reaches and the last
+   * thing it leaves, so the warm state is pushed further than the sky's own —
+   * `skyHorizonWarm` is a band at the horizon, and this is the whole underside
+   * of every cloud in the sky going orange at once.
+   */
+  cloudLitWarm: 0xffc98e,
+  cloudShadeWarm: 0xc98a80,
+  /**
+   * Night. Barely lighter than `skyZenithNight`, because a moonlit cloud is a
+   * silhouette with a rim rather than a lit object — the value gap that makes a
+   * daytime cloud read has no light source at night to sustain it.
+   */
+  cloudLitNight: 0x3b4670,
+  cloudShadeNight: 0x1e2748,
 
   // ── Characters (GDD §6 Phase C) ──────────────────────────────────────────
   //
@@ -361,7 +459,70 @@ export const HEX = {
    *  dried grass, and reading as either fresh grass or as stone is the failure. */
   strawLit: 0xe0c98a,
   strawBase: 0xbfa261,
-  strawShadow: 0x7d6738
+  strawShadow: 0x7d6738,
+
+  // ── Arlaan: the built village ────────────────────────────────────────────
+  //
+  // Nimmerschein is a timber village inside a palisade, and its whole read at
+  // distance is **three fields**: dark oak frame, pale daub panel, warm thatch.
+  // They are authored as a triple rather than borrowed from `wood*` because the
+  // two jobs pull opposite ways — `woodBase` is *planed* timber and has to
+  // separate from a tree trunk, while a house frame is weathered structural oak
+  // and has to separate from the daub it holds. Reusing one for both collapsed
+  // the frame into the wall at 25 m, which is exactly the distance a village
+  // silhouette is read at.
+  /** Structural oak: posts, braces, the palisade's stakes, cart timbers. */
+  timberLit: 0x8d6c46,
+  timberBase: 0x5f462d,
+  timberShadow: 0x342517,
+  /** Wattle-and-daub infill. Warm off-white — never a neutral grey, or the
+   *  village reads as stone and Arlaan stops being a farming country. */
+  daubLit: 0xeadfc6,
+  daubBase: 0xcfc0a1,
+  daubShadow: 0x968769,
+  /** Thatch. Sits a band under `strawBase` so a roof separates from a hay pile
+   *  standing next to it — the two are literally the same material, and the
+   *  only thing telling them apart at range is value. */
+  thatchLit: 0xcfae72,
+  thatchBase: 0xa98a54,
+  thatchShadow: 0x6a5231,
+  /** Split shingle, for the smithy and the gate towers — the two roofs that
+   *  must not be flammable in a village that keeps a forge lit. */
+  shingleLit: 0x8f8578,
+  shingleBase: 0x6a6155,
+  shingleShadow: 0x3d382f,
+  /** Wrought iron: hinges, the forge's tools, a boar spear's socket. Colder and
+   *  darker than `steelBase`, so a blade reads as sharpened and a hinge does not. */
+  ironLit: 0x7f8894,
+  ironBase: 0x545c68,
+  ironShadow: 0x2b3038,
+  /** The forge fire, and the fire pit at the Treff. The only emissive-looking
+   *  field in the world, so it is kept small and never appears as a large area. */
+  emberLit: 0xffd487,
+  emberBase: 0xef8a3c,
+  emberDeep: 0x8e2f14,
+  /** Arlaan's arms: a golden griffin on red. The banner over the gate and the
+   *  town guards' livery both take these, so they cannot drift apart. */
+  arlaanRed: 0x9c2b2e,
+  arlaanGold: 0xd8ae4e,
+
+  // ── Arlaan: the wild ─────────────────────────────────────────────────────
+  /** The Trollschwein. Coarse dark bristle over a warmer hide, so the beast
+   *  reads as an animal rather than as a rock with legs when it is still. */
+  boarBristle: 0x3f3226,
+  boarHide: 0x6b533b,
+  boarSnout: 0x8f6f57,
+  /** Tusks and the boar's hooves. Bone, not steel — warm, so a tusk never reads
+   *  as a metal weapon in a silhouette full of them. */
+  boneLit: 0xe8dcc2,
+  boneBase: 0xc4b391,
+  boneShadow: 0x7d705a,
+  /** Bandit cloth. Deliberately the most desaturated garment field in the
+   *  world: five figures breaking out of a treeline have to read as *shapes*
+   *  first, and colour is what would make them read as people. */
+  banditLit: 0x5a565f,
+  banditBase: 0x3d3b3f,
+  banditShadow: 0x211f24
 } as const
 
 export type PaletteKey = keyof typeof HEX

@@ -14,12 +14,12 @@
     )
       div(class="relative flex flex-col items-center")
         div(:style="sizeStyle")
-          img(
-            :src="logoSrc"
-            alt="3d-world"
-            class="w-full h-full object-contain"
-            draggable="false"
-          )
+          //- Inline SVG, not an `<img>`: this box is `min(vw, vh) * 0.4`, so it
+          //- is 128 px on a phone and 430 px on a desktop and the old 256²
+          //- bitmap was visibly soft above a 640 px viewport. `w-full h-full`
+          //- overrides the component's own `size` attribute — CSS beats
+          //- presentation attributes — so the mark tracks the box exactly.
+          ArlaanLogo(class="w-full h-full")
 
         //- Loading Text
         div.absolute.-bottom-8(class="mt-0 flex flex-col items-center gap-1")
@@ -33,13 +33,11 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import useAssets from '@/use/useAssets'
-import { prependBaseUrl } from '@/utils/function'
+import ArlaanLogo from '@/components/atoms/ArlaanLogo.vue'
 import { stopLoading } from '@/use/useCrazyGames'
 import { armFirstLoadInterstitial, notifySplashGone } from '@/use/useFirstLoadInterstitial'
 
 const { t } = useI18n()
-
-const logoSrc = prependBaseUrl('images/logo/logo_256x256.webp')
 
 const { loadingProgress, preloadAssets } = useAssets()
 const progress = computed(() => loadingProgress.value)

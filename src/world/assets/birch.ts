@@ -16,7 +16,7 @@ import {
 } from '../geometry/vertexColor'
 import { createOutlineMaterial } from '../shading/outlineMaterial'
 import { getFoliageRamp } from '../shading/ramp'
-import { createToonMaterial } from '../shading/toonMaterial'
+import { FOLIAGE_RIM, createToonMaterial } from '../shading/toonMaterial'
 import { mergeParts, partRanges } from './common'
 import { finishTier, smootherstep } from './plateau'
 import type { WorldAsset } from './types'
@@ -659,7 +659,10 @@ export const createBirchAsset = (options: BirchOptions = {}): WorldAsset => {
       wind: true,
       // The most mobile tree in the world, and the only one whose trunk moves.
       windStrength: 0.11,
-      rimStrength: 0.42
+      // Matte foliage rim (GDD R5 kept, gloss removed): tinted toward leaf,
+      // tightened, and gated by the sun so it stops wrapping the whole clump.
+      // See `FOLIAGE_RIM`.
+      ...FOLIAGE_RIM
     }),
     outline: createOutlineMaterial({ pixelWidth: 1.6, wind: true, windStrength: 0.11, name: 'birch-outline' }),
     outlineMaxTier: 1,

@@ -18,6 +18,11 @@ const routes: RouteRecordRaw[] = [
   // the chibi builder and a second three.js scene, and a player who never opens
   // it should not pay for either.
   { path: '/characters', name: 'characters', component: () => import('@/views/CharacterCreator.vue') },
+  // Chroniken von Arlaan, chapter 1. Lazy like every other secondary route:
+  // it pulls in the combat layer, the story cast and a second set of village
+  // assets, and a player who only ever opens the sandbox should pay for none of
+  // it.
+  { path: '/story', name: 'story', component: () => import('@/views/StoryScene.vue') },
   // Kept so existing links and docs that pointed at /world still resolve.
   { path: '/world', redirect: '/' },
   { path: '/:pathMatch(.*)*', redirect: '/' }
