@@ -1,5 +1,8 @@
 import { prependBaseUrl } from '@/utils/function'
-import useUser, { MUSIC_TRACK_FILES } from '@/use/useUser'
+import useUser from '@/use/useUser'
+
+/** Legacy streamed track (unused by Castle Fold, whose music is procedural). */
+const MUSIC_FILE = 'bg-cozy.ogg'
 import { getAudioContext, loadAudioBuffer, resourceCache, registerHtmlAudio, unregisterHtmlAudio, isAudioSuspended, registerOneShotSource } from '@/use/useAssets'
 import { isGamePaused } from '@/use/useGamePause'
 import { isMobileAudioMuted } from '@/use/useMobileAudioMute'
@@ -67,25 +70,14 @@ export const setMusicIntensity = (intensity: number): void => {
 }
 
 export const useMusic = () => {
-  const { userMusicVolume, userMusicTrack } = useUser()
+  const { userMusicVolume } = useUser()
 
   watch(userMusicVolume, () => {
     if (!bgMusic.value) return
     bgMusic.value.volume = Math.max(0, Math.min(1, (userMusicVolume.value ?? 0.6) * 0.025))
   })
 
-  // Live-swap the background track when the player picks a different one in
-  // Options. Only reload if music is meant to be playing right now — otherwise
-  // the next `startBattleMusic()` naturally picks up the new choice.
-  watch(userMusicTrack, () => {
-    if (!bgMusic.value || !shouldPlay.value) return
-    isPlaying.value = false
-    loadAndPlayTrack()
-  })
-
-  // Resolve the active track's filename, falling back to the default.
-  const currentTrackFile = (): string =>
-    MUSIC_TRACK_FILES[userMusicTrack.value] ?? MUSIC_TRACK_FILES.trance
+  const currentTrackFile = (): string => MUSIC_FILE
 
   // Point the music element at the active track and fade it in — using the
   // preloaded/decoded copy when available, otherwise fetching on demand.

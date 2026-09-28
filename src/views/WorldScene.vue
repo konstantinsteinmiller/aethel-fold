@@ -100,7 +100,7 @@ import WorldPerfPanel from '@/components/organisms/WorldPerfPanel.vue'
 import WorldSettingsPanel from '@/components/organisms/WorldSettingsPanel.vue'
 import { World } from '@/world/core/World'
 import { bindingFor, keyLabel } from '@/use/useKeybindings'
-import { makeScreenPoint, projectToScreen, type ScreenPoint } from '@/world/story/project'
+import { makeScreenPoint, projectToScreen, type ScreenPoint } from '@/world/core/project'
 
 const { t } = useI18n()
 

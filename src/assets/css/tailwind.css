@@ -1,1 +1,28 @@
 @import "tailwindcss";
+
+/*
+ * Castle Fold paper palette. `static` so every token is emitted on :root even
+ * when no utility uses it — scoped component styles read them as plain
+ * `var(--color-*)` custom properties. The same values live as Sass variables
+ * in `src/assets/css/_paper.sass` for the F-components.
+ */
+@theme static {
+  --color-parchment: #fff6e3;
+  --color-parchment-mid: #f4e7c9;
+  --color-parchment-shade: #e7d3a8;
+  --color-ink: #1c1724;
+  --color-paper-red: #ff6a5c;
+  --color-paper-red-shade: #d8433b;
+  --color-paper-blue: #5f95ff;
+  --color-paper-blue-shade: #3464d6;
+  --color-paper-yellow: #ffe066;
+  --color-paper-yellow-shade: #f4b73a;
+  --color-paper-green: #7fdc7a;
+  --color-paper-green-shade: #45a64a;
+  --color-paper-shadow: rgb(76 64 120 / 0.45);
+  --color-desk: #3a2416;
+  --color-desk-light: #8a5a36;
+
+  --shadow-paper: 0 0.25rem 0 rgb(76 64 120 / 0.45), 0 0.5rem 1rem rgb(76 64 120 / 0.25);
+  --text-shadow-ink: 2px 0 0 #1c1724, -2px 0 0 #1c1724, 0 2px 0 #1c1724, 0 -2px 0 #1c1724, 1.5px 1.5px 0 #1c1724, -1.5px 1.5px 0 #1c1724, 1.5px -1.5px 0 #1c1724, -1.5px -1.5px 0 #1c1724;
+}

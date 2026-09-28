@@ -1,0 +1,274 @@
+/**
+ * One fold line on the page, drawn: its paper panel(s) on hinge pivots, the
+ * glowing dotted guide, and — for walls — the pop-up that SNAPs out of the
+ * crease (tower, battlement or heraldic shield).
+ *
+ *   wall   — one panel lifts to 90°; the pop-up springs up on the hinge.
+ *   valley — two panels dip into a V (the ravine), stretched so they meet.
+ *   launch — one panel flips 180° over its hinge.
+ *   ridge  — two panels rise into a ∧ mountain.
+ */
+
+import { Group, Mesh, type Texture } from 'three'
+import type { FoldState } from '../../logic/types'
+import { clamp01, easeOutBack } from '../../logic/math'
+import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
+import { shieldGeometry, towerGeometry, wallGeometry } from '../models'
+import { buildFlapGeometry } from './flapGeometry'
+import { GuideLine } from './GuideLine'
+
+const VALLEY_MAX = (24 * Math.PI) / 180
+const RIDGE_MAX = (52 * Math.PI) / 180
+
+class Panel {
+  readonly pivot = new Group()
+  readonly hinge = new Group()
+  readonly mesh: Mesh
+  private readonly sgn: number
+
+  constructor(ax: number, az: number, ux: number, uz: number, len: number, w: number, mats: PaperMaterial[]) {
+    this.sgn = Math.sign(w) || 1
+    this.pivot.position.set(ax, 0.002, az)
+    this.pivot.rotation.y = Math.atan2(-uz, ux)
+    this.mesh = new Mesh(buildFlapGeometry(len, w, ax, az, ux, uz), mats)
+    this.mesh.castShadow = true
+    this.mesh.receiveShadow = true
+    this.hinge.add(this.mesh)
+    this.pivot.add(this.hinge)
+  }
+
+  /** Positive angle lifts the far edge; negative dips it. */
+  set(angle: number, stretch = 1): void {
+    this.hinge.rotation.x = -this.sgn * angle
+    this.mesh.scale.z = stretch
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose()
+  }
+}
+
+export class FoldView {
+  readonly group = new Group()
+  private readonly panels: Panel[] = []
+  private readonly guide: GuideLine
+  private readonly artMat: PaperMaterial
+  private readonly paperMat: PaperMaterial
+  private structure: Group | null = null
+  private structMat: PaperMaterial | null = null
+  private wobble = 0
+  private wobbleV = 0
+  private lastRev = 0
+  private lastHp: number
+  private hitFlash = 0
+  private jolt = 0
+  private reveal = 0
+
+  constructor(private f: FoldState, art: Texture) {
+    const d = f.def
+    this.lastHp = f.hp
+    this.artMat = createPaperMaterial({ map: art, vertexColors: true, grain: 0.05 })
+    this.paperMat = createPaperMaterial({ vertexColors: true, grain: 0.06 })
+    const mats = [this.artMat, this.paperMat]
+    // Both materials share one outline id so the flap reads as a single card.
+    this.paperMat.uniforms.uObjectId.value = this.artMat.uniforms.uObjectId.value
+
+    const { ux, uz, nx, nz, len } = f
+    if (d.kind === 'wall' || d.kind === 'launch') {
+      const p = new Panel(d.ax, d.az, ux, uz, len, d.side * d.depth, mats)
+      this.panels.push(p)
+      this.group.add(p.pivot)
+    } else if (d.kind === 'valley' || d.kind === 'ridge') {
+      // Panel A hinged on the far (−n) edge reaching toward the centre, panel B mirrored.
+      const aX = d.ax - nx * d.depth
+      const aZ = d.az - nz * d.depth
+      const bX = d.ax + nx * d.depth
+      const bZ = d.az + nz * d.depth
+      const pa = new Panel(aX, aZ, ux, uz, len, d.side * d.depth, mats)
+      const pb = new Panel(bX, bZ, ux, uz, len, -d.side * d.depth, mats)
+      this.panels.push(pa, pb)
+      this.group.add(pa.pivot, pb.pivot)
+    }
+
+    if (d.kind === 'wall' && d.structure !== 'none') this.buildStructure()
+
+    // Guide path.
+    const c = { x: f.cx, z: f.cz }
+    let pts: number[]
+    let twoWay = false
+    if (d.kind === 'valley') {
+      pts = [c.x - ux * len * 0.36, c.z - uz * len * 0.36, c.x + ux * len * 0.36, c.z + uz * len * 0.36]
+      twoWay = true
+    } else if (d.kind === 'launch') {
+      pts = [
+        c.x + nx * d.depth * 0.86, c.z + nz * d.depth * 0.86,
+        c.x + nx * d.depth * 0.35 + ux * 0.35, c.z + nz * d.depth * 0.35 + uz * 0.35,
+        c.x - nx * 0.55, c.z - nz * 0.55
+      ]
+    } else if (d.kind === 'ridge') {
+      pts = [c.x + nx * d.depth * 0.95, c.z + nz * d.depth * 0.95, c.x - nx * d.depth * 0.95, c.z - nz * d.depth * 0.95]
+    } else {
+      pts = [
+        c.x + nx * 0.2, c.z + nz * 0.2,
+        c.x + nx * d.depth * 0.55 + ux * 0.4, c.z + nz * d.depth * 0.55 + uz * 0.4,
+        c.x + nx * d.depth * 0.92, c.z + nz * d.depth * 0.92
+      ]
+    }
+    this.guide = new GuideLine({ points: pts, twoWay }, 0.014, d.structure === 'shield' ? 0.26 : 0.32)
+    this.group.add(this.guide.mesh)
+    this.group.userData.perfTag = `fold.${d.kind}`
+  }
+
+  private buildStructure(): void {
+    const f = this.f
+    const d = f.def
+    const s = new Group()
+    this.structMat = createPaperMaterial({ vertexColors: true, grain: 0.06 })
+    const m = this.structMat
+    const add = (geo: ReturnType<typeof towerGeometry>, x: number, scale = 1): void => {
+      const mesh = new Mesh(geo, m)
+      mesh.position.x = x
+      mesh.scale.setScalar(scale)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      s.add(mesh)
+    }
+    if (d.structure === 'tower') {
+      add(towerGeometry(), 0)
+      const side = (f.len - 1.45) / 2
+      if (side > 0.35) {
+        add(wallGeometry(Number(side.toFixed(2))), -(0.72 + side / 2), 1)
+        add(wallGeometry(Number(side.toFixed(2))), 0.72 + side / 2, 1)
+      }
+    } else if (d.structure === 'wall') {
+      add(wallGeometry(Number((f.len * 0.96).toFixed(2))), 0)
+    } else if (d.structure === 'shield') {
+      add(shieldGeometry(), 0, Math.min(1.25, f.len / 2.6))
+    }
+    // Stand on the hinge, a hair toward the player, facing the player.
+    s.position.set(f.cx - f.nx * 0.16, 0, f.cz - f.nz * 0.16)
+    s.rotation.y = Math.atan2(-f.uz, f.ux) + (d.side > 0 ? Math.PI : 0)
+    s.scale.set(1, 0.001, 1)
+    s.visible = false
+    this.structure = s
+    this.group.add(s)
+  }
+
+  /** Re-point at a fresh fold state (same definition) — page restarts reuse the view. */
+  bind(f: FoldState): void {
+    this.f = f
+    this.lastRev = f.rev
+    this.lastHp = f.hp
+    this.wobble = 0
+    this.wobbleV = 0
+    this.reveal = 0
+  }
+
+  /** How far below the page a point inside a dipped valley sits (for trapped enemies). */
+  dipAt(x: number, z: number): number {
+    const f = this.f
+    if (f.def.kind !== 'valley') return 0
+    const d = (x - f.def.ax) * f.nx + (z - f.def.az) * f.nz
+    const a = f.t * VALLEY_MAX
+    const depth = f.def.depth * Math.tan(a)
+    return -depth * (1 - Math.min(1, Math.abs(d) / f.def.depth))
+  }
+
+  /** Height of a ridge's surface at a point (enemies being swept ride it). */
+  ridgeAt(x: number, z: number): number {
+    const f = this.f
+    if (f.def.kind !== 'ridge') return 0
+    const d = (x - f.def.ax) * f.nx + (z - f.def.az) * f.nz
+    const a = f.t * RIDGE_MAX
+    return f.def.depth * Math.tan(a) * (1 - Math.min(1, Math.abs(d) / f.def.depth))
+  }
+
+  update(time: number, dt: number, highlight: boolean): void {
+    const f = this.f
+    const k = f.def.kind
+    // Snap/stamp wobble (a spring kicked on every snap).
+    if (f.rev !== this.lastRev) {
+      this.lastRev = f.rev
+      this.wobbleV += f.phase === 'up' ? 9 : -6
+    }
+    this.wobbleV += (-160 * this.wobble - 11 * this.wobbleV) * dt
+    this.wobble += this.wobbleV * dt
+    if (f.hp < this.lastHp) {
+      this.hitFlash = 1
+      this.jolt = 1
+    }
+    this.lastHp = f.hp
+    this.hitFlash = Math.max(0, this.hitFlash - dt * 4)
+    this.jolt = Math.max(0, this.jolt - dt * 5)
+
+    const t = f.t
+    if (k === 'wall') {
+      const ang = t * (Math.PI / 2) + this.wobble * 0.08
+      this.panels[0]!.set(ang)
+    } else if (k === 'launch') {
+      this.panels[0]!.set(t * Math.PI + (f.phase === 'spent' ? this.wobble * 0.05 : 0))
+    } else if (k === 'valley') {
+      const a = t * VALLEY_MAX
+      const st = 1 / Math.cos(a)
+      this.panels[0]!.set(-a, st)
+      this.panels[1]!.set(-a, st)
+    } else if (k === 'ridge') {
+      const a = t * RIDGE_MAX
+      const st = 1 / Math.cos(a)
+      this.panels[0]!.set(a, st)
+      this.panels[1]!.set(a, st)
+    }
+
+    // Pop-up.
+    const s = this.structure
+    if (s) {
+      let p: number
+      if (f.phase === 'snapping' || f.phase === 'up') p = easeOutBack(clamp01((t - 0.35) / 0.65), 2.2)
+      else p = clamp01(t * 1.15)
+      p += this.wobble * 0.06
+      s.visible = p > 0.01
+      const squash = 1 + (1 - clamp01(p)) * 0.35
+      s.scale.set(squash, Math.max(0.001, p), squash)
+      s.rotation.z = Math.sin(time * 40) * 0.04 * this.jolt
+      // A battered wall leans.
+      const wear = 1 - f.hp / f.def.hp
+      s.rotation.x = f.phase === 'up' ? wear * 0.12 * Math.sin(time * 3) : 0
+    }
+
+    // Guide visibility.
+    let op = 0
+    let active = false
+    if (f.phase === 'ready') {
+      this.reveal = Math.min(1, this.reveal + dt * 3)
+      op = this.reveal
+      active = true
+    } else if (f.phase === 'dragging') {
+      op = Math.max(0, 1 - f.drag * 2.6)
+      active = true
+    } else if (f.phase === 'cooldown') {
+      op = 0.55
+    } else {
+      this.reveal = f.phase === 'hidden' ? 0 : this.reveal
+    }
+    this.guide.update(time, op, active)
+
+    const hl = highlight ? 1 : 0
+    const flash = Math.max(f.flash * 0.35, this.hitFlash * 0.5)
+    for (const m of [this.artMat, this.paperMat]) {
+      m.uniforms.uHighlight.value = hl
+      m.uniforms.uFlash.value = f.flash * 0.25
+    }
+    if (this.structMat) {
+      this.structMat.uniforms.uHighlight.value = hl
+      this.structMat.uniforms.uFlash.value = flash
+    }
+  }
+
+  dispose(): void {
+    for (const p of this.panels) p.dispose()
+    this.guide.dispose()
+    this.artMat.dispose()
+    this.paperMat.dispose()
+    this.structMat?.dispose()
+  }
+}

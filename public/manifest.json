@@ -1,7 +1,7 @@
 {
-  "name": "aethel-fold",
-  "short_name": "aethel-fold",
-  "description": "Build a tower of cannons and crates, survive endless waves of siege, and rebuild it taller every run.",
+  "name": "Castle Fold",
+  "short_name": "Castle Fold",
+  "description": "Fold the pages of a pop-up book to crush a paper army, topple its castle and fold its dragon into a frog.",
   "display": "standalone",
   "display_override": [
     "fullscreen",
@@ -10,8 +10,8 @@
   "orientation": "any",
   "start_url": "./",
   "scope": "./",
-  "theme_color": "#0a1224",
-  "background_color": "#0a1224",
+  "theme_color": "#3a2416",
+  "background_color": "#3a2416",
   "icons": [
     {
       "src": "images/logo/logo_192x192.png",

@@ -8,12 +8,12 @@
  *   1. `pip install piper-tts` into whatever Python is on PATH (`PYTHON`
  *      overrides it — `PYTHON="py -3"` will *not* work, it is one executable
  *      name; use the full path to `python.exe` if the launcher is all you have).
- *   2. Download every distinct Piper model `src/world/story/voices.ts` casts
+ *   2. Download every distinct Piper model `src/voice/voices.ts` casts
  *      into `tools/piper/`, skipping anything already there.
  *
  * There is no translation model to install. The pipeline this was ported from
  * pulls Argos down here to machine-translate its English into German; this
- * chapter is authored in both languages by hand, so that step does not exist.
+ * registry carries both languages as authored text, so that step does not exist.
  *
  * Wants network and a few hundred MB. Run under vitest only to reuse the `@/`
  * alias, so the model list stays derived from the casting table instead of being
@@ -23,7 +23,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { test } from 'vitest'
-import { allPiperModels } from '@/world/story/voices'
+import { allPiperModels } from '@/voice/voices'
 
 const ROOT = process.cwd()
 const PIPER_DIR = resolve(ROOT, 'tools/piper')
@@ -99,7 +99,7 @@ test(
       } catch (err) {
         log(
           `  x ${model}: ${(err as Error).message}\n` +
-            '    (check the model id in src/world/story/voices.ts against huggingface.co/rhasspy/piper-voices —\n' +
+            '    (check the model id in src/voice/voices.ts against huggingface.co/rhasspy/piper-voices —\n' +
             '     a mis-typed or retired id is the only way this line prints, and swapping it is the whole fix)'
         )
       }

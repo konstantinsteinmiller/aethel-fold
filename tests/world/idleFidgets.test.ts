@@ -1,8 +1,5 @@
-import { Bone, Group, Vector3 } from 'three'
+import { Bone } from 'three'
 import { describe, expect, it } from 'vitest'
-import { CombatDirector, type CombatBody } from '@/world/combat/CombatDirector'
-import { Combatant } from '@/world/combat/Combatant'
-import { movesetFor, STATS } from '@/world/combat/movesets'
 import { applyFidget, FIDGET_SECONDS, Fidgets } from '@/world/characters/fidgets'
 import { BONE_NAMES, type BoneName } from '@/world/characters/rig'
 import type { PoseTargets } from '@/world/characters/poses'
@@ -17,80 +14,6 @@ const makeBones = (): Map<BoneName, Bone> => {
 }
 
 const targets = (bones: Map<BoneName, Bone>): PoseTargets => ({ get: name => bones.get(name) })
-
-/**
- * ─── A person waiting is not a paused video ─────────────────────────────────
- *
- * `CombatDirector.update` freezes during a dialogue beat and calls `settle` so
- * the cast still stands where the story put them. It used to pass `dt = 0` on
- * that path, and `Character.update` returns *before* `resetPose` when the delta
- * is zero — so the figure kept whatever pose the last moving frame left on it.
- * The player ran up to somebody, pressed the key, and stood through the whole
- * conversation frozen mid-stride with one foot off the ground.
- *
- * That is the defect these tests exist for, and it is a good example of the kind
- * this project keeps finding: nothing threw, nothing was out of budget, and the
- * suite was green.
- */
-describe('the frozen dialogue path', () => {
-  const buildDirector = (): { director: CombatDirector; seen: number[]; body: CombatBody } => {
-    const seen: number[] = []
-    const bones = makeBones()
-    const body: CombatBody = {
-      group: new Group(),
-      bones,
-      setPosition: () => {},
-      setFacing: () => {},
-      update: (dt: number) => {
-        seen.push(dt)
-      }
-    }
-    const director = new CombatDirector(
-      () => 0,
-      () => null
-    )
-    const combatant = new Combatant({
-      id: 'test',
-      team: 'party',
-      stats: STATS.villager ?? Object.values(STATS)[0]!,
-      moveset: movesetFor(null),
-      weapon: null
-    })
-    director.add({ id: 'test', combatant, character: body, brain: 'none' })
-    return { director, seen, body }
-  }
-
-  it('still poses the cast while combat is disabled', () => {
-    const { director, seen } = buildDirector()
-    director.enabled = false
-    director.update(1 / 60, new Vector3())
-    expect(seen).toHaveLength(1)
-  })
-
-  /**
-   * The assertion the fix is actually about. A zero delta is what froze the
-   * stride; anything that hands the body a real one lets the gait decay into
-   * the idle on its own.
-   */
-  it('hands the body the real frame delta, not zero', () => {
-    const { director, seen } = buildDirector()
-    director.enabled = false
-    director.update(1 / 60, new Vector3())
-    director.update(1 / 30, new Vector3())
-    expect(seen).toEqual([1 / 60, 1 / 30])
-  })
-
-  it('does not advance combat clocks while disabled', () => {
-    const { director } = buildDirector()
-    const combatant = director.get('test')!
-    const before = combatant.stanceTime
-    director.enabled = false
-    for (let i = 0; i < 60; i++) {
-      director.update(1 / 60, new Vector3())
-    }
-    expect(combatant.stanceTime).toBe(before)
-  })
-})
 
 describe('idle fidgets', () => {
   /**
@@ -137,7 +60,7 @@ describe('idle fidgets', () => {
   /**
    * Additive on a pose that is reset every frame, so applying the same instant
    * twice must give the same answer as applying it once — the trap
-   * `combat/postures.ts` documents for the hip lift, from the other side.
+   * `characters/postures.ts` documents for the hip lift, from the other side.
    * Nothing here writes `position`, and this is what keeps that true.
    */
   it('writes no bone positions, only rotations', () => {

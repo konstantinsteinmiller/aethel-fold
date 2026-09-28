@@ -3,19 +3,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // ─── flushSaveNow — immediate checkpoint flush (the CG "stage lost on reload"
 // regression) ──────────────────────────────────────────────────────────────
 //
-// On the CrazyGames cloud-only build, a cleared wave writes the new best wave into
-// `tower_state`, but the push to `sdk.data` only fires after the persist (~200ms)
+// On the CrazyGames cloud-only build, a cleared page writes the new progress into
+// `aethel_state`, but the push to `sdk.data` only fires after the persist (~200ms)
 // + strategy-flush (~250ms) debounces, and the async cloud write then takes
-// time to land. A player who clears a wave and reloads a moment later beat that
-// pipeline → the reload restored the OLD wave.
+// time to land. A player who clears a page and reloads a moment later beat that
+// pipeline → the reload restored the OLD page.
 //
 // `flushSaveNow()` (called at every hard checkpoint) forces the whole pipeline to
-// drain synchronously-as-possible: write `tower_state` now → SaveManager proxy →
+// drain synchronously-as-possible: write `aethel_state` now → SaveManager proxy →
 // strategy dirty → `manager.flush()` → backend. This test proves a checkpoint write
 // reaches the (fake) backend right after `flushSaveNow()` WITHOUT advancing any
 // timers — i.e. it does not wait for either debounce.
 
-const STATE_KEY = 'tower_state'
+const STATE_KEY = 'aethel_state'
+// Fields inside the blob (see `src/keys.ts`).
+const CLEARED = 'fold_cleared'
+const PAGE = 'fold_page'
+const BEST = 'fold_best'
 
 const makeFakeData = (seed: Record<string, string> = {}) => {
   const store = new Map<string, string>(Object.entries(seed))
@@ -47,39 +51,41 @@ beforeEach(() => {
 })
 
 describe('flushSaveNow — immediate flush on a hard checkpoint', () => {
-  it('pushes a pending stage write to the backend without waiting for the debounce', async () => {
+  it('pushes a pending page write to the backend without waiting for the debounce', async () => {
     const data = makeFakeData()
     await bootCloudOnly(data)
 
-    const { setState } = await import('@/use/useTowerState')
+    const { setState } = await import('@/use/useAethelState')
     const { flushSaveNow } = await import('@/use/useSaveStatus')
 
-    // A cleared wave writes the new best into tower_state (still sitting on the
-    // debounce timers — nothing has reached the cloud yet).
-    setState('ts_best_wave', 2)
+    // A cleared page writes the new progress into aethel_state (still sitting
+    // on the debounce timers — nothing has reached the cloud yet).
+    setState(CLEARED, 2)
     expect(data.store.get(STATE_KEY)).toBeUndefined()
 
     // The checkpoint flush drains everything immediately — no fake timers.
     await flushSaveNow()
 
     const cloudBlob = JSON.parse(data.store.get(STATE_KEY) || '{}')
-    expect(cloudBlob.ts_best_wave).toBe(2)
+    expect(cloudBlob[CLEARED]).toBe(2)
   })
 
-  it('also carries coexisting progress (coins) written in the same checkpoint', async () => {
+  it('also carries coexisting progress (records, resume page) written in the same checkpoint', async () => {
     const data = makeFakeData()
     await bootCloudOnly(data)
 
-    const { setState } = await import('@/use/useTowerState')
+    const { setState } = await import('@/use/useAethelState')
     const { flushSaveNow } = await import('@/use/useSaveStatus')
 
-    setState('ts_coins', 250)
-    setState('ts_best_wave', 3)
+    setState(BEST, { score: 250, time: 0 })
+    setState(PAGE, 4)
+    setState(CLEARED, 3)
     await flushSaveNow()
 
     const cloudBlob = JSON.parse(data.store.get(STATE_KEY) || '{}')
-    expect(cloudBlob.ts_best_wave).toBe(3)
-    expect(cloudBlob.ts_coins).toBe(250)
+    expect(cloudBlob[CLEARED]).toBe(3)
+    expect(cloudBlob[PAGE]).toBe(4)
+    expect(cloudBlob[BEST]).toEqual({ score: 250, time: 0 })
   })
 })
 
@@ -90,36 +96,32 @@ describe('flushSaveNow — immediate flush on a hard checkpoint', () => {
 const settle = () => new Promise((r) => setTimeout(r, 0))
 
 describe('discrete progression events flush to the backend immediately', () => {
-  it('buying a tech node flushes without waiting for the debounce', async () => {
+  it('clearing a page (the resume checkpoint) flushes without waiting for the debounce', async () => {
     const data = makeFakeData()
     await bootCloudOnly(data)
-    const { default: useTowerProgress } = await import('@/use/useTowerProgress')
-    const { default: useTowerEconomy } = await import('@/use/useTowerEconomy')
-    const prog = useTowerProgress()
-    useTowerEconomy().addCoins(10_000)
+    const prog = await import('@/use/useFoldProgress')
 
-    // `foundations` is the tree's root — no prerequisites, so it is buyable
-    // from a standing start.
-    expect(prog.buyTech('foundations')).toBe(true)
+    // `pageCleared` for page 2 → resume on page 3, two pages cleared.
+    prog.checkpoint(3, { score: 1840, hits: 1, time: 95.44 }, 2)
     await settle()
 
     const blob = JSON.parse(data.store.get(STATE_KEY) || '{}')
-    expect(blob.ts_tech?.levels?.foundations).toBe(1)
+    expect(blob[PAGE]).toBe(3)
+    expect(blob[CLEARED]).toBe(2)
+    expect(blob.fold_run).toEqual({ score: 1840, hits: 1, time: 95.4 })
   })
 
-  it('finishing a run flushes the new best wave immediately', async () => {
+  it('finishing a run flushes the new records immediately', async () => {
     const data = makeFakeData()
     await bootCloudOnly(data)
-    const { default: useTowerProgress } = await import('@/use/useTowerProgress')
-    const prog = useTowerProgress()
+    const prog = await import('@/use/useFoldProgress')
 
-    prog.recordRunEnd({
-      wave: 7, kills: 120, wavesCleared: 7, height: 9, blocks: 22, blocksPlaced: 22
-    })
+    prog.recordVictory(9120, 612.3)
     await settle()
 
     const blob = JSON.parse(data.store.get(STATE_KEY) || '{}')
-    expect(blob.ts_best_wave).toBe(7)
-    expect(blob.ts_total_kills).toBe(120)
+    expect(blob[BEST]).toEqual({ score: 9120, time: 612.3 })
+    expect(blob.fold_wins).toBe(1)
+    expect(blob[CLEARED]).toBe(6)
   })
 })

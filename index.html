@@ -7,14 +7,14 @@
   <!-- CSP meta tag injected by vite.config.ts at build time -->
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0a1224">
+  <meta name="theme-color" content="#3a2416">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="aethel-fold">
-  <meta name="description" content="Build a tower of cannons and crates, survive endless waves of siege, and rebuild it taller every run.">
+  <meta name="description" content="Fold the pages of a pop-up book to crush a paper army, topple its castle and fold its dragon into a frog.">
   <link rel="manifest" href="/manifest.json">
-  <title>aethel-fold</title>
+  <title>Castle Fold</title>
   <style>
       /* The splash paints before any JS runs, so its colours are inlined here
          rather than pulled from the app's stylesheet. They match the scene's
@@ -22,7 +22,7 @@
          flash of a differently-coloured page. */
       body {
           margin: 0;
-          background-color: #0a1224;
+          background-color: #3a2416;
           outline: none;
       }
 
@@ -33,7 +33,7 @@
           display: flex;
           align-items: center;
           justify-content: center;
-          background: radial-gradient(circle at 50% 38%, #1b2b52 0%, #0a1224 70%);
+          background: radial-gradient(circle at 50% 38%, #8a5a36 0%, #3a2416 70%);
           transition: opacity 0.4s ease-out;
       }
 
@@ -42,14 +42,13 @@
           pointer-events: none;
       }
 
-      /* Arlaan's arms, inline. Zero bytes over the wire and it paints
-         before any JS runs, so the loading screen is already the game's own
-         mark rather than a generic spinner. The paths are a copy of
-         `src/components/atoms/ArlaanLogo.vue` — index.html cannot import a
-         Vue component, and the point of copying them rather than simplifying
-         is that the handover static splash -> Vue splash -> canvas shows the
-         SAME drawing at the SAME size, with nothing swapping under the
-         player. If the mark is ever redrawn, both files change.
+      /* The paper crane, inline. Zero bytes over the wire and it paints
+         before any JS runs. The facets are a copy of
+         `src/components/atoms/GameLogo.vue` (without the wordmark: the
+         'Angry' font is not loaded yet) — index.html cannot import a Vue
+         component, and copying keeps the handover static splash -> Vue
+         splash showing the same crane at the same size. If the mark is ever
+         redrawn, both files change.
 
          40vmin matches `FLogoProgress`'s `min(vw, vh) * 0.4` box exactly, so
          the two logos are the same size in the same place and the handover is
@@ -68,7 +67,7 @@
 </head>
 <body>
 <div id="static-splash">
-  <svg class="splash-arms" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Chroniken von Arlaan" focusable="false"><path d="M 50 12 H 206 A 6 6 0 0 1 212 18 V 96 C 212 146 176 176 128 194 C 80 176 44 146 44 96 V 18 A 6 6 0 0 1 50 12 Z" fill="#9c2b2e" stroke="#1b0c11" stroke-width="6" stroke-linejoin="round"/><g fill="#1b0c11" stroke="#1b0c11" stroke-width="6" stroke-linejoin="round" fill-rule="evenodd"><path d="M 122 124 L 134 124 L 132 152 L 140 158 L 128 180 L 116 158 L 124 152 Z"/><path d="M 128 106 L 148 112 L 158 128 L 152 148 L 165 154 L 163 166 L 141 164 L 136 138 L 128 132 Z"/><path d="M 128 106 L 148 112 L 158 128 L 152 148 L 165 154 L 163 166 L 141 164 L 136 138 L 128 132 Z" transform="matrix(-1 0 0 1 256 0)"/><path d="M 128 56 L 145 76 L 149 100 L 154 118 L 144 130 L 128 126 Z"/><path d="M 128 56 L 145 76 L 149 100 L 154 118 L 144 130 L 128 126 Z" transform="matrix(-1 0 0 1 256 0)"/><path d="M 146 104 L 152 78 L 164 60 L 174 46 L 186 37 L 196 32 L 197 54 L 178 52 L 187 69 L 169 66 L 177 83 L 159 81 L 167 98 Z"/><path d="M 146 104 L 152 78 L 164 60 L 174 46 L 186 37 L 196 32 L 197 54 L 178 52 L 187 69 L 169 66 L 177 83 L 159 81 L 167 98 Z" transform="matrix(-1 0 0 1 256 0)"/><path d="M 152 78 L 164 60 L 174 46 L 186 37 L 196 32 L 184 46 L 176 56 L 166 71 L 155 88 Z"/><path d="M 152 78 L 164 60 L 174 46 L 186 37 L 196 32 L 184 46 L 176 56 L 166 71 L 155 88 Z" transform="matrix(-1 0 0 1 256 0)"/><path d="M 128 60 L 140 76 L 141 92 L 128 98 Z"/><path d="M 128 60 L 140 76 L 141 92 L 128 98 Z" transform="matrix(-1 0 0 1 256 0)"/><path d="M 136 36 L 128 26 L 117 26 L 109 32 L 99 35 L 94 47 L 102 43 L 108 47 L 112 55 L 122 61 L 137 59 L 131 46 Z M 116.5 39 a 4.5 4.5 0 1 0 9 0 a 4.5 4.5 0 1 0 -9 0 Z"/></g><g fill-rule="evenodd"><path d="M 122 124 L 134 124 L 132 152 L 140 158 L 128 180 L 116 158 L 124 152 Z" fill="#a4762f"/><path d="M 128 106 L 148 112 L 158 128 L 152 148 L 165 154 L 163 166 L 141 164 L 136 138 L 128 132 Z" fill="#a4762f"/><path d="M 128 106 L 148 112 L 158 128 L 152 148 L 165 154 L 163 166 L 141 164 L 136 138 L 128 132 Z" transform="matrix(-1 0 0 1 256 0)" fill="#a4762f"/><path d="M 128 56 L 145 76 L 149 100 L 154 118 L 144 130 L 128 126 Z" fill="#d8ae4e"/><path d="M 128 56 L 145 76 L 149 100 L 154 118 L 144 130 L 128 126 Z" transform="matrix(-1 0 0 1 256 0)" fill="#d8ae4e"/><path d="M 146 104 L 152 78 L 164 60 L 174 46 L 186 37 L 196 32 L 197 54 L 178 52 L 187 69 L 169 66 L 177 83 L 159 81 L 167 98 Z" fill="#d8ae4e"/><path d="M 146 104 L 152 78 L 164 60 L 174 46 L 186 37 L 196 32 L 197 54 L 178 52 L 187 69 L 169 66 L 177 83 L 159 81 L 167 98 Z" transform="matrix(-1 0 0 1 256 0)" fill="#d8ae4e"/><path d="M 152 78 L 164 60 L 174 46 L 186 37 L 196 32 L 184 46 L 176 56 L 166 71 L 155 88 Z" fill="#eccb7f"/><path d="M 152 78 L 164 60 L 174 46 L 186 37 L 196 32 L 184 46 L 176 56 L 166 71 L 155 88 Z" transform="matrix(-1 0 0 1 256 0)" fill="#eccb7f"/><path d="M 128 60 L 140 76 L 141 92 L 128 98 Z" fill="#eccb7f"/><path d="M 128 60 L 140 76 L 141 92 L 128 98 Z" transform="matrix(-1 0 0 1 256 0)" fill="#eccb7f"/><path d="M 136 36 L 128 26 L 117 26 L 109 32 L 99 35 L 94 47 L 102 43 L 108 47 L 112 55 L 122 61 L 137 59 L 131 46 Z M 116.5 39 a 4.5 4.5 0 1 0 9 0 a 4.5 4.5 0 1 0 -9 0 Z" fill="#d8ae4e"/></g><text x="128" y="218" text-anchor="middle" style="font-family:Georgia,'Times New Roman','Liberation Serif','Nimbus Roman',serif" font-size="18" font-weight="700" textLength="168" lengthAdjust="spacing" fill="#d8ae4e">CHRONIKEN VON</text><text x="128" y="251" text-anchor="middle" style="font-family:Georgia,'Times New Roman','Liberation Serif','Nimbus Roman',serif" font-size="34" font-weight="700" textLength="156" lengthAdjust="spacing" fill="#d8ae4e">ARLAAN</text></svg>
+  <svg class="splash-arms" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Castle Fold" focusable="false"><g fill="#1c1724" stroke="#1c1724" stroke-width="10" stroke-linejoin="round"><polygon points="60,30 112,122 90,128"/><polygon points="60,30 128,122 112,122"/><polygon points="196,30 144,122 166,128"/><polygon points="196,30 128,122 144,122"/><polygon points="90,130 106,134 40,64"/><polygon points="36,60 52,66 28,94"/><polygon points="166,130 150,134 226,70"/><polygon points="84,128 128,118 128,178"/><polygon points="128,118 172,128 128,178"/></g><g stroke="#1c1724" stroke-width="2.5" stroke-linejoin="round"><polygon points="60,30 112,122 90,128" fill="#3464d6"/><polygon points="60,30 128,122 112,122" fill="#5f95ff"/><polygon points="196,30 144,122 166,128" fill="#5f95ff"/><polygon points="196,30 128,122 144,122" fill="#3464d6"/><polygon points="90,130 106,134 40,64" fill="#ff6a5c"/><polygon points="36,60 52,66 28,94" fill="#ffe066"/><polygon points="166,130 150,134 226,70" fill="#d8433b"/><polygon points="84,128 128,118 128,178" fill="#fff6e3"/><polygon points="128,118 172,128 128,178" fill="#e7d3a8"/></g></svg>
 </div>
 <!-- Load the SDK before your game code -->
 <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>

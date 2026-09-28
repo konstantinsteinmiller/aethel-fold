@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { Heightfield } from '@/world/terrain/Heightfield'
+import { Heightfield } from '@/world/terrain/heightfield'
 import { scatterChunk } from '@/world/scatter'
 import { ScatterColliderIndex } from '@/world/scatterColliders'
 import {

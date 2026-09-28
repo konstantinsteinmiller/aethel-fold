@@ -4,8 +4,7 @@ import { buildWorldSeats, type WorldSeat } from './seats'
 /**
  * ─── Which seat the player is looking at ────────────────────────────────────
  *
- * The same rule as `StoryDirector.findTalkTarget`, deliberately, and for the
- * same reason it has: **aim beats proximity.** Candidates are scored by how
+ * **Aim beats proximity.** Candidates are scored by how
  * near the middle of the screen they are, not by how near the player they are,
  * because four benches ring a fire pit at the same distance and the only thing
  * that can break that tie is where the player is pointing the camera. Distance

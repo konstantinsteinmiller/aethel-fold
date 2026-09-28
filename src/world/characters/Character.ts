@@ -336,7 +336,7 @@ export class Character {
    *
    * The exception is the *combat* layer, which is a second animation layer and
    * has to be: an attack clip blends onto whatever the gait produced (see
-   * `combat/Combatant.ts::applyClip`), which is exactly what makes swinging while
+   * `characters/postures.ts::applyClip`), which is exactly what makes swinging while
    * walking possible without a second set of clips for every gait. It is a
    * legitimate writer, and the ordering is not ambiguous — it runs strictly after
    * `update()`, every frame, from `CombatDirector`.
@@ -760,7 +760,7 @@ export class Character {
    *
    * Safe to call every frame with the same value (it compares first) and safe to
    * call on a figure that has no face (it does nothing). Driven by
-   * `story/lipSync.ts`, which turns the line on screen into this number.
+   * `src/voice/lipSync.ts`, which turns the line on screen into this number.
    *
    * ── Tier 0 only, and deliberately not carried down the ladder ─────────────
    *
@@ -853,9 +853,9 @@ export class Character {
       const drawing = combat.drawnFrom === 'sheathed'
       const state = drawing ? this.combatTarget(combat) : combat.drawnFrom
       const kind = state === 'mainHand' ? combat.itemAt('mainHand') : combat.itemAt('back')
-      // Through the pose family, not the kind: a scrantis, a broadsword and a
-      // dagger all leave the hip along the sword's arc, and a war axe comes off
-      // the back along the greatsword's. See `combatPoses.POSE_FAMILY`.
+      // Through the pose family, not the kind: every one-hander leaves the hip
+      // along the sword's arc, and every two-hander comes off the back along the
+      // greatsword's. See `combatPoses.POSE_FAMILY`.
       const family = kind === null ? null : poseFamilyOf(kind)
       if (family !== null) {
         applyDraw(this.bones, family, combat.drawProgress, drawing ? 'draw' : 'sheathe', effort)

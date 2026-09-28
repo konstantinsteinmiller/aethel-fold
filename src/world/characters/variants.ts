@@ -115,9 +115,8 @@ export const HAIR_COLOURS: readonly ColourStop[] = [
    * ever saved. Five was the shipped table and stays the shipped table; this is
    * the sixth.
    *
-   * It exists because the protagonist's hair is canon and the table could not
-   * express it. `Chroniken von Arlaan` gives Athalus "shoulder-length **dark
-   * blond** hair", which sits between `strawBase` (a light blond that reads as
+   * It exists because the table could not express **dark blond** hair, which
+   * sits between `strawBase` (a light blond that reads as
    * white at 20 m) and `sandstoneBase` (which is plainly red). `strawShadow` is
    * the straw family's own dark end, so this is the same hair the table already
    * had, two bands down — which is exactly what "dark blond" means.

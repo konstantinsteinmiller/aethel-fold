@@ -1453,7 +1453,7 @@ describe('the brow colour', () => {
  * ── Two languages, and the count is derived rather than written down ────────
  *
  * The game shipped 21 locales as a tower-defence game and ships **English and
- * German** as Arlaan; the other 19 bundles were deleted. This block used to name
+ * German** now; the other 19 bundles were deleted. This block used to name
  * all 21 and assert `toHaveLength(21)`, and when they were deleted the file
  * stopped *collecting* — 1400 lines of geometry assertions that have nothing to
  * do with i18n went dark because of an import at the top.

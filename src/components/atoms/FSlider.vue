@@ -17,9 +17,9 @@ const props = withDefaults(defineProps<Props>(), {
   min: 0,
   max: 100,
   step: 1,
-  colorFrom: '#ffcd00', // Brawl Yellow
-  colorTo: '#f7a000',
-  trackColor: '#1a2b4b' // Dark Blue depth
+  colorFrom: '#ff6a5c', // paper red, lit half
+  colorTo: '#d8433b', // paper red, shaded half
+  trackColor: '#fff6e3' // parchment strip
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -37,79 +37,130 @@ const updateValue = (event: Event) => {
 <template lang="pug">
   div.f-slider-container(class="w-full")
     //- Label (Optional)
-    div(v-if="label" class="slider-label mb-2 text-white font-black uppercase italic tracking-wider") {{ label }}
+    div.slider-label(v-if="label") {{ label }}
 
-    div.f-slider__row(class="relative flex items-center")
-      //- Custom Track Background (The 3D "Well")
-      div(
-        class="f-slider__track absolute inset-0 my-auto rounded-full border-[3px] border-[#0f1a30] overflow-hidden bg-[#0a1425]"
-      )
-        //- Progress Fill
-        div(
-          class="h-full transition-all duration-75 relative"
+    //- The thumb travels (100% - thumb) exactly like the native one, so the
+    //- painted square never hangs off either end of the strip.
+    div.f-slider__row
+      //- The track: a strip of parchment with an ink border.
+      div.f-slider__track(:style="{ backgroundColor: trackColor }")
+        //- Fill: a creased strip of coloured paper laid over it.
+        div.f-slider__fill(
           :style="{ \
-            width: `${progress}%`, \
-            backgroundImage: `linear-gradient(to bottom, ${colorFrom}, ${colorTo})` \
+            width: `calc(var(--fsl-thumb) / 2 + (100% - var(--fsl-thumb)) * ${progress / 100})`, \
+            backgroundImage: `linear-gradient(170deg, ${colorFrom} 0 50%, ${colorTo} 50% 100%)` \
           }"
         )
-          //- Inner Shine for the fill
-          span(class="absolute inset-x-0 top-0 h-1/2 bg-white/20")
 
       //- Native Input (Invisible but functional)
-      input(
+      input.f-slider__input(
         type="range"
         :min="min"
         :max="max"
         :step="step"
         :value="modelValue"
+        :aria-label="label"
         @input="updateValue"
-        class="f-slider__input absolute inset-0 w-full opacity-0 cursor-pointer z-10 touch-manipulation"
       )
 
-      //- Custom Thumb (Visual Only)
-      div(
-        class="thumb-visual pointer-events-none absolute flex items-center justify-center transition-transform"
-        :style="{ left: `calc(${progress}% - var(--fsl-thumb) / 2)` }"
+      //- Custom thumb (visual only): a folded paper square.
+      div.thumb-visual(
+        aria-hidden="true"
+        :style="{ left: `calc((100% - var(--fsl-thumb)) * ${progress / 100})` }"
       )
-        //- The "3D Shadow" of the thumb
-        span(class="absolute inset-0 translate-y-[3px] bg-[#102e7a] rounded-xl border-[3px] border-[#0f1a30]")
-        //- The Main Thumb Body
-        span(class="relative block inset-0 w-full h-full bg-[#50aaff] rounded-xl border-[3px] border-[#0f1a30] overflow-hidden")
-          //- Thumb Shine
-          span(class="absolute inset-x-0 top-0 h-1/2 bg-white/30")
-          //- Little Detail (Vertical Line)
-          span(class="absolute inset-0 flex items-center justify-center")
-            span(class="w-1.5 h-4 bg-white/50 rounded-full")
+        span.thumb-visual__shadow
+        span.thumb-visual__body
 </template>
 
 <style scoped lang="sass">
+@use '@/assets/css/paper' as paper
+
 .slider-label
+  margin-bottom: 0.4rem
+  font-weight: 900
+  text-transform: uppercase
+  letter-spacing: 0.04em
   font-size: clamp(0.75rem, 3.2vw, 1.1rem)
-  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000
+  @include paper.ink-text
 
 .f-slider-container
   // Thumb size drives the row height, the track height AND the left offset, so
-  // all three stay in sync at any viewport instead of the old hard-coded 40px.
-  --fsl-thumb: clamp(2rem, 9vw, 2.5rem)
+  // all three stay in sync at any viewport.
+  --fsl-thumb: clamp(2.25rem, 9vw, 2.6rem)
+  --bw: 2.5px
+  --ear: calc(var(--fsl-thumb) * 0.3)
   padding-block: clamp(0.4rem, 2vw, 1rem)
   -webkit-tap-highlight-color: transparent
 
 .f-slider__row
+  position: relative
+  display: flex
+  align-items: center
   height: var(--fsl-thumb)
+  min-height: 2.25rem
 
 .f-slider__track
-  height: calc(var(--fsl-thumb) * 0.6)
+  position: absolute
+  inset-inline: 0
+  top: 50%
+  height: calc(var(--fsl-thumb) * 0.5)
+  border: var(--bw) solid paper.$ink
+  border-radius: 0.15rem
+  overflow: hidden
+  transform: translateY(-50%)
+  box-shadow: 0 3px 0 paper.$shadow
+  // A faint centre fold along the strip.
+  background-image: linear-gradient(to bottom, transparent calc(50% - 1px), rgba(28, 23, 36, 0.12) calc(50% - 1px) 50%, transparent 50%)
+
+.f-slider__fill
+  position: relative
+  height: 100%
+  border-right: 2px solid paper.$ink
+  transition: width 75ms linear
 
 .f-slider__input
+  position: absolute
+  inset: 0
+  z-index: 10
+  width: 100%
   height: var(--fsl-thumb)
+  margin: 0
+  opacity: 0
+  cursor: pointer
+  touch-action: manipulation
 
 .thumb-visual
+  position: absolute
+  top: 0
   width: var(--fsl-thumb)
   height: var(--fsl-thumb)
+  pointer-events: none
+
+.thumb-visual__shadow
+  @include paper.shadow-plate(right, 3px)
+
+.thumb-visual__body
+  position: absolute
+  inset: 0
+  border: var(--bw) solid paper.$ink
+  background-image: paper.crease(paper.$blue, paper.$blue-shade, 135deg, 50%)
+  transition: transform 90ms ease-out
+  @include paper.dog-ear-clip
+
+  &::after
+    @include paper.dog-ear-flap(paper.$blue-shade)
+
+  .f-slider__row:active &
+    transform: translateY(2px)
+
+.f-slider__input:focus-visible ~ .thumb-visual
+  outline: 3px solid paper.$blue
+  outline-offset: 3px
 
 /* Ensure the native range covers the whole area for better hitboxes */
 input[type="range"]
   -webkit-appearance: none
+  appearance: none
   background: transparent
 
   &::-webkit-slider-thumb

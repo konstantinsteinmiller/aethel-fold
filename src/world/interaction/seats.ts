@@ -1,10 +1,10 @@
-import { SEAT_HEIGHT, type SeatKind } from '../combat/postures'
+import { SEAT_HEIGHT, type SeatKind } from '../characters/postures'
 import type { Placement } from '../level/types'
 
 /**
  * ─── What can be sat on, and where exactly ──────────────────────────────────
  *
- * The catalogue half of `world/interaction/`. `combat/postures.ts` knows how a
+ * The catalogue half of `world/interaction/`. `characters/postures.ts` knows how a
  * figure folds onto a seat at height `S`; this knows which props *are* seats,
  * where on each of them the buttocks go, and which way the sitter ends up
  * looking. Nothing here knows about a chapter, a player or a camera — a seat is
@@ -89,13 +89,13 @@ export interface SeatAnchor {
 }
 
 export interface SeatDefinition {
-  /** Which clip in `combat/postures.ts` this seat is sat on with. */
+  /** Which clip in `characters/postures.ts` this seat is sat on with. */
   kind: SeatKind
   /** One per occupant. See the header: every seat is single-occupancy in v1. */
   anchors: readonly SeatAnchor[]
 }
 
-/** The sitter's body radius, from `combat/movesets.ts::STATS.athalus`. */
+/** The sitter's body radius, the player's capsule. */
 const SITTER_RADIUS = 0.32
 
 /**
@@ -116,7 +116,7 @@ const SITTER_RADIUS = 0.32
  * at **0.74 m** and the log's is a round, tapered back running **0.55 → 0.68 m**
  * over half a metre of its length, both before a `scaleRange` that stretches to
  * 1.35. `seatedLeg` clamps above 0.63 and hands back a figure with its feet in
- * the air, which is precisely the failure `combat/postures.ts` exists to
+ * the air, which is precisely the failure `characters/postures.ts` exists to
  * prevent. A camp seat needs a prop with a flat top at 0.34; until there is
  * one, the bandits keep standing, which `camp.ts` argues for on its own terms.
  *

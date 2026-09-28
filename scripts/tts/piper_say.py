@@ -4,7 +4,7 @@
     echo "<text>" | python scripts/tts/piper_say.py <model.onnx> <out.wav> [speakerId]
 
 The single-line counterpart to `piper_batch.py`, for auditioning a voice by hand
-before committing it to `src/world/story/voices.ts`:
+before committing it to `src/voice/voices.ts`:
 
     echo "Worueber soll ich dir denn alles erzaehlen, Junge?" | \
       python scripts/tts/piper_say.py tools/piper/de_DE-pavoque-low.onnx try.wav
@@ -16,7 +16,7 @@ umlauts and typographic dashes pass through untouched by any shell's quoting
 rules, which matters more on Windows than anywhere else.
 
 The optional speakerId picks one voice out of a multi-speaker model. This
-chapter's casting deliberately uses none (see `voices.ts` on why), and the
+project's casting deliberately uses none (see `voices.ts` on why), and the
 argument stays because auditioning one is exactly what you would use this for.
 """
 import sys

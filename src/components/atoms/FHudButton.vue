@@ -12,6 +12,10 @@
  * hard 2.5rem floor, so the row is compact on a 320px phone, comfortable on a
  * tablet, and never collapses.
  *
+ * Castle Fold look: each chip is a square of folded paper — crease, dog-ear,
+ * ink border and a periwinkle desk shadow. `gold` is yellow paper and `slate`
+ * is plain parchment.
+ *
  * Slots: default = the glyph (SVG / icon component); `badge` = the corner
  * indicator (claim count, reward pill, timer).
  */
@@ -50,7 +54,14 @@ defineEmits(['click'])
 </template>
 
 <style scoped lang="sass">
+@use '@/assets/css/paper' as paper
+
 .f-hud-button
+  --bw: 2.5px
+  --depth: 4px
+  --ear: clamp(0.5rem, 2vw, 0.75rem)
+  --hud-from: #{paper.$yellow}
+  --hud-to: #{paper.$yellow-shade}
   position: relative
   display: inline-flex
   align-items: center
@@ -68,24 +79,26 @@ defineEmits(['click'])
   pointer-events: auto
   touch-action: manipulation
   -webkit-tap-highlight-color: transparent
-  transition: transform 90ms ease-out, filter 90ms ease-out
+  transition: filter 90ms ease-out
 
-  &:hover:not(.is-disabled)
-    filter: brightness(1.08)
+  @media (hover: hover)
+    &:hover:not(.is-disabled) .f-hud-button__body
+      transform: translateY(-2px)
 
-  &:active:not(.is-disabled)
-    transform: translateY(2px) scale(0.94)
+  &:active:not(.is-disabled) .f-hud-button__body
+    transform: translateY(3px)
+
+  &:focus-visible
+    outline: 3px solid paper.$blue
+    outline-offset: 4px
 
   &.is-disabled
-    opacity: 0.45
-    filter: grayscale(1)
+    opacity: 0.5
+    filter: grayscale(0.85)
     cursor: not-allowed
 
 .f-hud-button__shadow
-  position: absolute
-  inset: 0
-  transform: translateY(3px)
-  border-radius: clamp(0.45rem, 2vw, 0.7rem)
+  @include paper.shadow-plate
 
 .f-hud-button__body
   position: relative
@@ -94,13 +107,19 @@ defineEmits(['click'])
   justify-content: center
   width: 100%
   height: 100%
-  border: 2px solid #0f1a30
-  border-radius: clamp(0.45rem, 2vw, 0.7rem)
+  border: var(--bw) solid paper.$ink
+  background-image: paper.crease(var(--hud-from), var(--hud-to), 135deg, 55%)
   color: #fff
+  transition: transform 90ms ease-out
+  @include paper.dog-ear-clip
+
+  &::after
+    @include paper.dog-ear-flap(var(--hud-to))
 
   // The glyph fills a consistent fraction of the chip regardless of chip size,
   // so a row of mixed icons reads as one set.
   :slotted(svg), :slotted(img)
+    position: relative
     width: 62%
     height: 62%
     pointer-events: none
@@ -109,6 +128,7 @@ defineEmits(['click'])
   position: absolute
   top: 0
   right: 0
+  z-index: 1
   translate: 30% -30%
   display: flex
   align-items: center
@@ -117,36 +137,27 @@ defineEmits(['click'])
 
 // ─── Tones ──────────────────────────────────────────────────────────────────
 
-.tone-gold
-  .f-hud-button__shadow
-    background-color: #7a5a12
-  .f-hud-button__body
-    background-image: linear-gradient(to bottom, #ffcd00, #f7a000)
-
 .tone-blue
-  .f-hud-button__shadow
-    background-color: #102e7a
-  .f-hud-button__body
-    background-image: linear-gradient(to bottom, #50aaff, #2266ff)
+  --hud-from: #{paper.$blue}
+  --hud-to: #{paper.$blue-shade}
 
 .tone-green
-  .f-hud-button__shadow
-    background-color: #0e5c2c
-  .f-hud-button__body
-    background-image: linear-gradient(to bottom, #67e08a, #1f9d4d)
+  --hud-from: #{paper.$green}
+  --hud-to: #{paper.$green-shade}
 
 .tone-slate
-  .f-hud-button__shadow
-    background-color: #151d31
+  --hud-from: #{paper.$parchment}
+  --hud-to: #{paper.$parchment-shade}
+
   .f-hud-button__body
-    background-image: linear-gradient(to bottom, #4a5878, #2d3855)
+    color: paper.$ink
 
 .is-attention
   animation: hud-pulse 1.6s ease-in-out infinite
 
 @keyframes hud-pulse
   0%, 100%
-    filter: drop-shadow(0 0 0 rgba(255, 200, 0, 0))
+    filter: drop-shadow(0 0 0 rgba(255, 224, 102, 0))
   50%
-    filter: drop-shadow(0 0 8px rgba(255, 200, 0, 0.75))
+    filter: drop-shadow(0 0 0.5rem rgba(255, 224, 102, 0.9))
 </style>

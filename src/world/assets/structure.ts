@@ -16,7 +16,7 @@ import type { WorldAsset } from './types'
 /**
  * ─── The built world: houses, palisades, bridges, carts ─────────────────────
  *
- * Nimmerschein is the first thing in this project that is **built** rather than
+ * The village is the first thing in this project that is **built** rather than
  * grown or eroded, and it needs a different kit from either. `plateau.ts` lofts
  * a surface of revolution, which is right for a rock and useless for a roof;
  * `chibiGeometry.ts` skins a rig, which is right for a person and useless for a
@@ -295,7 +295,7 @@ export const WALL_CORNER_V = [2 / 16, 6 / 16, 10 / 16, 14 / 16] as const
  * two parts, two normal solutions and a seam at the ridge that has to be
  * bevelled by hand. Here the ridge bevel is the spline's own rounding, which is
  * what thatch actually looks like — a straight arris is a *tiled* roof, and
- * Nimmerschein is thatched.
+ * the village is thatched.
  *
  * ── Why this list is 24 long and not 16 ─────────────────────────────────────
  *
@@ -375,7 +375,7 @@ const THATCH_POINTS: readonly (readonly [number, number])[] = [
   // **±3.2 % of the rise, raised from ±2.4 %.** The original delivered 3.6 cm
   // peak-to-peak on a cottage and a normal tilt of about 5°, and was chosen as
   // texture. Looked at in the browser from the village street it is *nothing*:
-  // every roof in Nimmerschein reads as one flat tan plane, because the toon
+  // every roof in the village reads as one flat tan plane, because the toon
   // ramp quantises and 5° does not cross a band edge anywhere on the slope.
   // 3.2 % delivers 4.8 cm and about 7°, which does cross one under the
   // chapter's low afternoon sun, and the coat gains the horizontal banding a

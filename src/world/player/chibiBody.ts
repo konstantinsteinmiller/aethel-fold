@@ -1,6 +1,6 @@
 import type { Object3D, Vector3 } from 'three'
 import { Character } from '../characters/Character'
-import { applyPosture, type SeatKind } from '../combat/postures'
+import { applyPosture, type SeatKind } from '../characters/postures'
 import { seatRootLift } from '../interaction/SitController'
 import { CharacterEquipment, variantOf } from '../characters/CharacterEquipment'
 import { DEFAULT_APPEARANCE, type CharacterAppearance, type EquipmentLoadout } from '../characters/equipment'

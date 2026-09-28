@@ -53,7 +53,7 @@ export const PLACEABLE_CATEGORY_LABELS: Record<PlaceableCategory, string> = {
   // point-with-a-uniform-scale objects, so they have their own editor and their
   // own store (`world/water/WaterEditor.ts`). A fall is a prop like any other.
   water: 'Water',
-  // Nimmerschein: houses, the palisade, the bridge over the Arla, and the yard
+  // The village: houses, the palisade, the river bridge, and the yard
   // clutter between them. Its own section rather than folded into `platform`
   // because a designer laying out a village is not reaching for a plateau — and
   // because a house is the only thing in the catalogue whose *orientation* is

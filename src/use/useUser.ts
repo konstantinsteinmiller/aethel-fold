@@ -1,13 +1,11 @@
 import { computed, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { mobileCheck } from '@/utils/function'
-import { DEFAULT_LOCALE, DIFFICULTY, type Difficulties } from '@/utils/enums'
+import { DEFAULT_LOCALE } from '@/utils/enums'
 import { isDbInitialized, isSplashScreenVisible } from '@/use/useMatch'
 import { saveDataVersion } from '@/use/useSaveStatus'
-import { getState, setState, hasState } from '@/use/useTowerState'
-import {
-  SOUND_KEY, MUSIC_KEY, LANGUAGE_KEY, DIFFICULTY_KEY, MUSIC_TRACK_KEY
-} from '@/keys'
+import { getState, setState, hasState } from '@/use/useAethelState'
+import { SOUND_KEY, MUSIC_KEY, LANGUAGE_KEY } from '@/keys'
 
 export const windowWidth = ref(window.innerWidth)
 export const windowHeight = ref(window.innerHeight)
@@ -46,24 +44,15 @@ export const version: string = APP_VERSION
 
 // ─── Persisted settings ────────────────────────────────────────────────────
 //
-// aethel-fold persists FIVE user settings — difficulty, sound volume, music
-// volume, locale, music track — as fields inside the single `tower_state`
-// blob (keys catalogued in `src/keys.ts`), never as their own localStorage
-// entries. On a platform build the blob goes through the patched
-// `SaveManager.setItem` and is mirrored to the SDK cloud store automatically.
-// Hydrate at boot is a synchronous read; the strategy populates localStorage
-// from the cloud BEFORE the App module graph imports (see `main.ts`).
+// Castle Fold persists THREE user settings — sound volume, music volume and
+// locale — as fields inside the single `aethel_state` blob (keys catalogued in
+// `src/keys.ts`), never as their own localStorage entries. On a platform build
+// the blob goes through the patched `SaveManager.setItem` and is mirrored to
+// the SDK cloud store automatically.
 //
 // Key constants are re-exported here so long-standing importers
 // (`useCrazyMuteSync`, tests) keep working without an extra import hop.
-export { SOUND_KEY, MUSIC_KEY, LANGUAGE_KEY, DIFFICULTY_KEY, MUSIC_TRACK_KEY }
-
-// Background-music track id → audio filename (under public/audio/music/).
-export type MusicTrack = 'trance' | 'cozy'
-export const MUSIC_TRACK_FILES: Record<MusicTrack, string> = {
-  trance: 'trance.ogg',
-  cozy: 'bg-cozy.ogg'
-}
+export { SOUND_KEY, MUSIC_KEY, LANGUAGE_KEY }
 
 const readNumber = (key: string, fallback: number): number => {
   const v = getState<unknown>(key)
@@ -90,11 +79,6 @@ const userMusicVolume: Ref<number> = ref(readNumber(MUSIC_KEY, DEFAULT_MUSIC_VOL
 // *overrides* `resolveInitialLocale` for every player who has never opened the
 // language picker — which is all of them, on a first run.
 const userLanguage: Ref<string> = ref(readString(LANGUAGE_KEY, DEFAULT_LOCALE))
-// Difficulty defaults to MEDIUM. It scales enemy HP + wave budget (Easy −20%,
-// Hard +25%) via `difficultyFactor()` below, read by the wave director.
-const userDifficulty: Ref<Difficulties> = ref(readString<Difficulties>(DIFFICULTY_KEY, DIFFICULTY.MEDIUM))
-// Background-music track — defaults to 'trance' (Trance Tunnel).
-const userMusicTrack: Ref<MusicTrack> = ref(readString<MusicTrack>(MUSIC_TRACK_KEY, 'trance'))
 
 // Re-read on hydrate-success bump. Module init reads these synchronously
 // from localStorage, but on cloud-only builds (CrazyGames) the blob is
@@ -120,23 +104,10 @@ watch(saveDataVersion, () => {
   userSoundVolume.value = readNumber(SOUND_KEY, userSoundVolume.value)
   userMusicVolume.value = readNumber(MUSIC_KEY, userMusicVolume.value)
   userLanguage.value = readString(LANGUAGE_KEY, userLanguage.value)
-  userDifficulty.value = readString<Difficulties>(DIFFICULTY_KEY, userDifficulty.value)
-  userMusicTrack.value = readString<MusicTrack>(MUSIC_TRACK_KEY, userMusicTrack.value)
 
   if (!hasState(SOUND_KEY)) setState(SOUND_KEY, userSoundVolume.value)
   if (!hasState(MUSIC_KEY)) setState(MUSIC_KEY, userMusicVolume.value)
-  if (!hasState(DIFFICULTY_KEY)) setState(DIFFICULTY_KEY, userDifficulty.value)
-  if (!hasState(MUSIC_TRACK_KEY)) setState(MUSIC_TRACK_KEY, userMusicTrack.value)
 })
-
-/** Wave-pressure multiplier for the active difficulty: Easy −20% (smaller wave
- *  budgets and softer enemies), Medium ×1, Hard +25% (denser waves, tankier
- *  enemies). Read by the wave director when composing a wave. */
-export const difficultyFactor = (): number => {
-  if (userDifficulty.value === DIFFICULTY.EASY) return 0.8
-  if (userDifficulty.value === DIFFICULTY.HARD) return 1.25
-  return 1
-}
 
 // Boot signal that several composables (`main.ts`, `useCrazyMuteSync`,
 // the i18n loader) wait on. Previously the IDB hydrate flipped this; with
@@ -156,7 +127,7 @@ isSplashScreenVisible.value = false
 //     produced `cardQuestUserLanguage`, `cardQuestSoundVolume`, etc.
 //   • `chaosArena*` keys — the interim prefix from the
 //     2026-05-04 build. We no longer mirror the locale hint to
-//     sessionStorage at all (the value lives in `ts_user_language`,
+//     sessionStorage at all (the value lives in `user_language`,
 //     which flows through `sdk.data` on CG), so any existing
 //     `chaosArena*` entry is also dead data.
 // Fire-and-forget — errors are swallowed because there is nothing to
@@ -202,14 +173,6 @@ const useUser = () => {
         userLanguage.value = value as string
         setState(LANGUAGE_KEY, userLanguage.value)
         break
-      case 'difficulty':
-        userDifficulty.value = value as Difficulties
-        setState(DIFFICULTY_KEY, userDifficulty.value)
-        break
-      case 'musicTrack':
-        userMusicTrack.value = value as MusicTrack
-        setState(MUSIC_TRACK_KEY, userMusicTrack.value)
-        break
     }
   }
 
@@ -217,8 +180,6 @@ const useUser = () => {
     userSoundVolume,
     userMusicVolume,
     userLanguage,
-    userDifficulty,
-    userMusicTrack,
     setSettingValue
   }
 }

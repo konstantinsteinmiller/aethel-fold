@@ -2,16 +2,12 @@ import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
-import FpsMeter from '@/components/atoms/FpsMeter.vue'
 import KeybindingsMenu from '@/components/organisms/KeybindingsMenu.vue'
-import PauseMenu from '@/components/organisms/PauseMenu.vue'
 import SettingsMenu from '@/components/organisms/SettingsMenu.vue'
 import WorldSettingsPanel from '@/components/organisms/WorldSettingsPanel.vue'
 import en from '@/i18n/locales/en'
-import { isGamePaused } from '@/use/useGamePause'
 import { DEFAULT_SETTINGS, setSetting, settings } from '@/use/useGameSettings'
 import { bindingFor, resetBindings } from '@/use/useKeybindings'
-import { clearAllSlots, writeSlot } from '@/use/useStorySave'
 
 /**
  * ─── The menus, mounted ─────────────────────────────────────────────────────
@@ -22,11 +18,9 @@ import { clearAllSlots, writeSlot } from '@/use/useStorySave'
  * front of a player. These are the four behaviours that are not visible in a
  * screenshot either:
  *
- *   * the pause is actually held while the menu is up, and released on unmount
- *     (leaving it held is a game that never resumes);
- *   * Escape means "back" inside the menu and only closes from the root;
+ *   * the settings screen switches panels;
  *   * a rebind arms, captures the next key, and cancels on Escape;
- *   * the FPS readout obeys its setting rather than a code word.
+ *   * the world settings reach a world that mounts after the panel.
  */
 
 const i18n = createI18n({ legacy: false, locale: 'en', fallbackLocale: 'en', messages: { en } })
@@ -42,128 +36,8 @@ const pressEscape = async (): Promise<void> => {
 const textOf = (html: string): string => html.replace(/<[^>]+>/g, ' ')
 
 beforeEach(() => {
-  clearAllSlots()
   resetBindings()
   settings.value = { ...DEFAULT_SETTINGS }
-})
-
-describe('PauseMenu', () => {
-  it('renders nothing and holds no pause while closed', () => {
-    const wrapper = mountWith(PauseMenu, { open: false })
-    expect(wrapper.find('button').exists()).toBe(false)
-    expect(isGamePaused.value).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('holds the pause and asks the host to stop feeding input', async () => {
-    const wrapper = mountWith(PauseMenu, { open: true })
-    await nextTick()
-    expect(isGamePaused.value).toBe(true)
-    expect(wrapper.emitted('blockInput')?.[0]).toEqual([true])
-
-    await wrapper.setProps({ open: false })
-    expect(isGamePaused.value).toBe(false)
-    expect(wrapper.emitted('blockInput')?.[1]).toEqual([false])
-    wrapper.unmount()
-  })
-
-  it('releases the pause if it is unmounted while open', async () => {
-    const wrapper = mountWith(PauseMenu, { open: true })
-    await nextTick()
-    expect(isGamePaused.value).toBe(true)
-    // A route change with the menu up. Without the unmount guard the game stays
-    // paused with nothing on screen able to unpause it.
-    wrapper.unmount()
-    expect(isGamePaused.value).toBe(false)
-  })
-
-  it('offers the five entries in order', () => {
-    const wrapper = mountWith(PauseMenu, { open: true })
-    const labels = wrapper.findAll('button').map(button => button.text())
-    expect(labels).toEqual([
-      en.menu.continue,
-      en.menu.newGame,
-      en.menu.loadGame,
-      en.menu.saveGame,
-      en.menu.settings
-    ])
-    wrapper.unmount()
-  })
-
-  it('emits continue and close together', async () => {
-    const wrapper = mountWith(PauseMenu, { open: true })
-    await wrapper.findAll('button')[0]!.trigger('click')
-    expect(wrapper.emitted('continue')).toHaveLength(1)
-    expect(wrapper.emitted('close')).toHaveLength(1)
-    wrapper.unmount()
-  })
-
-  it('asks before starting a new game', async () => {
-    const wrapper = mountWith(PauseMenu, { open: true })
-    await wrapper.findAll('button')[1]!.trigger('click')
-    expect(wrapper.emitted('newGame')).toBeUndefined()
-    expect(textOf(wrapper.html())).toContain(en.menu.newGameConfirm)
-
-    // Cancel is the second button on the confirmation screen.
-    await wrapper.findAll('button')[1]!.trigger('click')
-    expect(wrapper.emitted('newGame')).toBeUndefined()
-
-    await wrapper.findAll('button')[1]!.trigger('click')
-    await wrapper.findAll('button')[0]!.trigger('click')
-    expect(wrapper.emitted('newGame')).toHaveLength(1)
-    expect(wrapper.emitted('close')).toHaveLength(1)
-    wrapper.unmount()
-  })
-
-  it('closes on Escape from the root and steps back from anywhere else', async () => {
-    const wrapper = mountWith(PauseMenu, { open: true })
-    await nextTick()
-
-    await wrapper.findAll('button')[3]!.trigger('click')
-    expect(textOf(wrapper.html())).toContain(en.menu.quickSlot)
-
-    await pressEscape()
-    expect(wrapper.emitted('close')).toBeUndefined()
-    expect(wrapper.findAll('button')[0]!.text()).toBe(en.menu.continue)
-
-    await pressEscape()
-    expect(wrapper.emitted('close')).toHaveLength(1)
-    wrapper.unmount()
-  })
-
-  it('emits a save with the slot the player picked, then returns to the root', async () => {
-    const wrapper = mountWith(PauseMenu, { open: true })
-    await wrapper.findAll('button')[3]!.trigger('click')
-
-    // Quick slot first, then 1, 2, 3 — `ALL_SLOTS` order.
-    const rows = wrapper.findAll('button')
-    expect(rows[0]!.text()).toContain(en.menu.quickSlot)
-    expect(rows[1]!.text()).toContain('Slot 1')
-    await rows[2]!.trigger('click')
-
-    expect(wrapper.emitted('save')?.[0]).toEqual([2])
-    // The host owns the write, so the menu must not close on the player: they
-    // are one click from carrying on.
-    expect(wrapper.emitted('close')).toBeUndefined()
-    expect(wrapper.findAll('button')[0]!.text()).toBe(en.menu.continue)
-    wrapper.unmount()
-  })
-
-  it('draws a written slot and refuses to load an empty one', async () => {
-    writeSlot(2, { chapter: 1, beatId: 'ambush', label: 'Drive off the bandits', payload: { hp: 1 } })
-    const wrapper = mountWith(PauseMenu, { open: true })
-    await wrapper.findAll('button')[2]!.trigger('click')
-
-    const rows = wrapper.findAll('button')
-    expect(rows[0]!.attributes('disabled')).toBeDefined()
-    expect(rows[2]!.attributes('disabled')).toBeUndefined()
-    expect(rows[2]!.text()).toContain('Drive off the bandits')
-
-    await rows[2]!.trigger('click')
-    expect(wrapper.emitted('load')?.[0]).toEqual([2])
-    expect(wrapper.emitted('close')).toHaveLength(1)
-    wrapper.unmount()
-  })
 })
 
 describe('SettingsMenu', () => {
@@ -322,17 +196,5 @@ describe('legacy grass setting', () => {
     localStorage.setItem('world.grassDetail', 'sixteen')
     const mod = await loadSettings()
     expect(mod.settings.value.grassDetail).toBe('auto')
-  })
-})
-
-describe('FpsMeter', () => {
-  it('follows its setting rather than a code word', async () => {
-    const wrapper = mountWith(FpsMeter)
-    expect(wrapper.html()).toBe('<!--v-if-->')
-
-    setSetting('fpsMonitor', true)
-    await nextTick()
-    expect(wrapper.html()).not.toBe('<!--v-if-->')
-    wrapper.unmount()
   })
 })

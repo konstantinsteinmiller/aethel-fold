@@ -185,10 +185,8 @@ export interface CharacterAppearance {
   /**
    * Torso mass, on top of whatever `sex` already sets. See `BuildStyle`.
    *
-   * The second-strongest silhouette lever on this figure after height, and the
-   * one the story cast leans on hardest: a smith's son and a boy who grinds
-   * blades for a living are the same height in the book and are not the same
-   * shape.
+   * The second-strongest silhouette lever on this figure after height: two
+   * characters of the same height need not be the same shape.
    */
   build: BuildStyle
   skinTone: SkinTone
@@ -255,41 +253,6 @@ export type ItemKind =
   | 'greatsword'
   | 'bow'
   | 'crossbow'
-  // ── The arms of Arlaan ────────────────────────────────────────────────────
-  //
-  // Six kinds, one per named character in Chapter 1, and the reason they are
-  // separate kinds rather than colourways of the four above is the *silhouette*
-  // rule this project applies to everything else. `gearSeed` already gives a
-  // weapon five palettes and changes nothing about its outline, so a "sword,
-  // seed 3" in Theodor's hand is Athalus's sword in a different brown. Four
-  // teenagers who have to be told apart from behind at fifteen metres need four
-  // different outlines, and that is geometry.
-  //
-  // The book names each of them, which is what settles the list:
-  //
-  //   * **scrantis** — Jester's. Six hinged sabre blades on a chain, thrown like
-  //     a whip. It is the most unusual object in the chapter and the only weapon
-  //     in the world with a *chain* silhouette.
-  //   * **scrantisPair** — the two folded ones he keeps on his belt while the
-  //     third is in his hand. Chapter 1: "two six-bladed folded Scrantis of
-  //     steel, always on his belt."
-  //   * **warAxe** — Gearn's berserker axe. A circular blade an ell across with
-  //     a half-moon notch top and bottom, which he uses to trap and strip a
-  //     blade out of a hand.
-  //   * **huntingBow** — Kareen's, cut from trollcherry by her father Lothar,
-  //     the best bowyer in the kingdom. Double-recurved and a head longer than
-  //     the standard bow, so an archer reads as *the* archer.
-  //   * **broadsword** — Theodor's militia sword, with a shield. Wide, plain,
-  //     issue rather than owned.
-  //   * **dagger** — Athalus's hunting knife, which is all he has when the boar
-  //     picks him. The chapter turns on him not having his sword.
-  | 'scrantis'
-  | 'scrantisPair'
-  | 'warAxe'
-  | 'huntingBow'
-  | 'broadsword'
-  | 'dagger'
-  | 'quiver'
   // ── Profession wardrobe ───────────────────────────────────────────────────
   //
   // Nine torso garments and six head items, chosen for **silhouette spread**
@@ -361,9 +324,8 @@ export const EQUIP_SLOTS: readonly EquipSlot[] = [
   //
   // The back slot is no better — it already holds the bow — so the quiver needs
   // somewhere that is neither a hand nor the spine, which is exactly what a belt
-  // is. It earns its keep twice over: Jester's two folded Scrantis hang there
-  // while the third is in his fist, and that pair is one of the few details
-  // Chapter 1 states outright about how a character looks.
+  // is. No item kind uses it today; the slot and its `beltL` socket are kept so
+  // a quiver or a pouch is one row in each table rather than a new slot.
   //
   // Additive by construction. Every existing loadout deserialises with
   // `belt: null`, every consumer iterates `EQUIP_SLOTS`, and `BODY_SLOTS` is
@@ -389,18 +351,6 @@ export const ITEM_SLOT: Record<ItemKind, EquipSlot> = {
   greatsword: 'back',
   bow: 'back',
   crossbow: 'back',
-  // The Arlaan arms. `warAxe` goes on the **back** with the greatsword rather
-  // than on the hip with the swords, and that is dictated by its head: the blade
-  // is an ell across, so hung at `hipR` it reaches through the thigh and out the
-  // far side of the leg. `huntingBow` follows `bow` for the same reason a bow
-  // does — it is a thin arc and hugs the spine.
-  scrantis: 'mainHand',
-  warAxe: 'back',
-  huntingBow: 'back',
-  broadsword: 'mainHand',
-  dagger: 'mainHand',
-  quiver: 'belt',
-  scrantisPair: 'belt',
   shield: 'offHand',
   hat: 'head',
   torsoArmour: 'torso',
@@ -443,7 +393,7 @@ export interface EquipmentLoadout {
   head: ItemKind | null
   torso: ItemKind | null
   legs: ItemKind | null
-  /** Quiver, pouch, or Jester's pair of folded Scrantis. See `EQUIP_SLOTS`. */
+  /** Quiver or pouch. See `EQUIP_SLOTS`. */
   belt: ItemKind | null
   drawn: DrawnState
 }
@@ -588,7 +538,7 @@ export const SOCKETS: Record<SocketName, Socket> = {
    *
    * Deliberately the mirror of `hipR` and deliberately *not* its exact mirror.
    * `hipR` stands 185 mm outboard because it has to hold a 470 mm blade clear of
-   * a swinging arm; a quiver and a pair of folded Scrantis are both short, so
+   * a swinging arm; a quiver or a pouch is short, so
    * this sits 40 mm closer in — far enough out to clear the thigh at the top of
    * a stride, near enough in that a quiver does not read as being carried at
    * arm's length.
@@ -608,15 +558,6 @@ export const STOW_SOCKET: Record<ItemKind, SocketName | null> = {
   greatsword: 'backOver',
   bow: 'backFlat',
   crossbow: 'backOver',
-  scrantis: 'hipR',
-  warAxe: 'backOver',
-  huntingBow: 'backFlat',
-  broadsword: 'hipR',
-  dagger: 'hipR',
-  // The two belt items are never anywhere else — their stow socket *is* their
-  // only socket, and `DRAWN_SOCKET` gives them null below.
-  quiver: 'beltL',
-  scrantisPair: 'beltL',
   // A shield is carried, never stowed — see the note on `offHand` carriage in
   // the animation layer. Slinging it on the back as well would need a fourth
   // back socket and would collide with everything already there.
@@ -725,19 +666,6 @@ export const GRIP_ROTATION: Record<ItemKind, readonly [number, number, number]> 
   }
   table.sword = bladeUp
   table.greatsword = bladeUp
-  // The three sword-shaped Arlaan arms take the same hammer grip, because they
-  // are gripped the same way: flats against the palm, edge square to the
-  // knuckles. The scrantis is in the list on purpose — its chain hangs from the
-  // fist exactly as a blade does, and the whole point of the weapon is that it
-  // is *thrown* from a hand that starts in a normal guard.
-  table.broadsword = bladeUp
-  table.dagger = bladeUp
-  table.scrantis = bladeUp
-  // The axe hangs from the same over-the-shoulder socket as the greatsword and
-  // is drawn into the same fist, so it takes the same quarter turn. Its head is
-  // authored on the item's ±Z, which is what keeps it in the socket's cant plane
-  // — the same clause that keeps a sword's guard off the forearm.
-  table.warAxe = bladeUp
   /**
    * The bow takes the *opposite* quarter turn, because its length runs both ways
    * from the riser and the limb that has to point **up** is +Y, not −Y. Same
@@ -752,7 +680,6 @@ export const GRIP_ROTATION: Record<ItemKind, readonly [number, number, number]> 
    * table.
    */
   table.bow = [Math.PI * 0.5, 0, 0]
-  table.huntingBow = [Math.PI * 0.5, 0, 0]
   /**
    * ── The crossbow's quarter turn is about its **aim line**, not across it ────
    *
@@ -799,14 +726,6 @@ export const DRAWN_SOCKET: Record<ItemKind, SocketName | null> = {
   greatsword: 'handR',
   bow: 'handL',
   crossbow: 'handR',
-  scrantis: 'handR',
-  warAxe: 'handR',
-  huntingBow: 'handL',
-  broadsword: 'handR',
-  dagger: 'handR',
-  // Worn, never held. A quiver in the hand is a bug, not a state.
-  quiver: null,
-  scrantisPair: null,
   shield: 'handL',
   hat: null,
   torsoArmour: null,
@@ -869,29 +788,6 @@ export const EQUIPMENT_BUDGET: Record<ItemKind, number> = {
   sword: 200,
   greatsword: 280,
   bow: 220,
-  // ── The Arlaan arms ───────────────────────────────────────────────────────
-  //
-  // Two of these sit well above the sword's 200 and both increases are bought
-  // by silhouette rather than by detail:
-  //
-  //   * **scrantis, 460.** Six blades and five hinges is eleven parts where a
-  //     sword has three, and the *gaps between them* are the entire read. There
-  //     is no cheaper description of a chain: collapse it to one swept blade and
-  //     it is a sabre, which is the one thing it must not look like.
-  //   * **warAxe, 340.** The half-moon notches in the head are the feature the
-  //     book names — Gearn traps a blade in one — and a notch is a place the
-  //     section has to come back on itself, which no amount of paint gives.
-  //
-  // The other four are ordinary. `dagger` is under half the sword because it is
-  // a third the length at the same section, and `quiver`/`scrantisPair` are
-  // small belt objects that are never nearer than a hip.
-  scrantis: 460,
-  scrantisPair: 190,
-  warAxe: 340,
-  huntingBow: 260,
-  broadsword: 230,
-  dagger: 160,
-  quiver: 200,
   crossbow: 300,
   shield: 240,
   hat: 180,

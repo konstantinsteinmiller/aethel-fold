@@ -27,8 +27,7 @@ import type { WorldAsset } from './types'
 /**
  * ─── Inside the storyteller's hut ───────────────────────────────────────────
  *
- * The frame story of `Chroniken von Arlaan` happens in one room, and the book
- * furnishes it precisely enough to build from: a sparse wooden table, a jug of
+ * One furnished room, built from a precise list: a sparse wooden table, a jug of
  * wine from the store cupboard, a big chest the smith drops his hammer into, a
  * cushion fetched for an old man's back, two full pails of water carried in from
  * the river, and a door somebody stands in to shout down the road.
@@ -741,8 +740,8 @@ export const createHutGlassAsset = (): WorldAsset =>
  * is why there are rafters and nothing above them.
  *
  * The roof is therefore a *veiled* prop rather than a permanent one:
- * `StoryDirector` calls `World.setPlacementVeil('hut-roof', …)` whenever the
- * player is inside the room or in dialogue with somebody who is, and the
+ * a caller uses `World.setPlacementVeil('hut-roof', …)` whenever the camera
+ * is inside the room, and the
  * instanced field multiplies the coverage into the same signed `aFade`
  * attribute the LOD crossfade already writes. So it goes see-through through the
  * ordered dither this whole world dissolves things with — no transparency, no
@@ -852,7 +851,7 @@ export const createHutChairAsset = (): WorldAsset => {
     // when `halfA` is the thin one.
     //
     // 0.305 rather than 0.34, for the same reason the whole room came down a
-    // third: `SEAT_HEIGHT.chair` is 0.34 and `combat/postures.ts` solves the
+    // third: `SEAT_HEIGHT.chair` is 0.34 and `characters/postures.ts` solves the
     // seated leg against the surface the buttocks rest on. A plank whose
     // *centre* is at 0.34 has its top at 0.375, so a solved sit put the figure
     // 3.5 cm inside its own chair. Centre 0.305 + half 0.035 = a top face at
@@ -1322,11 +1321,11 @@ export const createHutPortraitAsset = (): WorldAsset => {
     out.lerp(C.hairBase, 0.85 * hair)
     out.lerp(C.strawBase, 0.35 * hair * smoothstep(0.86, 0.7, u))
 
-    // Arlaan's red and gold, bottom corner: a painter's mark, and the one
+    // Heraldic red and gold, bottom corner: a painter's mark, and the one
     // saturated accent that stops the panel reading as a brown rectangle.
     const mark = smoothstep(0.16, 0.09, u) * smoothstep(0.95, 0.78, fromCentre)
-    out.lerp(C.arlaanRed, 0.7 * mark)
-    out.lerp(C.arlaanGold, 0.5 * mark * smoothstep(0.13, 0.1, u))
+    out.lerp(C.bannerRed, 0.7 * mark)
+    out.lerp(C.bannerGold, 0.5 * mark * smoothstep(0.13, 0.1, u))
 
     // Everything above is the *front*. The panel's edges take the board it is
     // painted on.
@@ -1420,7 +1419,7 @@ export const createHutTableAsset = (): WorldAsset =>
         // ── 0.56, and it was 0.76 ────────────────────────────────────────
         //
         // Every seat and every table in this room came down by a third, and the
-        // arithmetic is in `combat/postures.ts`: the rig's hip-to-sole is
+        // arithmetic is in `characters/postures.ts`: the rig's hip-to-sole is
         // 0.62 m against a real adult's 0.90, so furniture authored at human
         // scale is furniture these figures cannot use. A 0.76 m board is chest
         // height on a seated one. Scaled by the same 0.62 / 0.90 this is a
@@ -1503,7 +1502,7 @@ export const createHutStoolAsset = (): WorldAsset =>
       beam({
         name: 'stool/seat',
         // 0.28–0.34, down from 0.44–0.50. See `hut-table`'s note and the
-        // arithmetic in `combat/postures.ts`: at 0.5 the seated solution asks
+        // arithmetic in `characters/postures.ts`: at 0.5 the seated solution asks
         // for a thigh 64 degrees below horizontal, which is not sitting on a
         // stool, it is crouching against one. At 0.34 it is 20 degrees and the
         // soles land on the boards.
@@ -1960,7 +1959,7 @@ export const createHutWineAsset = (): WorldAsset =>
         paint: (u: number, _v: number, out: Color) => {
           out.copy(C.woodBase).lerp(C.woodLit, 0.3)
           // Wine in the cup, at the very top.
-          out.lerp(C.arlaanRed, 0.7 * smoothstep(0.86, 0.98, u))
+          out.lerp(C.bannerRed, 0.7 * smoothstep(0.86, 0.98, u))
         },
         deep: C.woodShadow,
         ao: 0.6,

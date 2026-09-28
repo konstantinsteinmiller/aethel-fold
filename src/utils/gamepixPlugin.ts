@@ -35,7 +35,7 @@ import { isGamepix } from '@/use/useUser'
 import { isDebug } from '@/use/useMatch'
 import { isPlatformPaused, isVisibilityHidden, pauseGame, resumeGame } from '@/use/useGamePause'
 import { setPlatformAudioMuted } from '@/use/useGamePauseAudio'
-import { gamesPlayedTotal, maxStageReached } from '@/use/useTowerProgress'
+import { records, pagesCleared } from '@/use/useFoldProgress'
 
 declare global {
   interface Window {
@@ -440,7 +440,7 @@ const installScoreLevelWatchers = (): void => {
 
   // Boot value flushed immediately so the toolkit's debug panel lights
   // up at boot even before the first in-game change.
-  let pendingScore = gamesPlayedTotal.value
+  let pendingScore = records.value.score
   let scoreTimer: ReturnType<typeof setTimeout> | null = null
   const flushScore = (): void => {
     scoreTimer = null
@@ -452,12 +452,12 @@ const installScoreLevelWatchers = (): void => {
   // second (cascading drops, frame-rate-coupled counters). Spamming
   // `updateScore` wastes the SDK's input-validation budget and the
   // toolkit panel flickers. 1500 ms is the sweet spot.
-  watch(gamesPlayedTotal, (next) => {
+  watch(() => records.value.score, (next) => {
     pendingScore = next
     if (scoreTimer === null) scoreTimer = setTimeout(flushScore, SCORE_DEBOUNCE_MS)
   })
 
-  watch(maxStageReached, (stage) => gamePixUpdateLevel(stage), { immediate: true })
+  watch(pagesCleared, (page) => gamePixUpdateLevel(Math.max(1, page)), { immediate: true })
 }
 
 // ─── Ad show wrappers ─────────────────────────────────────────────────────

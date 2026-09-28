@@ -79,16 +79,15 @@ export const isDrawable = (kind: ItemKind): kind is DrawableKind =>
  * ─── Pose families ──────────────────────────────────────────────────────────
  *
  * A weapon's **pose is a property of how it is held, not of what it is.** A
- * broadsword, a hunting dagger and a scrantis all leave a hip scabbard into a
- * one-handed guard along the same arc; a war axe comes over the shoulder into
- * two hands exactly as a greatsword does; a longbow is drawn like a bow.
+ * broadsword or a dagger would leave a hip scabbard into a one-handed guard
+ * along the sword's arc; an axe would come over the shoulder into two hands
+ * exactly as a greatsword does; a longbow is drawn like a bow.
  *
- * That distinction is what makes six new weapons cost nothing here. Every table
+ * That distinction is what makes a new weapon cost nothing here. Every table
  * below this line is a `Record<DrawableKind, …>` — draw paths, hand turns,
  * handover windows, clip lengths, elbow hinges, off-hand joins, eight of them —
- * and the alternative to this map was six new rows in each, forty-eight
- * hand-authored motion numbers, for four weapons that move identically to ones
- * that already exist. Worse, they would have had to be *re-tuned* against the
+ * and the alternative to this map is a new row in each per weapon, for weapons
+ * that move identically to ones that already exist. Worse, they would have had to be *re-tuned* against the
  * same measured constraints (`elbowStability`, the antipodal guard), and the
  * suite that guards those runs over `DRAWABLE_KINDS`, so the new rows would have
  * been unguarded.
@@ -97,24 +96,13 @@ export const isDrawable = (kind: ItemKind): kind is DrawableKind =>
  * grow, and this is the only place that has to notice.
  *
  * Null means "has no draw": a garment, a hat, a shield (which is never stowed),
- * a quiver, the pair of folded scrantis on the belt.
+ * a quiver.
  */
 export const POSE_FAMILY: Record<ItemKind, DrawableKind | null> = {
   sword: 'sword',
   greatsword: 'greatsword',
   bow: 'bow',
   crossbow: 'crossbow',
-  // One-handed, off the hip, into a guard.
-  broadsword: 'sword',
-  dagger: 'sword',
-  scrantis: 'sword',
-  // Over the shoulder, into both hands.
-  warAxe: 'greatsword',
-  // Off the spine, into the left fist, drawn with the right.
-  huntingBow: 'bow',
-  // Worn, not drawn.
-  scrantisPair: null,
-  quiver: null,
   shield: null,
   hat: null,
   torsoArmour: null,
@@ -146,7 +134,7 @@ export const POSE_FAMILY: Record<ItemKind, DrawableKind | null> = {
  * The one accessor everything outside this file should use. `isDrawable` above
  * is kept because three suites narrow with it, but it answers the *narrower*
  * question — "is this one of the four base kinds" — and a caller that wants to
- * know whether a scrantis can be drawn must ask this instead.
+ * know whether an item can be drawn must ask this instead.
  */
 export const poseFamilyOf = (kind: ItemKind): DrawableKind | null => POSE_FAMILY[kind]
 

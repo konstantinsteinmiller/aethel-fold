@@ -57,9 +57,8 @@
 
   `target` is null when there is nothing to sit on and nothing to get out of;
   `seated` picks which of the two states is drawn. `screen` is the projection of
-  the seat's own anchor raised half a metre (`StoryDirector.SEAT_PROMPT_LIFT`),
-  in the same origin-top-left, unclamped, viewport-normalised space the
-  objective locator and the talk prompt use.
+  the seat's own anchor raised half a metre, in the origin-top-left, unclamped,
+  viewport-normalised space `world/core/project.ts` produces.
 
   The host must mount this inside the element the canvas fills — every position
   here is a percentage of the offset parent.
@@ -70,7 +69,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import KeyCap from '@/components/atoms/KeyCap.vue'
 import { bindingFor, keyLabel } from '@/use/useKeybindings'
-import type { ScreenPoint } from '@/world/story/project'
+import type { ScreenPoint } from '@/world/core/project'
 
 const props = defineProps<{
   target: { seated: boolean } | null

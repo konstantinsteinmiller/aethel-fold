@@ -1,6 +1,6 @@
-import { STORY_VOICE_LINES, type StoryVoiceLine } from '@/world/story/lineIds'
-import { speakerName } from '@/world/story/script'
-import { isNonSpeechVoice, voiceModel } from '@/world/story/voices'
+import '@/voice/catalog'
+import { allVoiceLines, type VoiceLine as RegisteredLine } from '@/voice/lines'
+import { isNonSpeechVoice, speakerDisplayName, voiceModel } from '@/voice/voices'
 
 /**
  * ─── The one enumeration both voice-over tools read ─────────────────────────
@@ -8,25 +8,15 @@ import { isNonSpeechVoice, voiceModel } from '@/world/story/voices'
  * `gen-voice-over-todo.ts` (the recording checklist) and `gen-voice-over.ts`
  * (the TTS pass) have to agree, exactly, on which lines exist, what they are
  * called and where their files go — otherwise the checklist ticks off a file the
- * generator will never write, or the generator fills a gap the checklist never
- * showed. So neither of them enumerates anything; both call this.
+ * generator will never write. So neither enumerates anything; both call this.
  *
- * It is a thin map over `STORY_VOICE_LINES`, which is where the ids actually
- * come from (`src/world/story/lineIds.ts`). What it adds is the casting
- * (`voices.ts`) and the display name (`script.ts`), so the tools need to know
- * about neither.
- *
- * ── Why this is a map and not a dry-run ─────────────────────────────────────
- *
- * The sibling project this comes from has to *execute* every dialogue with a
- * recording API, because its scripts are imperative `run(d)` bodies with
- * branches in them and the only way to learn what a conversation contains is to
- * play it. This chapter's script is a declarative array of `{ who, de, en }`, so
- * the enumeration is a `for` loop and there is nothing to simulate. That is the
- * whole reason the ids in `lineIds.ts` have to be derived rather than authored.
+ * It is a thin map over the registry in `src/voice/lines.ts`. Importing
+ * `@/voice/catalog` first is what pulls in every game module that registers
+ * lines. What this adds is the casting (`voices.ts`) and the display name, so
+ * the tools need to know about neither.
  */
 
-export interface VoiceLine extends StoryVoiceLine {
+export interface VoiceLine extends RegisteredLine {
   /** The German Piper model, or `''` when this speaker is non-speech. */
   piperDe: string
   /** The English Piper model, or `''` when this speaker is non-speech. */
@@ -39,26 +29,23 @@ export interface VoiceLine extends StoryVoiceLine {
   nameEn: string
 }
 
-/** Every spoken line in the chapter, in play order, cast and named. */
+/** Every registered spoken line, in registration order, cast and named. */
 export const collectVoiceLines = (): VoiceLine[] =>
-  STORY_VOICE_LINES.map(line => ({
+  allVoiceLines().map(line => ({
     ...line,
-    piperDe: voiceModel(line.who, 'de'),
-    piperEn: voiceModel(line.who, 'en'),
-    nonSpeech: isNonSpeechVoice(line.who),
-    nameDe: speakerName(line.who, 'de'),
-    nameEn: speakerName(line.who, 'en')
+    piperDe: voiceModel(line.speaker, 'de'),
+    piperEn: voiceModel(line.speaker, 'en'),
+    nonSpeech: isNonSpeechVoice(line.speaker),
+    nameDe: speakerDisplayName(line.speaker, 'de'),
+    nameEn: speakerDisplayName(line.speaker, 'en')
   }))
 
 /**
  * The authored text of a line in one locale.
  *
  * German for anything starting `de`, English otherwise — the same prefix test
- * `storyLine()` and `voiceModel()` use. Both languages are hand-authored, so
- * there is no third case and nothing to translate: this project's script carries
- * its own English, which is the one real difference from the pipeline this was
- * ported from (that one machine-translates English into German with Argos and
- * caches the result; there is nothing here for it to do).
+ * `voiceModel()` uses. Both languages are authored in the registry, so there is
+ * nothing to translate.
  */
 export const textFor = (line: VoiceLine, locale: string): string =>
   locale.toLowerCase().startsWith('de') ? line.de : line.en
@@ -81,21 +68,18 @@ export const hasDirection = (text: string): boolean => /\([^)]*\)/.test(text)
  * Three rules, and the second one is a deliberate departure from the pipeline
  * this was ported from:
  *
- *   1. `(a stage direction)` is dropped. There are none in the script today and
- *      the rule is kept anyway, because the moment somebody writes one the
- *      alternative is a voice actor's placeholder saying the word "contemptuous"
- *      out loud. A line that was *entirely* a direction cleans to `''`, and the
+ *   1. `(a stage direction)` is dropped — otherwise the placeholder voice says
+ *      the word "contemptuous" out loud. A line that was *entirely* a direction cleans to `''`, and the
  *      caller skips synthesis rather than rendering silence.
  *
  *   2. `*emphasis*` is **unwrapped, not dropped** — the markers go, the word
  *      stays. In the project this came from `*…*` marks a sound cue (`*a hungry
  *      snarl*`) and is correctly deleted; here it marks italics on a word the
  *      author wants stressed — `„Ach. *Die* Geschichte meinst du."` — and
- *      deleting it would have the storyteller say "Ach. Geschichte meinst du."
- *      That is one line in the whole chapter and it would have been shipped.
+ *      deleting it would change the sentence.
  *
- *   3. Quotation marks are dropped. Every line in this script is wrapped in
- *      German typographic quotes (`„ … "`), which are typography rather than
+ *   3. Quotation marks are dropped. German lines are often wrapped in
+ *      typographic quotes (`„ … "`), which are typography rather than
  *      speech; espeak-ng's handling of `„` is not something to find out about
  *      from a rendered file. Apostrophes are untouched — `doesn't` is a word.
  *

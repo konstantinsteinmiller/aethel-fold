@@ -40,7 +40,7 @@ import { aoStats } from '../geometry/vertexAO'
 import { PlacementBatcher } from '../level/PlacementBatcher'
 import { buildStartingLevel } from '../level/startingLevel'
 import type { Placement } from '../level/types'
-import { SIT_SECONDS, type SeatKind } from '../combat/postures'
+import { SIT_SECONDS, type SeatKind } from '../characters/postures'
 import { SeatFinder, SitController, type SitActor } from '../interaction'
 import { groundForward } from '../player'
 import { setLodBandScale, setLodQuality, updateLodBiasFromView } from '../lod/config'
@@ -524,11 +524,10 @@ export class World {
   readonly player: Player
   // -- Sitting on things ----------------------------------------------------
   //
-  // The sandbox half of `world/interaction/`. The chapter's copy lives in
-  // `StoryDirector` and drives a `Combatant`; this one drives the first-person
+  // The sandbox's use of `world/interaction/`: it drives the first-person
   // walker through a five-member adapter. The catalogue, the focus scan and the
-  // state machine are the same three objects in both -- which is the point: a
-  // bug in the sit is one bug, reproducible from either route.
+  // state machine are shared objects, so a bug in the sit is one bug,
+  // reproducible from any route that uses them.
   private seats: SeatFinder | null = null
   private readonly sit = new SitController()
   /** The seat being held, and how far into it. `Combatant.postureBlend`'s twin. */
@@ -755,8 +754,8 @@ export class World {
    * `WaterPlacement`s rather than reaching for them, because the **sandbox**
    * keeps its water in the water editor's persisted store and polls it (see
    * `syncWater`) while the **chapter** builds two bodies of its own and never
-   * persists anything, and `src/world/` may not import `src/world/story/` to
-   * find that out.
+   * persists anything, and the engine may not import a game's content to find
+   * that out.
    *
    * Everything already built is regenerated — terrain chunks by
    * `setWaterBodies`, grass by the explicit `rebuild` it asks the field's owner
@@ -2693,8 +2692,7 @@ export class World {
   }
 
   /**
-   * One frame of the sit. `StoryDirector.advanceSit` + `updateSeat`, minus every
-   * rule that belongs to a chapter.
+   * One frame of the sit.
    */
   private updateSit(delta: number): void {
     const actor = this.sitActor

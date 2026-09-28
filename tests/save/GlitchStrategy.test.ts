@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GlitchStrategy, type ConflictResolver } from '@/utils/save/GlitchStrategy'
 import { SaveManager } from '@/utils/save/SaveManager'
+import { SAVE_KEYS } from '@/utils/save/SaveMergePolicy'
 
 // ─── test helpers ──────────────────────────────────────────────────────────
 
@@ -8,6 +9,13 @@ const TITLE_ID = 'ebaca9c7-aeff-41c4-9169-a26bdf49cd34'
 const INSTALL_ID = 'install-xyz'
 const TOKEN = 'test-token'
 const BASE_URL = 'https://api.test.local/api'
+
+/** Every persisted gameplay value lives inside this ONE key (`useAethelState`);
+ *  with `__save_meta__` it is the whole cloud payload (`isPayloadKey`). */
+const STATE = SAVE_KEYS.STATE
+
+/** The single persisted blob, as `useAethelState` writes it. */
+const blob = (fields: Record<string, unknown>): string => JSON.stringify(fields)
 
 const savesUrl = `${BASE_URL}/titles/${TITLE_ID}/installs/${INSTALL_ID}/saves`
 const resolveUrl = (saveId: string) =>
@@ -71,7 +79,8 @@ describe('GlitchStrategy (isGlitch guard)', () => {
   })
 
   it('hydrates local state from the Glitch save list', async () => {
-    const payload = { ts_coins: '99', ts_best_wave: '[1,2]' }
+    const state = blob({ [SAVE_KEYS.CLEARED]: 2, [SAVE_KEYS.LESSONS]: { fold: true, tear: true } })
+    const payload = { [STATE]: state }
     const fetchImpl = makeFetch({
       [`GET ${savesUrl}`]: () =>
         jsonResponse({
@@ -91,8 +100,8 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    expect(window.localStorage.getItem('ts_coins')).toBe('99')
-    expect(window.localStorage.getItem('ts_best_wave')).toBe('[1,2]')
+    expect(window.localStorage.getItem(STATE)).toBe(state)
+    expect(JSON.parse(window.localStorage.getItem(STATE)!)[SAVE_KEYS.LESSONS]).toEqual({ fold: true, tear: true })
     expect(strategy.getBaseVersion()).toBe(5)
     expect(strategy.getSaveId()).toBe('save-uuid-1')
   })
@@ -123,7 +132,8 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    window.localStorage.setItem('ts_coins', '10')
+    const state = blob({ [SAVE_KEYS.RUNS]: 10 })
+    window.localStorage.setItem(STATE, state)
 
     await vi.runAllTimersAsync()
     // Await the inflight upload triggered by the scheduled flush.
@@ -138,7 +148,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
 
     // Decode payload and verify content round-trips.
     const decoded = JSON.parse(atob(body.payload))
-    expect(decoded.ts_coins).toBe('10')
+    expect(decoded[STATE]).toBe(state)
 
     // Checksum must match SHA-256 of the raw JSON bytes.
     const bytes = new TextEncoder().encode(JSON.stringify(decoded))
@@ -190,7 +200,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    window.localStorage.setItem('ts_coins', '77')
+    window.localStorage.setItem(STATE, blob({ [SAVE_KEYS.RUNS]: 77 }))
     await manager.flush()
 
     expect(postCalls).toBe(1)
@@ -198,7 +208,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
   })
 
   it('respects a custom keep_server conflict resolver and refreshes from the server', async () => {
-    const remotePayload = { ts_coins: '200' }
+    const remotePayload = { [STATE]: blob({ [SAVE_KEYS.RUNS]: 200 }) }
     const fetchImpl = makeFetch({
       [`GET ${savesUrl}`]: () =>
         jsonResponse({
@@ -207,7 +217,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
               id: 'save-uuid-3',
               slot_index: 0,
               version: 1,
-              payload: base64Encode(JSON.stringify({ ts_coins: '1' }))
+              payload: base64Encode(JSON.stringify({ [STATE]: blob({ [SAVE_KEYS.RUNS]: 1 }) }))
             }
           ]
         }),
@@ -243,7 +253,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
                 id: 'save-uuid-3',
                 slot_index: 0,
                 version: 1,
-                payload: base64Encode(JSON.stringify({ ts_coins: '1' }))
+                payload: base64Encode(JSON.stringify({ [STATE]: blob({ [SAVE_KEYS.RUNS]: 1 }) }))
               }
             ]
           })
@@ -283,12 +293,12 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    expect(window.localStorage.getItem('ts_coins')).toBe('1')
+    expect(window.localStorage.getItem(STATE)).toBe(blob({ [SAVE_KEYS.RUNS]: 1 }))
 
-    window.localStorage.setItem('ts_coins', '999')
+    window.localStorage.setItem(STATE, blob({ [SAVE_KEYS.RUNS]: 999 }))
     await manager.flush()
 
-    expect(window.localStorage.getItem('ts_coins')).toBe('200')
+    expect(window.localStorage.getItem(STATE)).toBe(blob({ [SAVE_KEYS.RUNS]: 200 }))
     expect(strategy.getBaseVersion()).toBe(8)
   })
 
@@ -297,7 +307,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     // sanity guard doesn't engage (it only retries when local looks like
     // fresh defaults — see SaveManager.shouldRunSanityGuard). The point
     // of THIS test is the local-mirror fallback, not the retry behaviour.
-    window.localStorage.setItem('ts_best_wave', '5')
+    window.localStorage.setItem(STATE, blob({ [SAVE_KEYS.CLEARED]: 5 }))
     const fetchImpl = vi.fn(async () => new Response('boom', { status: 500 }))
     const strategy = makeStrategy({ fetchImpl })
     const manager = new SaveManager(strategy)
@@ -305,8 +315,9 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     await expect(manager.init()).resolves.toBeUndefined()
 
     // Local writes still succeed even without a working backend.
-    window.localStorage.setItem('ts_coins', '3')
-    expect(window.localStorage.getItem('ts_coins')).toBe('3')
+    const state = blob({ [SAVE_KEYS.CLEARED]: 5, [SAVE_KEYS.RUNS]: 3 })
+    window.localStorage.setItem(STATE, state)
+    expect(window.localStorage.getItem(STATE)).toBe(state)
 
     // Strategy schedules a background retry on failure — clean it up so
     // the test runner doesn't hang on the pending timer.
@@ -354,31 +365,34 @@ describe('GlitchStrategy (isGlitch guard)', () => {
       }
     }
 
+    // The payload is the state blob plus META; the same blob written
+    // before / after unrelated localStorage traffic (which the allowlist
+    // drops) must still produce byte-identical uploads.
+    const state = blob({ [SAVE_KEYS.CLEARED]: 4, [SAVE_KEYS.RUNS]: 10, user_language: 'en' })
     const a = await captureChecksum([
-      ['ts_coins', '10'],
-      ['ts_best_wave', '4'],
-      ['ts_user_language', 'en']
+      [STATE, state],
+      ['vConsole_switch_x', '0'],
+      ['prebid11_exp_1_26', 'false']
     ])
     const b = await captureChecksum([
-      ['ts_user_language', 'en'],
-      ['ts_best_wave', '4'],
-      ['ts_coins', '10']
+      ['prebid11_exp_1_26', 'false'],
+      ['vConsole_switch_x', '0'],
+      [STATE, state]
     ])
 
     expect(a.checksum).toBe(b.checksum)
     expect(a.payload).toBe(b.payload)
 
     // And the sorted order is actually alphabetical (not just stable).
-    // `__save_meta__` sorts first because `_` < `s` lexicographically.
+    // `__save_meta__` sorts first because `_` < `a` lexicographically.
     // The strategy now writes a meta blob alongside player data so future
     // hydrates can compare progress (see SaveMergePolicy.ts).
     const decoded = JSON.parse(atob(a.payload))
     expect(Object.keys(decoded)).toEqual([
       '__save_meta__',
-      'ts_best_wave',
-      'ts_coins',
-      'ts_user_language'
+      'aethel_state'
     ])
+    expect(decoded[STATE]).toBe(state)
   })
 
   it('excludes internal bookkeeping keys from the payload', async () => {
@@ -394,7 +408,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    window.localStorage.setItem('ts_coins', '1')
+    window.localStorage.setItem(STATE, blob({ [SAVE_KEYS.RUNS]: 1 }))
     await manager.flush()
 
     // `__save_meta__` is written by every flush so the next hydrate can
@@ -402,7 +416,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     // design now, alongside the player's own keys. The internal
     // bookkeeping keys (`__save_internal__*`) are still excluded.
     const decoded = JSON.parse(atob(captured.payload))
-    expect(Object.keys(decoded)).toEqual(['__save_meta__', 'ts_coins'])
+    expect(Object.keys(decoded)).toEqual(['__save_meta__', STATE])
   })
 
   it('flips to guest-blocked mode on 403 and suppresses further uploads', async () => {
@@ -431,7 +445,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     )
 
     // Subsequent writes must not trigger any POST — only the one GET.
-    window.localStorage.setItem('ts_coins', '5')
+    window.localStorage.setItem(STATE, blob({ [SAVE_KEYS.RUNS]: 5 }))
     await manager.flush()
 
     const postCalls = fetchImpl.mock.calls.filter(
@@ -440,7 +454,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     expect(postCalls).toHaveLength(0)
 
     // Local write still landed — backend is off but localStorage mirror works.
-    expect(window.localStorage.getItem('ts_coins')).toBe('5')
+    expect(window.localStorage.getItem(STATE)).toBe(blob({ [SAVE_KEYS.RUNS]: 5 }))
   })
 
   it('flips to guest-blocked on 403 during upload, cancelling pending flushes', async () => {
@@ -465,7 +479,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    window.localStorage.setItem('ts_coins', '5')
+    window.localStorage.setItem(STATE, blob({ [SAVE_KEYS.RUNS]: 5 }))
     await manager.flush()
 
     expect(postCount).toBe(1)
@@ -475,7 +489,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     )
 
     // More writes → no more POSTs.
-    window.localStorage.setItem('ts_coins', '6')
+    window.localStorage.setItem(STATE, blob({ [SAVE_KEYS.RUNS]: 6 }))
     await manager.flush()
     expect(postCount).toBe(1)
   })
@@ -498,7 +512,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     // 10MB+ payload — `a`.repeat(10M) Base64-encodes to ~13.3MB, safely
     // over the limit.
     const bigValue = 'a'.repeat(10 * 1024 * 1024)
-    window.localStorage.setItem('ts_huge_test', bigValue)
+    window.localStorage.setItem(STATE, blob({ [SAVE_KEYS.RUNS]: 1, huge_test: bigValue }))
     await manager.flush()
 
     expect(postCount).toBe(0)
@@ -531,12 +545,12 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    window.localStorage.setItem('ts_coins', '1')
+    window.localStorage.setItem(STATE, blob({ [SAVE_KEYS.RUNS]: 1 }))
     await manager.flush()
 
     const decoded = JSON.parse(atob(captured.payload))
     expect(decoded).not.toHaveProperty('__save_internal__glitch_version')
     expect(decoded).not.toHaveProperty('__save_internal__glitch_save_id')
-    expect(decoded.ts_coins).toBe('1')
+    expect(decoded[STATE]).toBe(blob({ [SAVE_KEYS.RUNS]: 1 }))
   })
 })

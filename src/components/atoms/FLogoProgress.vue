@@ -19,11 +19,19 @@
           //- bitmap was visibly soft above a 640 px viewport. `w-full h-full`
           //- overrides the component's own `size` attribute — CSS beats
           //- presentation attributes — so the mark tracks the box exactly.
-          ArlaanLogo(class="w-full h-full")
+          GameLogo(class="w-full h-full")
 
-        //- Loading Text
-        div.absolute.-bottom-8(class="mt-0 flex flex-col items-center gap-1")
-          span(class="percentage-text text-shadow text-amber-500") {{ Math.round(progress) }}%
+        //- Paper-strip progress bar: parchment track, creased red paper fill,
+        //- ink border — with the percentage beside it.
+        div.splash-progress
+          div.splash-progress__track(
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="Math.round(progress)"
+          )
+            div.splash-progress__fill(:style="{ width: `${Math.min(100, Math.max(0, progress))}%` }")
+          span.percentage-text {{ Math.round(progress) }}%
 
         Transition(name="hint-fade")
           div.stuck-hint.mt-4(v-if="showStuckHint") {{ t('loading.tooLong') }}
@@ -33,7 +41,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import useAssets from '@/use/useAssets'
-import ArlaanLogo from '@/components/atoms/ArlaanLogo.vue'
+import GameLogo from '@/components/atoms/GameLogo.vue'
 import { stopLoading } from '@/use/useCrazyGames'
 import { armFirstLoadInterstitial, notifySplashGone } from '@/use/useFirstLoadInterstitial'
 
@@ -207,18 +215,50 @@ watch(done, (isDone) => {
   &, & *
     -webkit-user-drag: none
 
+.splash-progress
+  position: absolute
+  top: calc(100% + clamp(0.5rem, 2.5vmin, 1.25rem))
+  left: 50%
+  display: flex
+  align-items: center
+  gap: clamp(0.4rem, 1.6vmin, 0.75rem)
+  width: clamp(10rem, 44vmin, 22rem)
+  transform: translateX(-50%)
+
+.splash-progress__track
+  position: relative
+  flex: 1 1 auto
+  min-width: 6rem
+  height: clamp(0.9rem, 3vmin, 1.4rem)
+  border: 3px solid #1c1724
+  border-radius: 0.15rem
+  overflow: hidden
+  // A parchment strip with a faint lengthwise fold.
+  background: linear-gradient(to bottom, #fff6e3 0 50%, #f4e7c9 50% 100%)
+  box-shadow: 0 4px 0 rgba(76, 64, 120, 0.45)
+
+.splash-progress__fill
+  height: 100%
+  border-right: 2px solid #1c1724
+  // Red paper, creased along its length.
+  background: linear-gradient(to bottom, #ff6a5c 0 52%, #d8433b 52% 100%)
+  transition: width 0.2s ease-out
+
 .percentage-text
-  font-size: clamp(0.9rem, 4vw, 1.35rem)
+  flex: 0 0 auto
+  min-width: 3ch
+  color: #fff
+  font-size: clamp(0.9rem, 4vmin, 1.35rem)
   font-weight: 900
+  text-shadow: 2px 0 0 #1c1724, -2px 0 0 #1c1724, 0 2px 0 #1c1724, 0 -2px 0 #1c1724, 1.5px 1.5px 0 #1c1724, -1.5px 1.5px 0 #1c1724, 1.5px -1.5px 0 #1c1724, -1.5px -1.5px 0 #1c1724
 
 .splash-backdrop
   position: fixed
   inset: 0
   z-index: 150
-  // Matches the inline splash in index.html AND the scene's sky, so the
-  // handover from static HTML → Vue splash → canvas is one continuous colour
-  // with no flash between the three.
-  background: radial-gradient(circle at 50% 38%, #1b2b52 0%, #0a1224 70%)
+  // Matches the inline splash in index.html, so the handover static HTML →
+  // Vue splash is one continuous colour: warm desk light over dark wood.
+  background: radial-gradient(circle at 50% 38%, #8a5a36 0%, #3a2416 70%)
 
 .splash-fade-leave-active
   transition: opacity 0.4s ease-out
@@ -236,8 +276,10 @@ watch(done, (isDone) => {
   transform: translate(-50%, -50%) scale(0.85)
 
 .stuck-hint
-  color: rgba(255, 200, 0, 0.85)
-  font-size: 0.9rem
+  // Clears the progress strip hanging below the logo box.
+  margin-top: clamp(3rem, 10vmin, 4.5rem)
+  color: #fff6e3
+  font-size: clamp(0.8rem, 3vmin, 0.95rem)
   text-align: center
   max-width: 80vw
 </style>

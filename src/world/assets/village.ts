@@ -28,17 +28,13 @@ import {
 import type { WorldAsset } from './types'
 
 /**
- * ─── Nimmerschein ───────────────────────────────────────────────────────────
+ * ─── The village ───────────────────────────────────────────────────────────
  *
- * The village Chapter 1 ends in: "a middling village of a little under 500
- * souls", walled with a palisade after the Forty Years' War, two gates, a market
- * square, and *der Treff* — a small place with benches and a fire pit where the
- * young people meet. The smithy is the only one in the village, it is a family
- * business handed down for generations, and it is the one house that is two
- * storeys and has a wash-room and a store built onto it. That last sentence is
- * the whole reason `house-smithy` is a separate generator rather than a taller
- * cottage: the book says it "stood out", so it has to stand out from across the
- * square, and the thing that makes a building stand out at 40 m is its
+ * A middling timber village: a palisade, two gates, a market square and a
+ * small place with benches and a fire pit. The smithy is the one house that is
+ * two storeys and has a wash-room and a store built onto it, which is the whole
+ * reason `house-smithy` is a separate generator rather than a taller cottage:
+ * it has to stand out from across the square, and the thing that makes a building stand out at 40 m is its
  * *silhouette*, not its size.
  *
  * ── Four house shapes, and why not one parameterised one ────────────────────
@@ -303,7 +299,7 @@ const stonePaint = (u: number, v: number, out: Color): void => {
  * pinning them down. This is what actually holds a thatched ridge on, and it is
  * the one detail on a thatched roof that a person can name from fifty metres —
  * the ridge is the only part of the roof that is on the *skyline* from every
- * approach, and until now Nimmerschein's was a bare tan roll.
+ * approach, and until now the village's was a bare tan roll.
  *
  * ── Why it is geometry and not paint ────────────────────────────────────────
  *
@@ -1112,13 +1108,12 @@ export const createPalisadeAsset = (seed = 1): WorldAsset =>
   })
 
 /**
- * The north gate: two towers, a lintel, the leaves of the gate, and Arlaan's
- * banner.
+ * The north gate: two towers, a lintel, the leaves of the gate, and a
+ * heraldic banner.
  *
  * It is a landmark and is budgeted like one. Every other prop in the village is
  * placed in tens; there are exactly two of these, they are the first and last
- * thing the player sees of Nimmerschein, and Chapter 1 ends by walking through
- * one of them past a nineteen-year-old on a chair.
+ * thing a traveller sees of the village.
  */
 export const createGateAsset = (seed = 1): WorldAsset => {
   const half = 2.3
@@ -1222,9 +1217,9 @@ export const createGateAsset = (seed = 1): WorldAsset => {
           lastTier: 1
         })
       ),
-      // ── Arlaan's banner ───────────────────────────────────────────────────
+      // ── The banner ─────────────────────────────────────────────────────────
       //
-      // A golden griffin on red (the story bible's §4.1). The griffin itself is
+      // A golden griffin on red. The griffin itself is
       // *painted*, and at the size a banner is read from the road it is a gold
       // mass in the middle of a red field, which is what a device on a banner
       // actually resolves to. This is the only member in the village with a wind
@@ -1238,14 +1233,14 @@ export const createGateAsset = (seed = 1): WorldAsset => {
         section: PLANK_SECTION,
         segments: 5,
         paint: (u, v, out) => {
-          out.copy(C.arlaanRed)
+          out.copy(C.bannerRed)
           // The griffin: a blob in the middle two thirds, roughened so it does
           // not read as a printed circle.
           const device =
             smoothstep(0.42, 0.2, Math.abs(u - 0.45)) *
             smoothstep(0.4, 0.16, Math.abs(((v + 0.25) % 0.5) - 0.25)) *
             (0.6 + 0.4 * Math.cos(9 * Math.PI * u))
-          out.lerp(C.arlaanGold, clamp01(device))
+          out.lerp(C.bannerGold, clamp01(device))
           // The hem, darker, so the cloth has an edge.
           out.lerp(C.timberShadow, 0.5 * smoothstep(0.08, 0.0, u))
         },

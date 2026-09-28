@@ -14,7 +14,7 @@ import { initAds } from '@/use/useAds'
 import { installGamePauseAudio } from '@/use/useGamePauseAudio'
 import useUser, { isCrazyWeb, isWaveDash, isItch, isGlitch, isGameDistribution, isPlaygama, isGamepix, isGameMonetize, isYandex } from '@/use/useUser'
 import { isDebug } from '@/use/useMatch.ts'
-import { reloadTowerState } from '@/use/useTowerState'
+import { reloadAethelState } from '@/use/useAethelState'
 import { SaveManager } from '@/utils/save/SaveManager'
 import { resolveSaveStrategy } from '@/platforms/resolveSaveStrategy'
 import { installSaveStatus } from '@/use/useSaveStatus'
@@ -180,7 +180,7 @@ const bootstrap = async () => {
 
   // CrazyGames cloud-only mode: gameplay state and our save bookkeeping
   // (`__save_*`) live in memory only; `sdk.data` is the sole persistence
-  // backend. CG QA explicitly requires that no `tower_state` / `ts_*` /
+  // backend. CG QA explicitly requires that no `aethel_state` /
   // `__save_*` keys appear in raw localStorage — only dev toggles
   // (`fps`, `debug`, `cheat`, `campaign-test`, `full_unlocked`) are
   // exempt. Inline env-literal so Vite tree-shakes the dead branch on
@@ -197,13 +197,13 @@ const bootstrap = async () => {
     // matter the hydrate timing.
   ;(window as any).__saveManager = saveManager
 
-  // Defense-in-depth `tower_state` / `ts_*` / `__save_*` safety remove on
+  // Defense-in-depth `aethel_state` / `__save_*` safety remove on
   // CG builds. BlobStorage's `scrubRawForCloudOnly()` already wiped these
   // at construction (it seeded into `state` first, so progress is
   // preserved); this second pass catches anything BlobStorage missed.
   // MUST run BEFORE `saveManager.init()` because init patches
   // `localStorage.setItem` / `removeItem` to forward to the strategy —
-  // calling the patched removeItem on a `ts_*` key would issue a
+  // calling the patched removeItem on the `aethel_state` key would issue a
   // cloud delete via `sdk.data.removeItem`, wiping the player's save.
   // Pre-init, `localStorage.removeItem` is still native and these
   // removes are local-only.
@@ -212,7 +212,7 @@ const bootstrap = async () => {
       const stragglers: string[] = []
       for (let i = 0; i < window.localStorage.length; i++) {
         const k = window.localStorage.key(i)
-        if (k && (k === 'tower_state' || k.startsWith('ts_') || k.startsWith('__save_'))) {
+        if (k && (k === 'aethel_state' || k.startsWith('__save_'))) {
           stragglers.push(k)
         }
       }
@@ -228,16 +228,16 @@ const bootstrap = async () => {
   installSaveStatus(saveManager)
   await saveManager.init()
 
-  // Refresh the in-memory `towerState` blob from the hydrated localStorage so
+  // Refresh the in-memory `aethelState` blob from the hydrated localStorage so
   // synchronous reads further down this file (notably `resolveInitialLocale`'s
   // `getState(LANGUAGE_KEY)` probe) see the cloud-stored values
   // immediately, NOT the stale pre-hydrate blob. Without this, a returning
   // player whose saved language is 'es' would still get a brief flash of the
   // Yandex / CG portal locale on first paint before the post-hydrate language
   // watcher (further down) reloads and switches. The watcher also calls
-  // `reloadTowerState()` defensively, so this is the early-flush companion, not
+  // `reloadAethelState()` defensively, so this is the early-flush companion, not
   // a replacement.
-  reloadTowerState()
+  reloadAethelState()
 
   // ─── Background / close flush — critical for mobile webviews ───────────
   //
@@ -329,7 +329,7 @@ const bootstrap = async () => {
   // ── The portal locale no longer picks the language ──────────────────────
   //
   // It used to, twice: as the first-paint hint into `resolveInitialLocale`, and
-  // as a seed written into `ts_user_language` for anyone with no stored choice.
+  // as a seed written into `user_language` for anyone with no stored choice.
   // Both are switched off, and the reason is the same one already written into
   // `i18n/index.ts` when the `navigator.language` sniff was removed:
   //
@@ -339,7 +339,7 @@ const bootstrap = async () => {
   // A portal is the same class of arbiter, and it was worse in one specific
   // way — `VITE_APP_CRAZY_WEB` is `true` in the **dev** build, so the local CG
   // stub reported `en` and every developer, and every first-time player on any
-  // CrazyGames locale but German, opened Chroniken von Arlaan in translation.
+  // CrazyGames locale but German, opened the game in translation.
   // `DEFAULT_LOCALE` said German and nothing that ran ever agreed with it.
   //
   // The cost, stated plainly: a first-time player on an English CrazyGames
@@ -395,12 +395,12 @@ const bootstrap = async () => {
       (ready) => {
         if (!ready) return
         stopLangSync?.()
-        // Defensive reload — `main.ts` already calls `reloadTowerState()`
+        // Defensive reload — `main.ts` already calls `reloadAethelState()`
         // right after `saveManager.init()` so first-paint reads see the
         // hydrated blob. This second call covers the case where hydrate
         // resolves a cloud value AFTER the early reload (Glitch's HTTP
         // strategy resolves out-of-band in some flows, etc.). Idempotent.
-        reloadTowerState()
+        reloadAethelState()
         // Apply whichever language is now authoritative: the player's own
         // stored choice, or `DEFAULT_LOCALE` if they have never made one. No
         // portal seed — see the note on `portalLocale` above.

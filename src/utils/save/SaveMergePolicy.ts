@@ -9,24 +9,25 @@
 // the player's actual keys. The blob lets the next hydrate score local vs.
 // remote and pick a winner deterministically without prompting.
 //
-// Score formula (aethel-fold):
-//   bestWave         × 500
-// + totalTechLevels  × 150
-// + runsPlayed       ×  10
+// Score formula (Castle Fold):
+//   pagesCleared  × 1000
+// + wins          × 5000
+// + lessons       ×   50
+// + resumePage    ×  100
+// + runs          ×   10
 //
-// `bestWave` is the headline progress number (highest wave ever survived),
-// tech levels are the permanent spend, and the run counter breaks ties between
-// two saves that reached the same wave with the same build.
+// `pagesCleared` is the headline progress number (highest page ever cleared),
+// wins are completed runs, and lessons / the resume page / the run counter
+// break ties between two saves at the same milestone.
 //
 // Conflict policy:
 //   - higher score wins
 //   - tie on score → newer savedAt wins
 //   - same time too → keep local (no needless writes)
-//   - if remote wins and local had ANY progress (score > 0), the player
-//     gets bonus coins = winner.maxStage × 50 to soften the loss
+//   - Castle Fold has no currency, so a remote win never pays a bonus.
 
-import { BEST_WAVE_KEY, COINS_KEY, TECH_KEY, RUNS_KEY } from '@/keys'
-import { STATE_KEY } from '@/use/useTowerState'
+import { CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUNS_KEY, WINS_KEY } from '@/keys'
+import { STATE_KEY } from '@/use/useAethelState'
 
 /** Where the meta blob is stored in localStorage / on the remote backend.
  *  NOT prefixed with `__save_internal__` — this key needs to round-trip
@@ -79,8 +80,9 @@ export interface SnapshotReader {
 /**
  * Hydrate-time merge resolution. The SaveManager's job is to:
  *   - apply the chosen side's keys to local
- *   - if `bonusCoins > 0`, add that to the merged COINS_KEY value
  *   - schedule a flush back to remote when the chosen side is local
+ *
+ * `bonusCoins` is kept in the shape for strategy compatibility and is always 0.
  */
 export type MergeResolution =
 /** Remote had higher progress; overwrite local. Bonus may be 0 if local was empty. */
@@ -117,11 +119,10 @@ const safeJson = <T>(v: string | null, fallback: T): T => {
  * Compute a fresh meta blob from the current localStorage snapshot.
  * Pure — no side effects.
  */
-/** Pull a sub-field out of the consolidated `tower_state` blob if present.
- *  Falls through to a top-level read for back-compat with any pre-migration
- *  snapshot that still has individual keys (e.g. the score formula was just
- *  invoked between BlobStorage construction and the first migration write). */
-const readField = (read: SnapshotReader, field: string): string | null => {
+/** Pull a sub-field out of the consolidated `aethel_state` blob, falling back
+ *  to a top-level read. Exported so the SaveManager's fresh-user guard reads
+ *  the exact same way the score formula does. */
+export const readField = (read: SnapshotReader, field: string): string | null => {
   const blob = read.get(STATE_KEY)
   if (blob != null) {
     try {
@@ -140,28 +141,25 @@ export const computeMeta = (
   read: SnapshotReader,
   savedAt: string = new Date().toISOString()
 ): SaveMeta => {
-  // `bestWave` is 0 for a player who has never finished a wave, so a brand-new
-  // local snapshot scores 0 and can never beat a real cloud save on a tie.
-  const bestWave = Math.max(0, safeInt(readField(read, BEST_WAVE_KEY), 0))
+  // A brand-new local snapshot scores 0 and can never beat a real cloud save.
+  const cleared = Math.max(0, Math.min(6, safeInt(readField(read, CLEARED_KEY), 0)))
+  const wins = Math.max(0, safeInt(readField(read, WINS_KEY), 0))
   const runs = Math.max(0, safeInt(readField(read, RUNS_KEY), 0))
-
-  const tech = safeJson<{ levels?: Record<string, number> }>(
-    readField(read, TECH_KEY),
-    {}
-  )
-  let techLevels = 0
-  if (tech.levels) {
-    for (const v of Object.values(tech.levels)) {
-      if (typeof v === 'number' && Number.isFinite(v) && v > 0) techLevels += v
-    }
+  const page = Math.max(1, Math.min(6, safeInt(readField(read, PAGE_KEY), 1)))
+  const lessons = safeJson<Record<string, unknown>>(readField(read, LESSONS_KEY), {})
+  let learned = 0
+  if (lessons && typeof lessons === 'object') {
+    for (const v of Object.values(lessons)) if (v === true) learned++
   }
 
   const progressScore =
-    bestWave * 500
-    + techLevels * 150
+    cleared * 1000
+    + wins * 5000
+    + learned * 50
+    + (page - 1) * 100
     + runs * 10
 
-  return { savedAt, progressScore, schemaVersion: SCHEMA_VERSION, maxStage: bestWave }
+  return { savedAt, progressScore, schemaVersion: SCHEMA_VERSION, maxStage: cleared }
 }
 
 /**
@@ -205,7 +203,7 @@ export const serializeMeta = (meta: SaveMeta): string => JSON.stringify(meta)
  * Rules (in order):
  *   1. No remote → 'local-only'
  *   2. No local  → 'remote-only'  (nothing to lose; no bonus needed)
- *   3. remote.score > local.score → 'remote-wins' with bonus = remote.maxStage * 50 if local had any progress
+ *   3. remote.score > local.score → 'remote-wins'
  *   4. local.score > remote.score → 'local-wins'
  *   5. Equal scores → newer savedAt wins (no bonus on score-tie wins)
  *   6. Equal everything → 'tie-keep-local'
@@ -218,8 +216,7 @@ export const decideMerge = (
   if (!localMeta) return { kind: 'remote-only' }
 
   if (remoteMeta.progressScore > localMeta.progressScore) {
-    const bonus = localMeta.progressScore > 0 ? remoteMeta.maxStage * 50 : 0
-    return { kind: 'remote-wins', bonusCoins: bonus }
+    return { kind: 'remote-wins', bonusCoins: 0 }
   }
   if (localMeta.progressScore > remoteMeta.progressScore) {
     return { kind: 'local-wins' }
@@ -236,20 +233,6 @@ export const decideMerge = (
 }
 
 /**
- * Add the bonus to the local coin total. Returns the new value as a
- * string ready to be written back to COINS_KEY. Caller does the write.
- */
-export const applyBonusCoins = (read: SnapshotReader, bonus: number): string => {
-  const current = safeInt(read.get(COINS_KEY), 0)
-  return String(current + Math.max(0, bonus))
-}
-
-/** Bonus-coin path: read the sub-field from tower_state if it exists. */
-export const readCoinTotal = (read: SnapshotReader): number => {
-  return safeInt(readField(read, COINS_KEY), 0)
-}
-
-/**
  * Allowlist of keys that participate in the persisted payload.
  *
  * Replacing the old "anything not internal" rule because that let
@@ -261,28 +244,17 @@ export const readCoinTotal = (read: SnapshotReader): number => {
  * misleading picture of what the game stores.
  *
  * Single-blob model: every persisted gameplay value lives inside the
- * `tower_state` localStorage entry (see `useTowerState.ts`). The cloud
+ * `aethel_state` localStorage entry (see `useAethelState.ts`). The cloud
  * therefore mirrors exactly TWO keys — the state blob and the meta blob.
- *
- * Individual `ts_*` field keys are also accepted as payload so any stray
- * per-key write (defensive, or a mid-migration snapshot from an older client)
- * round-trips safely instead of being silently dropped.
  */
-const PAYLOAD_PREFIXES = ['ts_'] as const
-
-export const isPayloadKey = (key: string): boolean => {
-  if (key === META_KEY) return true
-  if (key === STATE_KEY) return true
-  for (const prefix of PAYLOAD_PREFIXES) {
-    if (key.startsWith(prefix)) return true
-  }
-  return false
-}
+export const isPayloadKey = (key: string): boolean => key === META_KEY || key === STATE_KEY
 
 // Re-exported so tests / other modules don't have to re-declare them.
 export const SAVE_KEYS = {
-  BEST_WAVE: BEST_WAVE_KEY,
-  COINS: COINS_KEY,
-  TECH: TECH_KEY,
-  RUNS: RUNS_KEY
+  STATE: STATE_KEY,
+  CLEARED: CLEARED_KEY,
+  WINS: WINS_KEY,
+  RUNS: RUNS_KEY,
+  PAGE: PAGE_KEY,
+  LESSONS: LESSONS_KEY
 } as const

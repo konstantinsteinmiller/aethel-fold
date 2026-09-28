@@ -138,7 +138,7 @@ const SHRUB_SEED = 263
 const SAPLING_SEED = 269
 const THICKET_SEED = 271
 const MESA_SEED = 113
-// -- Nimmerschein ------------------------------------------------------------
+// -- The village --------------------------------------------------------------
 const HOUSE_COTTAGE_SEED = 401
 const HOUSE_COTTAGE_B_SEED = 409
 const HOUSE_LONG_SEED = 419
@@ -922,7 +922,7 @@ const definitionFactories = (): DefinitionFactory[] => {
       scaleRange: [0.65, 1.55]
     }),
 
-    // -- Nimmerschein --------------------------------------------------------
+    // -- The village --------------------------------------------------------
     //
     // Colliders here are **boxes**, not cylinders, and that is the one place
     // the village differs from every family above it. A rock is round enough
@@ -1056,7 +1056,7 @@ const definitionFactories = (): DefinitionFactory[] => {
     }),
     () => ({
       id: 'bridge-arla',
-      label: 'Bridge over the Arla',
+      label: 'River bridge',
       category: 'village',
       asset: createBridgeAsset(BRIDGE_SEED),
       // The one **walkable** village prop, and the only one that has to be: the
@@ -1100,7 +1100,7 @@ const definitionFactories = (): DefinitionFactory[] => {
       asset: createBenchAsset(BENCH_SEED),
       // 0.34 is the plank's top face, not a guess: the bench came down from a
       // human-scale 0.495 to the rig's own seat height when it became sittable
-      // (see `interaction/seats.ts` and the arithmetic in `combat/postures.ts`),
+      // (see `interaction/seats.ts` and the arithmetic in `characters/postures.ts`),
       // and a collider left at the old 0.46 states a bench 12 cm taller than the
       // one being drawn. Nothing currently notices -- every mover tests against a
       // step ceiling of at least y+0.6 -- which is exactly why it would have sat

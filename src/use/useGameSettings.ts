@@ -47,7 +47,7 @@ export interface GameSettings {
   musicVolume: number
   effectsVolume: number
   /**
-   * Spoken dialogue — the chapter's voice-over (`world/story/speech.ts`).
+   * Spoken dialogue — voice-over lines (`src/voice/speech.ts`).
    *
    * Its own slider rather than a share of `effectsVolume`, because it is the one
    * channel a player turns down for a reason that has nothing to do with volume:

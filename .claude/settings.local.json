@@ -48,7 +48,10 @@
       "Bash(echo \"exitcode=$?\")",
       "Bash(pnpm build:playgama)",
       "Bash(pnpm build:crazy-web)",
-      "PowerShell(npm run *)"
+      "PowerShell(npm run *)",
+      "mcp__chrome-devtools__new_page",
+      "mcp__firefox__browser_navigate",
+      "mcp__chrome-devtools__list_pages"
     ]
   },
   "enabledMcpjsonServers": [

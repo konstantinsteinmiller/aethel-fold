@@ -1,7 +1,7 @@
 // ─── BlobStorage ───────────────────────────────────────────────────────────
 //
 // In-memory mirror of the gameplay-state subset of localStorage. Holds
-// allowlisted gameplay keys (`ts_*`, `ts_*`) plus the META blob
+// allowlisted gameplay key (`aethel_state`) plus the META blob
 // (`__save_meta__`) and gives the strategy a single source of truth to
 // flush to its remote backend.
 //
@@ -19,7 +19,7 @@
 //     bookkeeping keys (the strategy's manifest, META) live in a
 //     separate in-memory shadow. Used by the CrazyGames strategy where
 //     `sdk.data` is the sole persistence backend and CG QA explicitly
-//     requires that no `ts_*` / `ts_*` / `__save_*` keys appear
+//     requires that no `aethel_state` / `__save_*` keys appear
 //     in raw localStorage. Construction additionally scrubs any
 //     leftovers from prior runs that DID mirror to raw, so QA's
 //     localStorage panel ends up clean after the next reload.

@@ -552,9 +552,8 @@ export const scatterChunkSet = (
         }
         // ── Nothing stands in the water, or on the beach ────────────────────
         //
-        // Local, because the sea round the storyteller's island and the Arla in
-        // Arlaan's valley are 1.7 km apart and up to 3.7 m different in height,
-        // and a single `minHeight` cannot be right for both. `+Infinity` away
+        // Local, because two bodies of water can be kilometres apart and metres
+        // different in height, and a single `minHeight` cannot be right for both. `+Infinity` away
         // from water, so this is one compare on the dry 99 % of the world.
         if (shoreAbove !== undefined && shoreAbove(x, z, height) < shoreBand) {
           continue

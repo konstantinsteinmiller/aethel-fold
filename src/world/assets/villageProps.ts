@@ -269,7 +269,7 @@ export const createFirePitAsset = (seed = 1): WorldAsset =>
  *
  * The bench is the last seat in the project still authored at human scale, and
  * it was missed for one reason: nobody ever sat on it. The storyteller's room
- * came down by a third the day the household did — `combat/postures.ts` carries
+ * came down by a third the day the household did — `characters/postures.ts` carries
  * the arithmetic and `hut-table`'s note carries the summary — and the rule it
  * establishes is that a figure whose hip-to-sole is 0.62 m against a real
  * adult's 0.90 cannot use furniture built for the adult.
@@ -539,9 +539,8 @@ export const createCrateStackAsset = (seed = 1): WorldAsset =>
  * A hand cart with its shafts down.
  *
  * Shafts down rather than up, and that is a story decision as much as an art
- * one: a cart with its shafts in the air is *in use*, and Nimmerschein in
- * Chapter 1 is a village going about a summer morning while four teenagers are
- * off doing something they were told not to.
+ * one: a cart with its shafts in the air is *in use*, and the village is at
+ * rest.
  */
 export const createCartAsset = (seed = 1): WorldAsset =>
   buildStructureAsset({
@@ -682,7 +681,7 @@ export const createMarketStallAsset = (seed = 1): WorldAsset =>
           // Stripes across the slope. Two dyes a village could actually make:
           // madder and undyed wool.
           const stripe = bands(downslope, 0.16, 10)
-          out.copy(C.clothLit).lerp(C.arlaanRed, 0.75 * (1 - stripe))
+          out.copy(C.clothLit).lerp(C.bannerRed, 0.75 * (1 - stripe))
           out.lerp(C.clothShadow, 0.6 * smoothstep(0.88, 1.0, downslope))
         },
         deep: C.clothShadow,

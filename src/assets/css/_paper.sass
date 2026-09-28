@@ -1,0 +1,110 @@
+// ─── Castle Fold paper kit ──────────────────────────────────────────────────
+//
+// Tokens and mixins only — this file emits no CSS by itself, so any scoped
+// component style can pull it in without duplicating rules:
+//
+//   @use '@/assets/css/paper' as paper
+//
+// Every surface is a sheet of paper: an ink border, a crease (a hard colour
+// stop between the lit and the shaded half), a folded dog-ear corner and a
+// periwinkle drop shadow — never pure black. The dog-ear and the shadow plate
+// both use `clip-path`, so the owning element must define:
+//
+//   --bw   ink border width (px is fine for borders)
+//   --ear  size of the folded corner (fluid: clamp() in rem/vw)
+
+$ink: #1c1724
+$ink-soft: #3a3142
+$parchment: #fff6e3
+$parchment-mid: #f4e7c9
+$parchment-shade: #e7d3a8
+$red: #ff6a5c
+$red-shade: #d8433b
+$blue: #5f95ff
+$blue-shade: #3464d6
+$yellow: #ffe066
+$yellow-shade: #f4b73a
+$green: #7fdc7a
+$green-shade: #45a64a
+$shadow: rgba(76, 64, 120, 0.45)
+$shadow-soft: rgba(76, 64, 120, 0.25)
+$desk: #3a2416
+$desk-light: #8a5a36
+
+// White lettering with a 2px ink keyline in all eight directions.
+$ink-outline: 2px 0 0 $ink, -2px 0 0 $ink, 0 2px 0 $ink, 0 -2px 0 $ink, 1.5px 1.5px 0 $ink, -1.5px 1.5px 0 $ink, 1.5px -1.5px 0 $ink, -1.5px -1.5px 0 $ink
+// A thinner keyline for small print (badges, hints).
+$ink-outline-thin: 1px 0 0 $ink, -1px 0 0 $ink, 0 1px 0 $ink, 0 -1px 0 $ink, 1px 1px 0 $ink, -1px 1px 0 $ink, 1px -1px 0 $ink, -1px -1px 0 $ink
+
+@mixin ink-text
+  color: #fff
+  text-shadow: $ink-outline
+
+@mixin ink-text-thin
+  color: #fff
+  text-shadow: $ink-outline-thin
+
+// A hard fold between the lit and the shaded half.
+@function crease($lit, $shade, $angle: 135deg, $at: 50%)
+  @return linear-gradient($angle, $lit 0 $at, $shade $at 100%)
+
+// A gentler fold for surfaces that carry text: the split sits off-centre and
+// the ridge catches a hairline of light.
+@function soft-crease($lit, $shade, $angle: 115deg, $at: 58%)
+  @return linear-gradient($angle, $lit 0 $at, rgba(255, 255, 255, 0.55) $at calc(#{$at} + 1px), $shade calc(#{$at} + 1px) 100%)
+
+// Cut the corner that the dog-ear folds over.
+@mixin dog-ear-clip($corner: right)
+  @if $corner == right
+    clip-path: polygon(0 0, calc(100% - var(--ear)) 0, 100% var(--ear), 100% 100%, 0 100%)
+  @else
+    clip-path: polygon(var(--ear) 0, 100% 0, 100% 100%, 0 100%, 0 var(--ear))
+
+// The folded flap itself. Use inside a `&::after` of the element that carries
+// `dog-ear-clip`; the parent's clip trims everything past the fold line, so the
+// flap only has to paint its shaded half, its two paper edges and the ink crease.
+@mixin dog-ear-flap($shade, $corner: right)
+  content: ''
+  position: absolute
+  top: calc(var(--bw, 0px) * -1)
+  width: var(--ear)
+  height: var(--ear)
+  box-sizing: border-box
+  pointer-events: none
+  border-bottom: var(--bw, 2px) solid $ink
+  @if $corner == right
+    right: calc(var(--bw, 0px) * -1)
+    border-left: var(--bw, 2px) solid $ink
+    background: linear-gradient(to top right, $shade 0 calc(50% - var(--bw, 2px)), $ink calc(50% - var(--bw, 2px)))
+    box-shadow: -2px 2px 0 $shadow-soft
+  @else
+    left: calc(var(--bw, 0px) * -1)
+    border-right: var(--bw, 2px) solid $ink
+    background: linear-gradient(to top left, $shade 0 calc(50% - var(--bw, 2px)), $ink calc(50% - var(--bw, 2px)))
+    box-shadow: 2px 2px 0 $shadow-soft
+  background-origin: border-box
+
+// The periwinkle "lifted off the desk" plate behind a sheet. Same clip as the
+// sheet so the shadow follows the dog-ear.
+@mixin shadow-plate($corner: right, $depth: var(--depth, 4px))
+  position: absolute
+  inset: 0
+  background-color: $shadow
+  transform: translateY($depth)
+  @include dog-ear-clip($corner)
+
+// Thin paper scrollbar for scrollable parchment areas.
+@mixin paper-scrollbar
+  scrollbar-width: thin
+  scrollbar-color: $ink-soft transparent
+
+  &::-webkit-scrollbar
+    width: 0.5rem
+
+  &::-webkit-scrollbar-track
+    background: transparent
+
+  &::-webkit-scrollbar-thumb
+    background: $ink-soft
+    border: 2px solid $parchment
+    border-radius: 999px

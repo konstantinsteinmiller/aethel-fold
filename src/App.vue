@@ -3,7 +3,6 @@ import { RouterView } from 'vue-router'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { mobileCheck } from '@/utils/function'
-import { useMusic } from '@/use/useSound'
 import { useExtensionGuard } from '@/use/useExtensionGuard'
 import { windowWidth, windowHeight } from '@/use/useUser'
 import { isDebug } from '@/use/useMatch'
@@ -21,9 +20,8 @@ import { resolveCapabilities } from '@/platforms/capabilities'
 import { getPlattformText } from '@/platforms/plattformText'
 
 const { t } = useI18n()
-const { initMusic, pauseMusic, continueMusic } = useMusic()
 useExtensionGuard()
-const { resourceCache } = useAssets()
+useAssets()
 useCrazyMuteSync()
 // Attach the "cmarc" debug-unlock key listener at app boot (App.vue is eager),
 // so typing it anywhere flips debug mode — the lazy game scene used to be the
@@ -35,8 +33,6 @@ installDebugUnlock()
 // but without CALLING it the keydown listeners were never attached at all
 // (it was previously only imported for `installDebugUnlock`, never invoked).
 useCheats()
-
-initMusic()
 
 const portraitQuery = window.matchMedia('(orientation: portrait)')
 const onTouchStart = (event: any) => {
@@ -60,20 +56,6 @@ const onContextMenu = (event: any) => {
   event.preventDefault() // Block right-click context menu
 }
 
-const handleVisibilityChange = async () => {
-  try {
-    if (document.hidden) {
-      pauseMusic()
-      // console.log('App moved to background - Pausing Music')
-    } else {
-      continueMusic()
-      // console.log('App back in focus - Resuming Music')
-    }
-  } catch (error) {
-    // console.log('error: ', error)
-  }
-}
-
 const updateGlobalDimensions = () => {
   windowWidth.value = window.innerWidth
   windowHeight.value = window.innerHeight
@@ -92,13 +74,11 @@ onMounted(() => {
       windowHeight.value = window.innerHeight
     }, 400)
     window.addEventListener('orientationchange', delayedUpdateGlobalDimensions)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
   }
 })
 onUnmounted(() => {
   window.removeEventListener('resize', updateGlobalDimensions)
   window.removeEventListener('orientationchange', delayedUpdateGlobalDimensions)
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
   clearInterval(dimensionsInterval.value)
 })
 

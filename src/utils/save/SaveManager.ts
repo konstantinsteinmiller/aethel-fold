@@ -5,8 +5,7 @@ import type {
   SaveStrategy
 } from './types'
 import { isInternalKey } from './types'
-import { SAVE_KEYS } from './SaveMergePolicy'
-import { STATE_KEY } from '@/use/useTowerState'
+import { SAVE_KEYS, readField } from './SaveMergePolicy'
 import { BlobStorage, type BlobStorageOptions } from './BlobStorage'
 
 // ─── SaveManager ───────────────────────────────────────────────────────────
@@ -400,44 +399,24 @@ const shouldRunSanityGuard = (state: HydrateState, local: LocalStorageAccessor):
 }
 
 /**
- * Read one field out of the consolidated `tower_state` blob, falling back to a
- * top-level key read.
- *
- * This indirection is load-bearing: aethel-fold persists everything INSIDE one
- * localStorage entry, so a naive `local.get('ts_best_wave')` always returns
- * null and `localLooksFresh` would report "fresh" for every player — making the
- * boot-sanity guard fire (and cost 3 s of boot latency) on every single launch
- * of a returning player, while telling us nothing.
- */
-const readStateField = (local: LocalStorageAccessor, field: string): string | null => {
-  const blob = local.get(STATE_KEY)
-  if (blob != null) {
-    try {
-      const parsed = JSON.parse(blob)
-      if (parsed && typeof parsed === 'object' && field in parsed) {
-        const v = (parsed as Record<string, unknown>)[field]
-        if (v == null) return null
-        return typeof v === 'string' ? v : JSON.stringify(v)
-      }
-    } catch { /* corrupt blob → fall through to the direct read */ }
-  }
-  return local.get(field)
-}
-
-/**
  * "Does this device look like a brand-new install?" — the precondition for the
- * boot-sanity retry loop. Any signal of real progress (a wave survived, coins
- * banked, a tech node bought, a run in flight) means the local snapshot is
- * worth booting with and we don't stall the player waiting on the cloud.
+ * boot-sanity retry loop. Any signal of real progress (a page cleared, a run
+ * finished or started, a lesson learned, a resume page past 1) means the local
+ * snapshot is worth booting with and we don't stall the player waiting on the
+ * cloud.
+ *
+ * Reads go *inside* the `aethel_state` blob (`readField`): a naive top-level
+ * read would always return null and report "fresh" for every player.
  */
 const localLooksFresh = (local: LocalStorageAccessor): boolean => {
-  const bestWave = parseInt(readStateField(local, SAVE_KEYS.BEST_WAVE) ?? '0', 10) || 0
-  if (bestWave > 0) return false
-  const coins = parseInt(readStateField(local, SAVE_KEYS.COINS) ?? '0', 10) || 0
-  if (coins > 0) return false
-  const runs = parseInt(readStateField(local, SAVE_KEYS.RUNS) ?? '0', 10) || 0
-  if (runs > 0) return false
-  if (readStateField(local, SAVE_KEYS.TECH)) return false
+  const read = { get: (k: string) => local.get(k) }
+  const num = (k: string): number => parseInt(readField(read, k) ?? '0', 10) || 0
+  if (num(SAVE_KEYS.CLEARED) > 0) return false
+  if (num(SAVE_KEYS.WINS) > 0) return false
+  if (num(SAVE_KEYS.RUNS) > 0) return false
+  if (num(SAVE_KEYS.PAGE) > 1) return false
+  const lessons = readField(read, SAVE_KEYS.LESSONS)
+  if (lessons && lessons !== '{}') return false
   return true
 }
 

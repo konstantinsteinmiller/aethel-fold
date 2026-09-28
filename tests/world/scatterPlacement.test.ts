@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Heightfield } from '@/world/terrain/Heightfield'
+import { Heightfield } from '@/world/terrain/heightfield'
 import { packWaterBodies, setWaterTable, shoreHeightAbove } from '@/world/terrain/waterLevel'
 import { SHORE_BAND, scatterChunkSet, type ScatterSpeciesPlan } from '@/world/scatter'
 import { ScatterColliderIndex } from '@/world/scatterColliders'

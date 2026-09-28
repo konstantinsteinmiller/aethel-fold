@@ -1,75 +1,211 @@
-# Grass system — implementation plan
+# Castle Fold — implementation plan
 
-Living plan for the `src/world/grass/` milestone. Resume from here if a session
-ends. Final documentation lives in [`grass.md`](./grass.md).
+Living plan for **Castle Fold** (`aethel-fold`), the origami pop-up-book siege
+game specified in [`aethel-fold-GDD.md`](./aethel-fold-GDD.md). Resume from here
+if a session ends: every task has a checkbox, and the **Status log** at the
+bottom says what was last touched.
 
-## Goal
+> The previous content of this file was the grass-system plan. That milestone
+> shipped; its record lives in [`grass.md`](./grass.md).
 
-Automatic grass on grassy ground, **6 LOD tiers**, **5 player-selectable detail
-levels** (+ `auto` + `off`) in a settings menu, directional (view-cone) culling,
-and the fewest possible draw calls / triangles.
+---
 
-## Architecture
+## 0. Decisions (made up-front so nobody re-litigates them)
 
-**One instance per *patch*, not per blade.** A patch is a 4 m × 4 m tuft cluster
-whose blades are baked into the tier geometry once at boot and shared by every
-instance. Per-instance data is 48 B (three `vec4`s, interleaved), against 64 B
-for a bare `instanceMatrix` — and it replaces ~200 blade instances.
+| Topic | Decision | Why |
+|---|---|---|
+| Product | Castle Fold boots at `/` straight into Page 1 — no main menu (GDD §6). Meadowfall sandbox moves to `/world` (lazy, dev bench). | GDD: "Booting the app drops the player instantly into the tutorial." |
+| Code home | `src/fold/` — `logic/` (pure TS, no three/Vue/DOM), `render/` (raw three.js), `audio/` (WebAudio synth), `input/`, `FoldEngine.ts` (glue). Vue HUD in `src/components/fold/`, view `src/views/FoldScene.vue`. | Pure logic is unit-testable headlessly; the renderer only *reads* logic state. |
+| Rendering | Raw three.js (same reasoning as GDD.md §0). Custom `PaperMaterial` (GLSL3 `ShaderMaterial`, toon bands + hard spot-lamp shadow + procedural paper grain + MRT normal output) → one composite pass: **Sobel ink outlines on depth+normals** (GDD §10.1), **tilt-shift** blur top/bottom 15 % (GDD §2), warm lamp vignette, grain. | GDD §2/§10 ask for exactly this; MRT gives the normals for free in the colour pass (no second geometry pass). |
+| Outlines | Bold, near-black ink (`ink` in the Castle Fold palette), constant screen width scaled with resolution. | This game's GDD overrides Meadowfall's "never #000" rule — different product, different contract. |
+| Lighting | One warm `SpotLight` above the desk (desk lamp), `BasicShadowMap`-sharp shadows, flat unlit-style toon (2 bands). | GDD §2 "warm localized point light from above… sharp hard-edged shadows". Spot, not point: one shadow map instead of six. |
+| Hinges | Paper flaps are `Object3D` pivots (the "bones" of GDD §10.2) → shadows & MRT stay correct with zero custom depth materials. | Vertex-shader folding would need a custom depth material per flap. |
+| Units | Knights etc. are **paper standees**: extruded die-cut silhouettes whose faces are programmatically drawn vector art (canvas atlas). `/public/images/fold/<name>.webp` overrides a frame automatically when present. | "Tiny 2D paper knights" (GDD §6) + "allow easy image update" (brief). |
+| Boss | Fully 3D faceted origami dragon (multi-colour panels, flat facets are *desired* here), hierarchical hinge rig: body, neck×3, head, jaw, wings×2 (3 fold segments each), legs×4, tail×4. | GDD §8 Page 5, reference storyboard. |
+| Audio | 100 % procedural WebAudio: paper crease (filtered noise + crackle), cardboard SNAP (sub thump + click), rip, kazoo/party-popper, stamp, gear grind, paper-fire, frog ribbit, tiny "yay!" crowd (formant synth); **procedural sequencer** for pizzicato + glockenspiel, boss brass + snare, the gear-grind drop and the victory chord. Existing `public/audio/sfx/*.ogg` layered where they fit (plastic-torn → rip body, celebration → victory). | GDD §3 soundtrack arc without shipping megabytes of audio; instant start. |
+| Save | **One object `aethel_state`** (in-memory `Record<string, any>`) is *the* save payload. `tower_state` is retired: the SaveManager allowlist, CrazyGames/GamePix/Yandex strategies, merge-policy scoring and fresh-user guard all move to `aethel_state` + `__save_meta__`. | Brief: one object in LocalStorage and in SDK cloud saves; correct hydration, never a false "fresh user". |
+| Removed | Tower-siege game (`src/game`, `useTower*` except the state blob which becomes `useAethelState`), BattlePass, Achievements, DailyRewards, Missions, AdRewardButton, TreasureChest, coin economy, leaderboard, interstitial/rewarded **triggers** (platform ad plumbing stays dormant for later), Arlaan chapter (voice-over kept → `src/voice/`). | Brief. |
+| Fonts | Only `Angry` (angrybirds-regular.ttf) — the global default. | Brief. |
+| i18n | Every player-facing string (incl. onomatopoeia SNAP!/STAMP!/CREASE!/RIP!/GROUAAARGH!) under `fold.*` in every locale (`en`, `de`). | Brief + parity test. |
 
-Rendering uses `Mesh` + `InstancedBufferGeometry` (verified: three 0.185 renders
-instanced from `geometry.isInstancedBufferGeometry` but only defines
-`USE_INSTANCING` for `isInstancedMesh`) — so there is **no `instanceMatrix`
-attribute and no per-vertex matrix multiply**.
+## 1. Coordinate system & page contract
 
-| file | role |
-|---|---|
-| `grass/config.ts` | 6-tier distance table, coverage maths, the 5 detail levels |
-| `grass/bladeGeometry.ts` | per-tier patch geometry (clumped blade layout) |
-| `grass/grassGlsl.ts` | vertex-shader blade construction, wind, taper |
-| `grass/grassMaterial.ts` | `GrassMaterial extends ToonMaterial` (chains, never assigns) |
-| `grass/grassPlacement.ts` | per-chunk patch generation — three.js-free, pure |
-| `grass/GrassField.ts` | residency, cone cull, LOD assignment, packing |
-| `components/organisms/WorldSettingsPanel.vue` | the player-facing menu |
+* Page sheet: **10 × 14** units, x ∈ [-5, 5] (left→right), z ∈ [-7, 7] (top/enemy → bottom/player). y = up off the paper.
+* Hero stands at z = 5.6; the **breach line** is z = 5.0.
+* Camera: steep isometric (≈58° pitch) from +z; `fitCamera()` solves distance so the whole sheet + margin fits any aspect (portrait → sheet fills width; landscape → desk + stacked layers visible at the sides = GDD §7 curiosity loop).
+* Thick paper **layer stack** under every page (visible at the edges), the next page's art faintly printed on the layer below.
 
-## Steps
+## 2. Mechanics (GDD §4 + storyboard)
 
-1. [x] Read the GDD / AAA-graphics contracts and the existing LOD, scatter,
-       terrain, shading and settings code.
-2. [x] `grass/config.ts` — tiers, ranges, levels.
-3. [x] `grass/bladeGeometry.ts` — blade + clump layout, subset property across tiers.
-4. [x] `grass/grassGlsl.ts` + `grass/grassMaterial.ts`.
-5. [x] `grass/grassPlacement.ts` — suitability mask, corner heights, ground tint.
-6. [x] `grass/GrassField.ts` — cone-sphere cull, per-chunk cells, packing.
-7. [x] Wire into `World.ts` (settings, streaming hooks, frame, profiler tag).
-8. [x] `WorldSettingsPanel.vue` + i18n across all 21 locales.
-9. [x] Tests (`tests/world/grass.test.ts`).
-10. [x] Measure per level in a real browser, write `grass.md`.
-11. [x] Revision pass — see `grass.md` §9.
+| Mechanic | Gesture (touch) | Gesture (mouse) | Effect |
+|---|---|---|---|
+| **Swipe to Fold** (wall) | drag along the blue dotted arrow | drag | flap follows the finger (light continuous haptic), release past 45 % → **SNAP**: pop-up tower/wall rises, knights on the flap are **launched toward the lens** → confetti burst. Wall blocks the lane, auto-lowers after `hold`. |
+| **Valley** (Page 2) | drag along the strip | drag | two panels rise into a V; everyone inside is **trapped** |
+| **Tap to Stamp** | tap a raised wall / valley | click | slam flat with extreme force → crush everything under it (+bonus). **Hit-stop 0.1 s** on brutes, sharp vertical shake, hard haptic. |
+| **Launch fold** (Page 3) | drag | drag | flap flips 180° and flings the catapult back up the page onto the archers |
+| **Ridge / shape terrain** (Page 3) | drag | drag | the ground folds into a mountain ∧ that closes a lane; the march re-routes into your traps |
+| **Spread to Flatten** (Page 4, boss wings) | two fingers apart on a glowing crease | press + drag outward (or wheel) | the tear follows the fingers; at 100 % **RIP** — tower/gate/drawbridge tears flat, crew destroyed |
+| **Shield fold** (Pages 3–5) | drag the line in front of the hero | drag | paper shield pops up; blocks arrows, boulders and dragon paper-fire |
+| **Crease** (boss legs) | swipe along the glowing crease | drag | the limb folds backward — **CREASE!** |
+| **Peel** (Page 4 → 5) | drag the dog-eared corner | drag | peels the page back to reveal the castle-core layer beneath |
+| **Frog fold** (Page 6) | final dotted line | drag | the flat dragon sheet folds into a tiny paper frog; ribbon **VICTORY** drops |
 
-## Status: done
+Health: the hero has **3 hearts**. Enemy breach, arrow, boulder or paper-fire = −1. At 0 the page **crumples into a ball**, is thrown away and a fresh sheet drops in (zero load time, GDD §9).
 
-Shipped. `pnpm type-check`, `pnpm test` (754 tests, 61 files) and `vite build`
-all pass; the browser console is clean at every detail level. Numbers, the
-revision pass and the change checklist live in [`grass.md`](./grass.md).
+## 3. Pages (GDD §8)
 
-Four things changed course mid-build and are worth remembering:
+1. **The Border** — swipe. 3 waves of knights, 3 wall lines. Lesson `swipe` on wave 1 (slow-mo + ghost hand, GDD §6 0:00–0:02).
+2. **The Ravine** — stamp. A valley strip across the middle + 2 walls; brutes (too heavy to launch) must be trapped and stamped. Lessons `stamp`.
+3. **The Siege** — archers shoot paper arrows (shield line, lesson `shield`), catapults on launch flaps (lesson `launch`), a ridge fold funnels a lane (lesson `ridge`), knights keep marching.
+4. **The Castle Gates** — static castle: 2 archer towers + gate + drawbridge with glowing creases (lesson `spread`), knights sally from the gate until it is torn. Exit = **layer peel** (lesson `peel`).
+5. **The Boss** — rumble → gears glow → castle unfolds into the **origami dragon** (music drop + gear grind + GROUAAARGH!). Loop: breath (raise the shield), stomp (knights spill), expose a weak point → crease legs (lesson `crease`), spread wings (lesson `core`), neck last → collapse into a flat sheet.
+6. **Victory** — one last dotted line → frog fold → die-cut VICTORY ribbon, massive confetti, tiny paper people cheering "yay!". Run summary (score, best, time, hits) + Play again.
 
-1. The **dithered crossfade was removed** for grass and replaced by a continuous
-   per-blade density ramp. It looks better *and* is free. (`grass.md` §4.3)
-2. The **rim light had to be cut to a third** of the world default — grass has no
-   interior, so the fresnel is at maximum over the whole meadow at once.
-3. **Detail changes became free** (`setDrawRange` + a width uniform) after the
-   rebuild path measured 34 ms on the click.
-4. The **view-cone A/B was initially wrong** because a 180° cone is not a
-   disabled cone — it still carries the apex guard.
+Pages flow with **zero downtime**: clearing a page folds its pop-ups flat and immediately turns the page (GDD §7).
 
-## Invariants that must not break
+## 4. Juice (GDD §5)
 
-* No hex literals — colours come from `art/palette.ts`.
-* `onBeforeCompile` is **chained**, never assigned.
-* Zero per-frame allocation in `GrassField.update`.
-* Grass never casts shadows (the depth material cannot see vertex-built blades —
-  the same argument water makes in `assets/types.ts`).
-* Grass draws no outline (an inverted hull per blade is the exact failure mode
-  `outlineMaterial.ts` already warns about).
-* Every tier checked with `Number.isFinite` before its budget assertion.
+* Hit-stop 0.1 s on stamping big enemies; global slow-mo for lessons.
+* Sharp, low-amplitude, high-frequency vertical shake on SNAP / Stamp (respects the "reduce motion" setting).
+* Haptics: light continuous while dragging a fold, sharp burst on SNAP/Stamp (`navigator.vibrate`, setting toggle).
+* Bouncy toon score pops (+100) — pooled DOM, Angry font, scale-up + rotate + fade.
+* Confetti: instanced rectangular paper chips (one draw call), physics + flutter.
+* Glowing 2D toon gears (billboard sprites, additive) for magic/energy.
+* Speed lines on launch, dust puffs (paper flecks) on stamp, shock ring on snap, pulsing yellow highlight on actionable outlines (GDD §9).
+* Onomatopoeia comic words (SNAP!, FOLD!, STAMP!, CREASE!, RIP!, GROUAAARGH!) — i18n, DOM, bouncy.
+
+## 5. UI (GDD §9 + brief)
+
+* HUD (safe-area aware, fluid `clamp()`/vw/vh sizing, portrait + landscape):
+  * top-left: `PageBadge` (page n/6 + name) and `HeartsBadge` (3 origami hearts);
+  * top-centre: `ScoreBadge`;
+  * top-right: `SettingsButton` (folded paper gear) + `FMuteButton` (origami speaker).
+* Pause = the screen folds like a **cootie catcher** (four triangular flaps close in) → origami `FModal` with Resume / Restart page / Restart game / Settings (music, sfx, haptics, shake, quality, language).
+* Victory panel on the die-cut ribbon (`FReward` restyled) + Play again.
+* All F-components restyled as folded paper (crease highlight, dog-ear corners, offset paper shadow), fluid sizes, minimum sizes so nothing collapses to 0, FModal header never overlaps content. Origami SVG icons replace emoji/raster icons.
+* `FLogoProgress` → Castle Fold crane logo; the static splash in `index.html` hands over on the first rendered frame.
+
+## 6. Save — `aethel_state`
+
+```
+aethel_state = {
+  v: 1,
+  page: 1..6,            // resume point (a reload drops you back on this page)
+  runScore, runTime, runHits,      // current run, checkpointed at page start
+  bestScore, bestTime, wins, runs,
+  lessons: { swipe: true, stamp: false, … },   // wordless lessons already learned
+  settings: { music, sfx, haptics, shake, quality, lang },
+  stats: { knights, brutes, launched, stamped, torn, folds, … },
+  updatedAt
+}
+```
+
+* `src/use/useAethelState.ts` replaces `useTowerState` (same debounced-persist API: `getState/setState/…`), STATE_KEY = `aethel_state`.
+* SaveManager allowlist → `aethel_state` + `__save_meta__`; CrazyGames, GamePix and Yandex strategies mirror that one key; merge-policy `progressScore` = pages cleared × 1000 + wins × 5000 + lessons × 50 + runs; boot fresh-guard looks inside `aethel_state`.
+* The game reads state only after `SaveManager.init()` resolved and re-reads on `saveDataVersion` (cloud recovery), so a slow SDK never yields a "fresh user".
+* Verified by unit tests (strategy + manager + composable round-trip) **and** Playwright e2e with a fake CrazyGames SDK (remote data survives a reload, local storage stays clean) plus Chrome-MCP manual verification.
+
+## 7. Performance budget
+
+* Target: ≤ 60 draw calls typical, ≤ 90 on the boss page; ≤ 12 programs. Instancing for knights, confetti, arrows, trees.
+* **Measured** (session 3, per frame, main pass + shadow pass + composite, 412×860):
+
+  | Page | Draw calls |
+  | --- | --- |
+  | 1 | 52 |
+  | 2 | 56 |
+  | 3 | 58–80 |
+  | 4 | 68–88 |
+  | 5 (dragon) | 123 |
+  | 6 | 46 |
+
+  * Programs: 16–22. The paper material's variants (atlas, cutout, double-sided) compile separately.
+  * GPU memory reaches a plateau after one full 1→6 cycle (about 31 geometries, 17 textures) and stays flat over repeated cycles.
+  * Page 5 is the outlier: 22 separately animated dragon parts cast shadows, plus the fallen castle pieces. Fallen pieces now leave the shadow pass and empty projectile meshes are hidden (138 → 123).
+  * Next step if needed: merge the dragon's rigid sub-parts per bone, or drop small parts from `castShadow`.
+* Zero per-frame allocation in logic + render update paths (pooled entities/events).
+* Adaptive render scale (DPR cap 2, floor 0.6) driven by frame-time p95; composite pass at full res, MSAA only on desktop.
+* Hot path: `index.html` splash → `main.ts` → `FoldScene` chunk (three + fold) → Page 1 built synchronously, pages 2–6 built on idle after first frame; locale chunk lazy; audio synthesised on first gesture.
+
+## 8. Task list
+
+### A. Cleanup & infrastructure
+- [x] A1 Remove Arlaan chapter; extract voice-over into `src/voice/` (background agent).
+- [x] A2 Remove tower game (`src/game`, `useTower*`, `GameScene`, `components/game`, MonsterLab route) and its tests.
+- [x] A3 Remove BattlePass, Achievements, DailyRewards, Missions, AdRewardButton, TreasureChest, CoinBadge/coin economy, leaderboard/identity, reward buttons; drop their tests and i18n keys.
+- [x] A4 `useAethelState` + save pipeline on `aethel_state` (allowlist, strategies, merge policy, fresh-guard, keys.ts, useUser settings, i18n locale key).
+- [x] A5 `.env.example` + per-platform `.env.<mode>` templates with **empty** keys/ids (game ids, title_id, test_install_id, tokens).
+- [x] A6 Fonts: only Angry; remove other font stacks (Georgia in logo, monospace in editor only stays debug-only).
+- [x] A7 Router: `/` → FoldScene; `/world` Meadowfall bench (lazy), `/characters`, `/water` benches stay lazy.
+- [x] A8 Rename product strings/meta: title, manifest, package scripts (`aethel-fold`), README.
+
+### B. Logic (`src/fold/logic`, pure TS)
+- [x] B1 `math.ts`, `types.ts`
+- [x] B2 `config.ts` (dimensions, timings, scores, tuning)
+- [x] B3 `pages.ts` (6 pages authored with builder helpers)
+- [x] B4 `events.ts` (pooled event queue)
+- [x] B5 `folds.ts` (fold state machine + drag/snap/stamp/lower dynamics)
+- [x] B6 enemies — pools in `entities.ts`, behaviour in `game.ts` (march/lanes/re-route/blocked/trapped/launched/crushed/breach; archers, catapults)
+- [x] B7 projectiles — pools in `entities.ts`, flight/blocking in `game.ts` (arrows, boulders, fling, paper-fire; shield blocking)
+- [x] B8 tears — `TearState` in `types.ts`, pull/tear in `game.ts` (spread targets)
+- [x] B9 `boss.ts` (dragon FSM, weak points, attacks)
+- [x] B10 `lessons.ts` (wordless onboarding controller: slow-mo, ghost-hand script, completion)
+- [x] B11 `game.ts` (FoldGame top-level FSM, waves, hearts, scoring, combos, hit-stop, time scale, page flow, crumple/drop, peel, finale)
+- [x] B12 `gestures.ts` (swipe/drag, tap, two-finger spread, single-pointer tear, peel; screen→page via injected projector)
+
+### C. Rendering (`src/fold/render`)
+- [x] C1 `FoldRenderer` (renderer, MRT target, adaptive scale, resize, dispose)
+- [x] C2 `PaperMaterial` + composite shader (Sobel ink, tilt-shift, vignette, grain, flash/fade uniforms)
+- [x] C3 `palette.ts` (Castle Fold colours) + `camera.ts` (fit, shake, focus)
+- [x] C4 Desk (wood planks, lamp pool), page sheet + layer stack, painted page art per theme (canvas texture)
+- [x] C5 Fold flaps (hinge pivots), dotted guide lines + arrows (animated), pop-up tower/wall/shield structures, valley panels, launch flap, ridge
+- [x] C6 Standee atlas (knight, brute, archer, catapult crew, hero, tiny cheering people) — vector drawings + `/images/fold/*` overrides; instanced standee field
+- [x] C7 Castle (Page 4/5) with tearable towers/gate/drawbridge
+- [x] C8 Origami dragon rig + animations (unfold, idle breathe, rear, breath, stomp, limb fold, collapse)
+- [x] C9 Paper frog + fold sequence
+- [x] C10 VFX: confetti, speed lines, dust flecks, shock ring, glow gears, paper-fire, arrows/boulders, landing markers, highlight pulse
+- [x] C11 Transitions: page turn (snapshot + curl), crumple ball + throw, fresh page drop, layer peel
+- [x] C12 Trees/props: pop-up pines, bushes, flags, river strip, bridge
+
+### D. Audio (`src/fold/audio`)
+- [x] D1 Synth SFX bank (crease loop, snap, rip, pop/kazoo, stamp, thunk, whoosh, arrow, boulder, gear grind, fire, roar, ribbit, yay, page turn, crumple)
+- [x] D2 Procedural music: pizzicato+glock, drop/grind, boss brass+snare, victory chord; ducking & transitions
+- [x] D3 Wire to settings/mute/pause (existing suspend/resume pipeline)
+
+### E. UI
+- [x] E1 Origami icon set — one named-icon component `src/components/icons/OrigamiIcon.vue`
+- [x] E2 Restyle F-components (FButton, FIconButton, FHudButton, FHudBadge, FModal, FSelect, FSlider, FSwitch, FTabs, FMuteButton, FLogoProgress, FReward, SaveStatusBanner) — fluid, min sizes, no custom scale hacks, header never overlaps
+- [x] E3 HUD components (`PageBadge`, `HeartsBadge`, `ScoreBadge`, `BossMeter`, `CootieCatcherPause` (pause + settings + confirm faces, replaces a separate settings modal), `FxLayer` (score pops + comic words, pooled), `GhostHand` (lessons + idle hint), `VictoryPanel`)
+- [x] E4 `FoldScene.vue` (canvas, input, HUD, pause gate, lifecycle signals to platform SDKs)
+- [x] E5 i18n `fold.*` in en + de; prune dead namespaces
+
+### F. Verification
+- [x] F1 Unit tests: logic (gestures, folds, enemies, projectiles, tears, boss, lessons, game flow, scoring), `useAethelState` + SaveManager hydration (LocalStorage, CrazyGames, GamePix, Yandex, Glitch) — remove tower/meta tests.
+- [x] F2 Playwright e2e (`tests/e2e`): boot → lesson → swipe snaps a wall; stamp; reload resumes page; fake-SDK remote hydration; responsive screenshots (320×658 portrait, 658×320 landscape, tablet, desktop); pause menu; victory flow via debug jump.
+- [x] F3 Real-browser session: play each page, console clean, perf numbers, hydration check.
+  - The chrome-devtools MCP cannot launch in the cloud container: it wants `/opt/google/chrome` and refuses to run as root.
+  - The same checks ran through Playwright on the bundled Chromium instead: all pages cycled three times with a clean console, the per-frame counters above, and the hydration e2e.
+  - To use the MCP locally, point it at a Chrome with `--executable-path`.
+- [x] F4 `pnpm type-check`, `pnpm test`, `pnpm build` green.
+
+### G. Docs
+- [x] G1 `description.md` (short ≤150, long ≤500, how to play, controls)
+- [x] G2 `roadmap.md` (≥15 retention/playtime/conversion features with implementation notes)
+- [x] G3 `CLAUDE.md` / README updated for Castle Fold
+
+---
+
+## Status log
+
+* **Session 1** — explored `src` (platform/save layer, UI/i18n, world engine, tower/meta systems); wrote this plan; B1 done; A1 delegated.
+* **Session 2** — built the whole game: logic, gestures, renderer and all views, audio, HUD and UI, the aethel_state save pipeline and i18n; removed the tower, meta and Arlaan code; visually verified every page, transition, the boss, the finale and the victory flow with headless SwiftShader screenshots at portrait, landscape and desktop sizes.
+* **Session 3** — ported the save and platform tests to `aethel_state`. This found and fixed two bugs:
+  * `checkpoint()` now flushes immediately;
+  * a CrazyGames manifest from a pre-port build no longer wedges the retry loop.
+
+  Also in this session:
+  * Playwright e2e is 21/21 green: gameplay, persistence, fake-SDK cloud hydration and 6-viewport HUD overlap.
+  * Blank `.env.*.example` templates for every platform mode.
+  * Splash, title, manifest and package renamed to Castle Fold.
+  * Wrote `description.md` and `roadmap.md` (20 items); rewrote the README and CLAUDE.md.
+  * `pnpm type-check` is clean, `pnpm test` gives 1976/1976, and `pnpm build` passes. The hot path is about 275 kB gzipped; the world, lab and character chunks are lazy.

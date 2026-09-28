@@ -1,11 +1,13 @@
 // Unit tests for the rewarded-ad rolling-window throttle. Verifies the
 // 5-in-10-min cap, expiry, persistence, and graceful handling of a
-// corrupted localStorage blob. Module is reloaded per test (`vi.resetModules`)
+// corrupted `aethel_state` blob. Module is reloaded per test (`vi.resetModules`)
 // so the in-memory `history` ref doesn't leak across cases.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const STORAGE_KEY = '__save_internal__rewarded_history'
+/** The single persisted blob (`useAethelState`); the history is a field of it. */
+const STATE_KEY = 'aethel_state'
 
 const importThrottle = async () => {
   vi.resetModules()
@@ -76,16 +78,16 @@ describe('useRewardedThrottle', () => {
     expect(mod.isRewardedThrottled.value).toBe(false)
   })
 
-  it('persists history inside the tower_state blob under the internal-key field', async () => {
+  it('persists history inside the aethel_state blob under the internal-key field', async () => {
     const mod = await importThrottle()
     mod.recordRewardedGranted(123_456)
     // The blob write is debounced (it rides the single-blob persist debounce),
     // so advance past it before asserting the on-disk contents.
     vi.advanceTimersByTime(300)
     // Single-blob storage: nothing lives at the bare key any more — the
-    // history is a sub-field of `tower_state`.
+    // history is a sub-field of `aethel_state`.
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull()
-    const blob = JSON.parse(window.localStorage.getItem('tower_state') || '{}')
+    const blob = JSON.parse(window.localStorage.getItem(STATE_KEY) || '{}')
     expect(blob[STORAGE_KEY]).toEqual([123_456])
   })
 
@@ -93,7 +95,7 @@ describe('useRewardedThrottle', () => {
     const seed = [Date.now() - 1000, Date.now() - 500, Date.now() - 100]
     // Single-blob model: the throttle reads its history as a field of the
     // consolidated blob, so seed it there (not at the bare key).
-    window.localStorage.setItem('tower_state', JSON.stringify({ [STORAGE_KEY]: seed }))
+    window.localStorage.setItem(STATE_KEY, JSON.stringify({ [STORAGE_KEY]: seed }))
     const mod = await importThrottle()
     // 3 entries < MAX (5), so still un-throttled, but the next 2 must throttle.
     expect(mod.isRewardedThrottled.value).toBe(false)
@@ -103,25 +105,30 @@ describe('useRewardedThrottle', () => {
   })
 
   it('survives malformed JSON in localStorage', async () => {
-    window.localStorage.setItem(STORAGE_KEY, 'not-json{')
+    window.localStorage.setItem(STATE_KEY, 'not-json{')
     const mod = await importThrottle()
     expect(mod.isRewardedThrottled.value).toBe(false)
   })
 
   it('survives a non-array JSON value in localStorage', async () => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ foo: 'bar' }))
+    window.localStorage.setItem(STATE_KEY, JSON.stringify({ [STORAGE_KEY]: { foo: 'bar' } }))
     const mod = await importThrottle()
     expect(mod.isRewardedThrottled.value).toBe(false)
   })
 
   it('filters non-numeric entries when restoring', async () => {
     window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify([Date.now(), 'oops', null, Date.now()])
+      STATE_KEY,
+      JSON.stringify({ [STORAGE_KEY]: [Date.now(), 'oops', null, Date.now()] })
     )
     const mod = await importThrottle()
-    // Two valid entries restored; below the cap.
+    // Two valid entries restored; below the cap — and exactly two, so three
+    // more grants (not two) are needed to reach it.
     expect(mod.isRewardedThrottled.value).toBe(false)
+    for (let i = 0; i < mod.MAX_REWARDED - 3; i++) mod.recordRewardedGranted()
+    expect(mod.isRewardedThrottled.value).toBe(false)
+    mod.recordRewardedGranted()
+    expect(mod.isRewardedThrottled.value).toBe(true)
   })
 
   it('resetRewardedThrottle clears in-memory state and storage', async () => {
@@ -130,6 +137,9 @@ describe('useRewardedThrottle', () => {
     expect(mod.isRewardedThrottled.value).toBe(true)
     mod.resetRewardedThrottle()
     expect(mod.isRewardedThrottled.value).toBe(false)
+    vi.advanceTimersByTime(300)
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull()
+    const blob = JSON.parse(window.localStorage.getItem(STATE_KEY) || '{}')
+    expect(blob).not.toHaveProperty(STORAGE_KEY)
   })
 })

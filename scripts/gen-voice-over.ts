@@ -3,9 +3,9 @@
  *
  *   pnpm voice-over:generate
  *
- * Renders a placeholder voice-over for every line of Chapter 1 that does not
- * have one yet, in every configured locale, with the local Piper voice cast in
- * `src/world/story/voices.ts`, and drops the `.ogg` where the runtime reads it:
+ * Renders a placeholder voice-over for every registered line (`src/voice/`)
+ * that does not have one yet, in every configured locale, with the local Piper
+ * voice cast in `src/voice/voices.ts`, and drops the `.ogg` where the runtime reads it:
  *
  *   `public/speech/<locale>/<speaker>/<LINE_ID>.ogg`
  *
@@ -23,19 +23,18 @@
  *
  * The pipeline this was ported from is English-first and machine-translates into
  * German with Argos, caching the result into a generated module for review. This
- * project is the opposite: every line in `script.ts` is hand-authored in **both**
- * German and English by the author, so German text is `line.de`, English is
+ * project is the opposite: every registered line carries **both** German and
+ * English text, so German text is `line.de`, English is
  * `line.en`, and there is no translator, no cache and no generated module. That
  * is the one real difference between the two, and it removes about a third of
  * the moving parts.
  *
  * ── Env ─────────────────────────────────────────────────────────────────────
  *
- *   VO_LOCALES=de,en    which locales to render (default `de,en` — German first,
- *                       because German is this game's first language)
+ *   VO_LOCALES=de,en    which locales to render (default `de,en`)
  *   VO_DRY_RUN=1        report the plan, touch nothing
  *   VO_LIMIT=N          cap NEW files per locale (0 = no cap) — a quick proof
- *   VO_FILTER=gearn     substring match on speaker / LINE_ID / scene — re-render
+ *   VO_FILTER=narrator  substring match on speaker / LINE_ID / scene — re-render
  *                       one part after a recast
  *   VO_PRUNE_DIRECTIONS=1  delete existing files for lines carrying a
  *                       `(stage direction)`, so they re-render from cleaned text

@@ -1142,55 +1142,6 @@ const BILLETS: Record<ItemKind, Billet> = {
     top: C.woodLit,
     bottom: C.woodShadow
   },
-  // ── The arms of Arlaan ────────────────────────────────────────────────────
-  //
-  // Sized to their real models' bounding boxes rather than guessed, because a
-  // billet that is the wrong size is worse than no billet: it is the shape a
-  // designer sees while a generator is still being written, and one that is half
-  // the length teaches the wrong thing about reach and about socket clearance.
-  scrantis: {
-    // The chain hangs 0.63 m below the fist and drifts 0.24 m fore-and-aft.
-    size: [0.03, 0.72, 0.26],
-    offset: [0, -0.3, 0.0],
-    chamfer: 0.01,
-    top: C.steelLit,
-    bottom: C.steelShadow
-  },
-  scrantisPair: {
-    size: [0.1, 0.24, 0.055],
-    offset: [0, -0.09, 0],
-    chamfer: 0.008,
-    top: C.steelLit,
-    bottom: C.steelShadow
-  },
-  warAxe: {
-    // 0.82 m of haft with a 0.30 m disc on the far end.
-    size: [0.05, 0.84, 0.31],
-    offset: [0, -0.23, 0],
-    chamfer: 0.012,
-    top: C.ironLit,
-    bottom: C.ironShadow
-  },
-  // Straddles the origin like the standard bow, and a head taller.
-  huntingBow: { size: [0.042, 0.96, 0.026], offset: [0, 0, 0], chamfer: 0.008, top: C.woodLit, bottom: C.woodShadow },
-  broadsword: {
-    size: [0.062, 0.57, 0.02],
-    offset: [0, -0.24, 0],
-    chamfer: 0.008,
-    top: C.steelLit,
-    bottom: C.steelShadow
-  },
-  dagger: { size: [0.03, 0.31, 0.014], offset: [0, -0.07, 0], chamfer: 0.005, top: C.steelLit, bottom: C.steelShadow },
-  // Hangs mouth-up from the belt, with the arrows standing above it — which is
-  // why the billet's centre is *above* the socket rather than below it, the only
-  // held item in the table for which that is true.
-  quiver: {
-    size: [0.1, 0.5, 0.1],
-    offset: [0, -0.075, 0],
-    chamfer: 0.014,
-    top: C.leatherLit,
-    bottom: C.leatherShadow
-  },
   shield: { size: [0.32, 0.4, 0.045], offset: [0, 0, 0.05], chamfer: 0.016, top: C.woodLit, bottom: C.leatherShadow },
   // Hats are authored in `headTop`'s frame, which sits inside the skull — the
   // brim has to clear the built surface, not the ideal ellipsoid (HAT_CLEARANCE).

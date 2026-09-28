@@ -7,12 +7,10 @@ import type {
   SaveStrategy
 } from './types'
 import {
-  applyBonusCoins,
   computeMeta,
   decideMerge,
   META_KEY,
   parseMeta,
-  SAVE_KEYS,
   serializeMeta,
   type SaveMeta
 } from './SaveMergePolicy'
@@ -239,7 +237,7 @@ export class GlitchStrategy implements SaveStrategy {
       ?? (anyPayloadKeyPresent(local) ? computeMeta({ get: (k) => local.get(k) }) : null)
 
     const resolution = decideMerge(localMeta, remoteMeta)
-    let bonusCoinsAwarded = 0
+    const bonusCoinsAwarded = 0
 
     switch (resolution.kind) {
       case 'remote-only':
@@ -250,15 +248,6 @@ export class GlitchStrategy implements SaveStrategy {
             if (typeof value === 'string') local.set(key, value)
           }
           if (remoteMeta) local.set(META_KEY, serializeMeta(remoteMeta))
-        }
-        if (resolution.kind === 'remote-wins' && resolution.bonusCoins > 0) {
-          const newCoins = applyBonusCoins({ get: (k) => local.get(k) }, resolution.bonusCoins)
-          local.set(SAVE_KEYS.COINS, newCoins)
-          bonusCoinsAwarded = resolution.bonusCoins
-          // Refresh meta to reflect the augmented coin total.
-          local.set(META_KEY, serializeMeta(computeMeta({ get: (k) => local.get(k) })))
-          // Flush back so remote picks up the bonus.
-          this.dirty = true
         }
         break
       }

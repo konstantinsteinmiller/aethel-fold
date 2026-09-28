@@ -20,7 +20,7 @@
 //
 //   2. **Single blob key.** Yandex's setData accepts an arbitrary object;
 //      we send `{ blob: <serialized snapshot>, meta: <SaveMeta JSON> }`.
-//      The blob is the consolidated `tower_state` blob (the same payload
+//      The blob is the consolidated `aethel_state` blob (the same payload
 //      Playgama / GamePix mirror), and `meta` is the same SaveMeta the
 //      CrazyGames merge resolver uses — kept here even though we don't
 //      run the merge today, so a future cross-device merge has the data.
@@ -42,7 +42,7 @@ import type {
   SaveStrategy
 } from './types'
 import { isInternalKey } from './types'
-import { STATE_KEY } from '@/use/useTowerState'
+import { STATE_KEY } from '@/use/useAethelState'
 import { META_KEY } from './SaveMergePolicy'
 import { isDebug } from '@/use/useMatch'
 import { getYandexPlayer } from '@/utils/yandexPlugin'
@@ -55,7 +55,7 @@ const PORTAL_KEYS: ReadonlySet<string> = new Set([STATE_KEY, META_KEY])
 /** Cloud-side key the entire snapshot lives under. Yandex's `setData` takes
  *  any object; we use a single field so reads/writes are O(1) and well under
  *  the 200 KB cap. */
-const CLOUD_BLOB_KEY = 'spin_and_mow_blob'
+const CLOUD_BLOB_KEY = 'aethel_state'
 
 /** Yandex's documented limit. Logged (not enforced) so a quota breach is
  *  surfaced in QA before it hits production cert. */

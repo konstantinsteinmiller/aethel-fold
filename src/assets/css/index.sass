@@ -13,9 +13,10 @@ html, body
   /* Extra insurance against the layout moving */
   width: 100%
   height: 100%
-  /* Match the scene's night sky so the iOS PWA safe-area / home-indicator gap
-     doesn't render as a stark black bar — it blends with the battlefield. */
-  background-color: #0a1224
+  /* The desk the pop-up book lies on. Matches index.html's static splash and
+     the loading backdrop, so the iOS PWA safe-area / home-indicator gap reads
+     as desk rather than a stark black bar. */
+  background-color: #3a2416
 
 #app
   height: 100%
@@ -28,8 +29,8 @@ html, body
 
 @keyframes yellow-pulse-protected
   0%, 100%
-    background-color: #ffcd00 !important
+    background-color: #ffe066 !important
     opacity: 1
   50%
-    background-color: #f7a000 !important
+    background-color: #f4b73a !important
     opacity: 0.7

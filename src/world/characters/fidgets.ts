@@ -22,7 +22,7 @@ import type { PoseTargets } from './poses'
  * Additively, on top of a pose that has already been reset this frame. Every
  * pose path in `Character.update` starts from `resetPose` (through `applyGait`
  * or `applyIdle`), so `bone.rotation.x += …` is idempotent — the same trap
- * `combat/postures.ts` documents at length for the hip lift, arrived at from the
+ * `characters/postures.ts` documents at length for the hip lift, arrived at from the
  * other side. Nothing here writes `position`, so nothing here can accumulate
  * even if that ever stops being true.
  *
@@ -92,7 +92,7 @@ const KINDS: readonly FidgetKind[] = [
 /**
  * ── Signs, because they are not guessable and have been got wrong ───────────
  *
- * From `rig.ts` and `combat/types.ts`, both of which state them:
+ * From `rig.ts` and `characters/postures.ts`, both of which state them:
  *
  *   * the figure faces **+Z** and **+X is its LEFT**;
  *   * a **negative** `rotation.x` on an upper arm raises it *forward*;
@@ -186,7 +186,7 @@ const applyScratchNose = (bones: PoseTargets, t: number, w: number): void => {
   if (arm) {
     arm.rotation.x -= 1.7 * w
     // Across the body. The right arm's *adduction* is positive z — this is the
-    // pair `combat/types.ts` warns is most often written backwards.
+    // pair `characters/postures.ts` warns is most often written backwards.
     arm.rotation.z += 0.8 * w
   }
   const forearm = bones.get('forearm.R')

@@ -1,30 +1,17 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
-  // The cel-shaded 3D open world (see GDD.md) — this project's actual game, and
-  // therefore the route every platform build boots into.
-  { path: '/', name: 'main', component: () => import('@/views/WorldScene.vue') },
-  // The original 2D tower-siege game. Kept reachable and fully intact; it still
-  // owns `tower_state` and the whole save/ads pipeline that the 3D world
-  // inherits. Move it back to '/' to ship it again.
-  { path: '/tower', name: 'tower', component: () => import('@/views/GameScene.vue') },
-  // Design bench for the monster art direction. Lazy, so it costs a player who
-  // never visits it nothing.
-  { path: '/monsters', name: 'monsters', component: () => import('@/views/MonsterLab.vue') },
-  // Bench for the water system: one island carrying a pond, a river, a sea and
-  // three waterfalls. Lazy, for the same reason /monsters is.
+  // Castle Fold (aethel-fold-GDD.md) — the game. No main menu: booting drops
+  // the player straight onto the first page (GDD §6), so it is the default
+  // route every platform build opens.
+  { path: '/', name: 'main', component: () => import('@/views/FoldScene.vue') },
+  // The Meadowfall open-world engine bench (GDD.md). Lazy: a player who never
+  // opens it pays for none of it.
+  { path: '/world', name: 'world', component: () => import('@/views/WorldScene.vue') },
+  // Bench for the water system. Lazy, for the same reason.
   { path: '/water', name: 'water', component: () => import('@/views/WaterLabView.vue') },
-  // Character creation. Lazy for the same reason the benches are — it pulls in
-  // the chibi builder and a second three.js scene, and a player who never opens
-  // it should not pay for either.
+  // Character creation bench. Lazy for the same reason.
   { path: '/characters', name: 'characters', component: () => import('@/views/CharacterCreator.vue') },
-  // Chroniken von Arlaan, chapter 1. Lazy like every other secondary route:
-  // it pulls in the combat layer, the story cast and a second set of village
-  // assets, and a player who only ever opens the sandbox should pay for none of
-  // it.
-  { path: '/story', name: 'story', component: () => import('@/views/StoryScene.vue') },
-  // Kept so existing links and docs that pointed at /world still resolve.
-  { path: '/world', redirect: '/' },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 

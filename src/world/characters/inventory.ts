@@ -64,8 +64,8 @@ const DRAWN_SOURCE: Record<DrawnState, { slot: EquipSlot; kinds: readonly ItemKi
   // Which kinds share a state is the same question `combatPoses.POSE_FAMILY`
   // answers, and the two must agree — a kind listed here whose pose family is
   // null would animate its draw as nothing at all.
-  twoHand: { slot: 'back', kinds: ['greatsword', 'warAxe'] },
-  bow: { slot: 'back', kinds: ['bow', 'huntingBow'] },
+  twoHand: { slot: 'back', kinds: ['greatsword'] },
+  bow: { slot: 'back', kinds: ['bow'] },
   crossbow: { slot: 'back', kinds: ['crossbow'] }
 }
 

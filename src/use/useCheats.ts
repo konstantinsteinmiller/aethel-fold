@@ -1,5 +1,4 @@
 import { onMounted, onUnmounted, ref } from 'vue'
-import useTowerEconomy from '@/use/useTowerEconomy'
 import { toggleDebug } from '@/use/useMatch'
 
 // `cheat` stays a top-level localStorage flag — it's an explicit dev toggle
@@ -54,124 +53,44 @@ export const installDebugUnlock = (): void => {
 // this bare side-effect can be tree-shaken — still attach the listener at boot.
 installDebugUnlock()
 
+/** Minimal surface of the running game the cheats need (published by FoldEngine). */
+interface FoldDebugHandle {
+  jumpTo(page: number): void
+  clearPage(): void
+}
+
+const foldHandle = (): FoldDebugHandle | null =>
+  ((window as unknown as { __fold?: FoldDebugHandle }).__fold) ?? null
+
 const useCheats = () => {
   if (!isCheat.value) return {}
 
-  const { addCoins } = useTowerEconomy()
-
-  // Dev shortcuts, retargeted to aethel-fold. Waves are simulated rather than
-  // jumped to (there is no "set wave" that produces a sensible tower), so the
-  // useful cheats are resource / coin injection and wave + speed control.
-  //
-  // The simulation is reached through a DYNAMIC import, never a static one.
-  // `useCheats` is called from `App.vue`, which is on the eager boot path — a
-  // static import would drag the whole game model (blocks, enemies, waves,
-  // renderer deps) into the entry chunk and delay first paint for every
-  // player, to serve a dev-only feature that 99.99% of them never trigger.
-  // Fetching it on the keypress costs a few ms exactly once, for the developer.
-  const withGame = (fn: (game: typeof import('@/use/useTowerGame')) => void): void => {
-    void import('@/use/useTowerGame').then(fn).catch((e) => {
-      console.warn('[CHEAT] could not load the game module', e)
-    })
-  }
-
-  /**
-   * Hand the live simulation to the console as `window.__tower`.
-   *
-   * Reaching the sim from devtools with a bare `import('@/use/useTowerGame')`
-   * does NOT work during development: Vite serves an HMR-updated module under a
-   * versioned URL, so the import resolves to a second, inert copy of the
-   * singleton and every mutation lands on an object nothing is rendering. The
-   * only reliable handle is one the running app publishes itself.
-   *
-   * Dev-only, and only after the cheat sequence has been typed.
-   */
-  const publishDebugHandle = (): void => {
-    if (typeof window === 'undefined') return
-    void import('@/use/useTowerGame').then((game) => {
-      ;(window as unknown as Record<string, unknown>).__tower = game
-      console.warn('[CHEAT] window.__tower is live (spawn / inspect the running sim).')
-    })
-  }
-  publishDebugHandle()
-
+  // Dev shortcuts for Castle Fold. The running engine publishes `window.__fold`
+  // (dev builds, or when the `cheat` flag is set), so nothing here imports the
+  // game — `useCheats` runs on the eager boot path and must stay tiny.
   const cheatsMap: Record<string, () => void> = {
-    'ctrl+shift+alt+k': () => {
-      addCoins(3000)
-      console.warn('[CHEAT] +3000 coins.')
-    },
-    'ctrl+shift+alt+b': () => withGame((game) => {
-      // Drop one of every late-game threat onto the field. Reaching wave 24 by
-      // hand to look at an ironclad ram is not a reasonable ask of a reviewer.
-      game.debugSpawn(['bombardier', 'firebug', 'ironRam', 'trebuchet', 'catapult'])
-      console.warn('[CHEAT] Spawned the late-game roster.')
-    }),
-    'ctrl+shift+alt+r': () => withGame((game) => {
-      game.wood.value += 500
-      game.stone.value += 500
-      console.warn('[CHEAT] +500 wood, +500 stone.')
-    }),
-    'ctrl+shift+alt+w': () => withGame((game) => {
-      game.callWave()
-      console.warn('[CHEAT] Wave called.')
-    }),
-    'ctrl+shift+alt+f': () => withGame((game) => {
-      game.toggleSpeed()
-      console.warn('[CHEAT] Battle speed toggled.')
-    })
+    'ctrl+shift+alt+c': () => {
+      foldHandle()?.clearPage()
+      console.warn('[CHEAT] Page cleared.')
+    }
   }
-
-  const heldKeys = new Set<string>()
-  const MODIFIER_KEYS = new Set(['control', 'shift', 'alt', 'meta'])
-
-  const normalizeKey = (e: KeyboardEvent): string | null => {
-    const codeMatch = e.code.match(/^Digit(\d)$/)
-    if (codeMatch) return codeMatch[1]!
-    const k = e.key.toLowerCase()
-    return MODIFIER_KEYS.has(k) ? null : k
-  }
-
-  const buildShortcut = (e: KeyboardEvent): string => {
-    const parts: string[] = []
-    if (e.ctrlKey || e.metaKey) parts.push('ctrl')
-    if (e.shiftKey) parts.push('shift')
-    if (e.altKey) parts.push('alt')
-    const sorted = [...heldKeys].sort()
-    parts.push(...sorted)
-    return parts.join('+')
-  }
-
-  const handleKeyDown = (e: KeyboardEvent) => {
-    const key = normalizeKey(e)
-    if (key) heldKeys.add(key)
-    const shortcut = buildShortcut(e)
-    if (cheatsMap[shortcut]) {
-      e.preventDefault()
-      cheatsMap[shortcut]!()
+  for (let p = 1; p <= 6; p++) {
+    cheatsMap[`ctrl+shift+alt+${p}`] = () => {
+      foldHandle()?.jumpTo(p)
+      console.warn(`[CHEAT] Jumped to page ${p}.`)
     }
   }
 
-  const handleKeyUp = (e: KeyboardEvent) => {
-    const key = normalizeKey(e)
-    if (key) heldKeys.delete(key)
+  const onKey = (e: KeyboardEvent): void => {
+    const combo = `${e.ctrlKey ? 'ctrl+' : ''}${e.shiftKey ? 'shift+' : ''}${e.altKey ? 'alt+' : ''}${e.code.replace(/^Key|^Digit/, '').toLowerCase()}`
+    const fn = cheatsMap[combo]
+    if (fn) {
+      e.preventDefault()
+      fn()
+    }
   }
-
-  const handleBlur = () => {
-    heldKeys.clear()
-  }
-
-  onMounted(() => {
-    window.addEventListener('keydown', handleKeyDown, { passive: false })
-    window.addEventListener('keyup', handleKeyUp)
-    window.addEventListener('blur', handleBlur)
-  })
-
-  onUnmounted(() => {
-    window.removeEventListener('keydown', handleKeyDown)
-    window.removeEventListener('keyup', handleKeyUp)
-    window.removeEventListener('blur', handleBlur)
-  })
-
+  onMounted(() => window.addEventListener('keydown', onKey))
+  onUnmounted(() => window.removeEventListener('keydown', onKey))
   return { isCheat }
 }
 

@@ -3,6 +3,7 @@
  * The small corner indicator used inside `FHudButton`'s `badge` slot —
  * a claim count, a reward amount, or a countdown. Fluidly sized so it stays
  * legible on a 320 px phone without swallowing the chip it sits on.
+ * Castle Fold look: a small creased paper tag with an ink border.
  */
 interface Props {
   tone?: 'red' | 'blue' | 'gold' | 'green'
@@ -16,22 +17,27 @@ withDefaults(defineProps<Props>(), { tone: 'red' })
 </template>
 
 <style scoped lang="sass">
+@use '@/assets/css/paper' as paper
+
 .f-hud-badge
+  --tag-from: #{paper.$red}
+  --tag-to: #{paper.$red-shade}
   display: inline-flex
   align-items: center
   justify-content: center
   gap: 0.15em
-  min-width: clamp(0.95rem, 4vw, 1.2rem)
-  min-height: clamp(0.95rem, 4vw, 1.2rem)
-  padding-inline: 0.3em
-  border: 2px solid #fff
-  border-radius: 999px
-  color: #fff
+  min-width: clamp(1rem, 4vw, 1.25rem)
+  min-height: clamp(1rem, 4vw, 1.25rem)
+  padding-inline: 0.35em
+  border: 2px solid paper.$ink
+  border-radius: 0.2em
+  background-image: paper.crease(var(--tag-from), var(--tag-to), 160deg, 55%)
   font-weight: 900
   line-height: 1
-  font-size: clamp(0.55rem, 2.4vw, 0.72rem)
+  font-size: clamp(0.6rem, 2.4vw, 0.75rem)
   white-space: nowrap
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45)
+  box-shadow: 0 2px 0 paper.$shadow
+  @include paper.ink-text-thin
 
   // Both element types, deliberately. `IconCoin` is an `<img>` while every
   // other icon in the set is an inline `<svg>`, and an `svg`-only rule let the
@@ -44,12 +50,13 @@ withDefaults(defineProps<Props>(), { tone: 'red' })
     height: 1em
     object-fit: contain
 
-.tone-red
-  background-color: #ef4444
 .tone-blue
-  background-color: #102e7a
+  --tag-from: #{paper.$blue}
+  --tag-to: #{paper.$blue-shade}
 .tone-gold
-  background-color: #f7a000
+  --tag-from: #{paper.$yellow}
+  --tag-to: #{paper.$yellow-shade}
 .tone-green
-  background-color: #1f9d4d
+  --tag-from: #{paper.$green}
+  --tag-to: #{paper.$green-shade}
 </style>

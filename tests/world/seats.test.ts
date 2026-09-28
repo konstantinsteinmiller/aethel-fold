@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Box3 } from 'three'
 import { registerAllPlaceables } from '@/world/assets/index'
-import { SEAT_HEIGHT, type SeatKind } from '@/world/combat/postures'
+import { SEAT_HEIGHT, type SeatKind } from '@/world/characters/postures'
 import {
   buildWorldSeats,
   resolveSeatFacing,
@@ -13,9 +13,6 @@ import {
 } from '@/world/interaction'
 import { getPlaceable } from '@/world/level/catalog'
 import type { Placement } from '@/world/level/types'
-import { CAMP, campPlacements } from '@/world/story/camp'
-import { framePlacements } from '@/world/story/frame'
-import { chapterOnePlacements, TREFF } from '@/world/story/level'
 
 /**
  * ─── The seat catalogue, against the geometry it claims to describe ─────────
@@ -198,44 +195,6 @@ describe('resolving seats into the world', () => {
       () => 0
     )
     expect(seats).toHaveLength(0)
-  })
-})
-
-describe('the chapter actually has seats in it', () => {
-  /**
-   * The referential half, and the one that catches a rename.
-   *
-   * Everything else in this file proves the machinery works on seats it made
-   * up. This proves the *chapter* still contains some — a `village-bench`
-   * renamed in `assets/index.ts`, or a Treff rebuilt out of stumps, would leave
-   * every test above green and the feature reachable nowhere.
-   */
-  it('finds the Treff benches, the storyteller’s furniture and nothing in the camp', () => {
-    const seats = buildWorldSeats([...chapterOnePlacements(), ...framePlacements(), ...campPlacements()], () => 0)
-    const count = (defId: string): number => seats.filter(seat => seat.defId === defId).length
-
-    // Four round der Treff's fire, plus the one in the island's yard.
-    expect(count('village-bench')).toBe(5)
-    // Six round the table, and the chair by the hearth.
-    expect(count('hut-stool')).toBe(6)
-    expect(count('hut-chair')).toBe(1)
-    expect(count('hut-bed')).toBe(1)
-
-    // Four of the five benches ring der Treff. Their anchors have to land on
-    // the props rather than at the placements' feet, so a bench 2.5 m from the
-    // fire pit stays 2.5 m from it.
-    const treff = seats.filter(seat => Math.hypot(seat.x - TREFF.x, seat.z - TREFF.z) < 3.5)
-    expect(treff).toHaveLength(4)
-    for (const seat of treff) {
-      expect(seat.y).toBeCloseTo(SEAT_HEIGHT.bench, 6)
-      expect(seat.facingMode).toBe('either')
-    }
-
-    // The camp sits on fallen logs and stumps, which are deliberately not in
-    // the catalogue — see the header there. If somebody makes them sittable,
-    // this is the line that says so.
-    const camp = seats.filter(seat => Math.hypot(seat.x - CAMP.x, seat.z - CAMP.z) < 20)
-    expect(camp).toHaveLength(0)
   })
 })
 

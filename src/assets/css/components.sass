@@ -71,18 +71,30 @@ html[native-dark-active] .game-ui-immune
     //background-color: #ffcd00 !important
     opacity: 1 !important
 
+// ─── Castle Fold text helpers ───────────────────────────────────────────────
+// Ink keyline (#1c1724), never pure black: white lettering outlined in all
+// eight directions, the way a paper cut-out title is inked.
+:root
+  --paper-ink: #1c1724
+  --paper-ink-outline: 2px 0 0 #1c1724, -2px 0 0 #1c1724, 0 2px 0 #1c1724, 0 -2px 0 #1c1724, 1.5px 1.5px 0 #1c1724, -1.5px 1.5px 0 #1c1724, 1.5px -1.5px 0 #1c1724, -1.5px -1.5px 0 #1c1724
+  --paper-ink-outline-thin: 1px 0 0 #1c1724, -1px 0 0 #1c1724, 0 1px 0 #1c1724, 0 -1px 0 #1c1724, 1px 1px 0 #1c1724, -1px 1px 0 #1c1724, 1px -1px 0 #1c1724, -1px -1px 0 #1c1724
+
 .custom-red-bg
-  background-color: #ff3e3e !important
+  background-color: #ff6a5c !important
 
 .text-shadow
-  text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
+  text-shadow: var(--paper-ink-outline)
 
 .text-shadow-light
-  text-shadow: 3px 3px 0 #555, -1px -1px 0 #555, 1px -1px 0 #555, -1px 1px 0 #555, 1px 1px 0 #555
-
+  text-shadow: var(--paper-ink-outline-thin)
 
 .game-text
-  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
+  text-shadow: var(--paper-ink-outline)
+
+// Ink-on-parchment body copy.
+.paper-ink-text
+  color: #1c1724
+  text-shadow: none
 
 .attention-bounce
   animation: attention-bounce 1.4s infinite ease-in-out
@@ -92,34 +104,34 @@ html[native-dark-active] .game-ui-immune
 
 @keyframes attention-bounce
   0%, 20%, 50%, 80%, 100%
-    transform: translateY(0) scale(1)
+    transform: translateY(0)
   40%
-    transform: translateY(-8px) scale(1.05)
+    transform: translateY(-8px)
   60%
-    transform: translateY(-4px) scale(1.02)
+    transform: translateY(-4px)
 
 // New Hint Animation: 3s bounce, 3s pause (Total 6s cycle)
 @keyframes hint-bounce-cycle
   // Bouncing phase (0% to 50% of 6 seconds = 3 seconds)
   0%, 7.5%, 18.75%, 30%, 37.5%
-    transform: translateY(0) scale(1)
+    transform: translateY(0)
   22%
-    transform: translateY(-15px) scale(1.06)
+    transform: translateY(-15px)
   34.5%
-    transform: translateY(-7px) scale(1.03)
+    transform: translateY(-7px)
   // Pausing phase (50% to 100% = 3 seconds)
   50%, 100%
-    transform: translateY(0) scale(1)
+    transform: translateY(0)
 
 
 @keyframes instant-bounce-cycle
   // Bouncing phase (0% to 100% = 3 seconds)
   0%, 7.5%, 18.75%, 30%, 37.5%, 57.5%, 68.75%, 80%, 87.5%, 50%, 100%
-    transform: translateY(0) scale(1)
+    transform: translateY(0)
   22%, 72%
-    transform: translateY(-15px) scale(1.06)
+    transform: translateY(-15px)
   34.5%, 84.5%
-    transform: translateY(-7px) scale(1.03)
+    transform: translateY(-7px)
 
 .instant-bounce
   animation: instant-bounce-cycle 3s infinite ease-in-out
@@ -133,8 +145,8 @@ html[native-dark-active] .game-ui-immune
 @keyframes hint-bounce-cycle-2
   // Bouncing phase (50% to 100% of 5 seconds = 3 seconds)
   0%, 40.5%, 56.5%, 68.75%, 80%, 87.5%, 100%
-    transform: translateY(0) scale(1)
+    transform: translateY(0)
   48.5%, 72%
-    transform: translateY(-15px) scale(1.06)
+    transform: translateY(-15px)
   63.5%, 84.5%
-    transform: translateY(-7px) scale(1.03)
+    transform: translateY(-7px)

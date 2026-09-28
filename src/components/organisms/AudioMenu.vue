@@ -51,11 +51,11 @@
   `FSlider` and `FSwitch` exist and were rejected: they are the 2D tower game's
   chrome — skewed bodies, yellow-to-orange gradients, four-way black text
   shadows — and dropping one into this overlay reads as a different game pasted
-  into the pause menu. The house style here is `StoryOverlay`'s: slate plate,
+  into the pause menu. The house style here is a slate plate,
   one hairline ring, amber only where something is on.
 
   ── What consumes these ─────────────────────────────────────────────────────
-  Voices does: `world/story/speech.ts` plays the chapter's voice-over at
+  Voices does: `src/voice/speech.ts` plays voice-over lines at
   `masterVolume × voiceVolume`, silenced by `muted`, and pushes a mid-sentence
   slider move onto the clip that is already talking. The other two are still
   stored-only — the world has no music or effects mixer at the time of writing —

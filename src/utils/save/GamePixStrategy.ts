@@ -29,13 +29,13 @@
 //      per session so it isn't spammy.
 //
 //   3. **PORTAL_KEYS allowlist.** Only mirror the consolidated state
-//      blob (`tower_state`), NOT internal-scratch keys or debug-only
+//      blob (`aethel_state`), NOT internal-scratch keys or debug-only
 //      flags. The latter should stay local-only by design — they
 //      shouldn't roam across devices.
 
 import type { HydrateState, LocalStorageAccessor, SaveStrategy } from './types'
 import { isInternalKey } from './types'
-import { STATE_KEY } from '@/use/useTowerState'
+import { STATE_KEY } from '@/use/useAethelState'
 import { META_KEY } from './SaveMergePolicy'
 import { isDebug } from '@/use/useMatch'
 

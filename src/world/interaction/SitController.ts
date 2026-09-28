@@ -1,4 +1,4 @@
-import type { SeatKind } from '../combat/postures'
+import type { SeatKind } from '../characters/postures'
 import { resolveSeatFacing, type WorldSeat } from './seats'
 
 /**
@@ -57,7 +57,7 @@ export type SitPhase = 'idle' | 'walking' | 'sitting' | 'seated' | 'standing'
 /**
  * ─── How far a sitter's root has to rise, and why it is not zero ────────────
  *
- * `combat/postures.ts` solves the seated leg from **the rig's bind-pose bone
+ * `characters/postures.ts` solves the seated leg from **the rig's bind-pose bone
  * lengths** — hip 0.62, thigh 0.27, shin 0.27 — and every figure in the game is
  * that rig under a **uniform group scale**. `cast.ts` spends 0.94 to 1.07 of it
  * on making adults tell each other apart, and two much larger numbers on the

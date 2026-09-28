@@ -181,13 +181,20 @@ export class CrazyGamesStrategy implements SaveStrategy {
       }
     }
 
-    const remoteKeys = parseManifest(manifestRaw)
+    // Only keys this build persists. A manifest written by a pre-port build
+    // (`tower_state` / `ts_*`) names keys that are no longer payload; left
+    // in, they made the "only META came back" guard below fire on every
+    // attempt, wedging the player in `failed-retrying` — no cloud save ever
+    // again, plus the 3 s boot-sanity stall on every launch.
+    const remoteKeys = parseManifest(manifestRaw).filter(isPayloadKey)
 
-    // Genuine "fresh remote": SDK responded successfully but had no manifest.
-    if (manifestRaw === null && remoteKeys.length === 0) {
+    // Genuine "fresh remote": SDK responded successfully but has no state
+    // blob of ours — no manifest at all, or one naming only foreign keys /
+    // a lone META (which describes a save we can't restore).
+    if (!remoteKeys.some(k => k !== META_KEY)) {
       this.setState('success-empty', 'remote has no save')
       // Seed cloud with whatever local already has — gameplay state from
-      // the current/prior session AND user settings (`ts_user_*`)
+      // the current/prior session AND user settings (`user_*`)
       // present from useUser.ts's module-init writes. `lastSentByKey` is
       // empty here so every local payload key is genuinely new to remote
       // and gets queued.
@@ -317,7 +324,7 @@ export class CrazyGamesStrategy implements SaveStrategy {
     // from the (post-merge) snapshot held in `lastSentByKey` needs to be
     // queued for upload. Catches the case where useUser.ts seeded its
     // ref defaults into localStorage but the player never explicitly
-    // re-saved them — without this, settings (`ts_user_*`) and any
+    // re-saved them — without this, settings (`user_*`) and any
     // other passively-written gameplay keys would live forever in local
     // and never round-trip through `sdk.data`. Per-key dedupe in
     // `doFlush` skips writes already authoritative remotely.

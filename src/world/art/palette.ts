@@ -461,9 +461,9 @@ export const HEX = {
   strawBase: 0xbfa261,
   strawShadow: 0x7d6738,
 
-  // ── Arlaan: the built village ────────────────────────────────────────────
+  // ── The built village ───────────────────────────────────────────────────
   //
-  // Nimmerschein is a timber village inside a palisade, and its whole read at
+  // A timber village inside a palisade, and its whole read at
   // distance is **three fields**: dark oak frame, pale daub panel, warm thatch.
   // They are authored as a triple rather than borrowed from `wood*` because the
   // two jobs pull opposite ways — `woodBase` is *planed* timber and has to
@@ -476,7 +476,7 @@ export const HEX = {
   timberBase: 0x5f462d,
   timberShadow: 0x342517,
   /** Wattle-and-daub infill. Warm off-white — never a neutral grey, or the
-   *  village reads as stone and Arlaan stops being a farming country. */
+   *  village reads as stone rather than farming country. */
   daubLit: 0xeadfc6,
   daubBase: 0xcfc0a1,
   daubShadow: 0x968769,
@@ -496,19 +496,19 @@ export const HEX = {
   ironLit: 0x7f8894,
   ironBase: 0x545c68,
   ironShadow: 0x2b3038,
-  /** The forge fire, and the fire pit at the Treff. The only emissive-looking
+  /** The forge fire, and the village fire pit. The only emissive-looking
    *  field in the world, so it is kept small and never appears as a large area. */
   emberLit: 0xffd487,
   emberBase: 0xef8a3c,
   emberDeep: 0x8e2f14,
-  /** Arlaan's arms: a golden griffin on red. The banner over the gate and the
-   *  town guards' livery both take these, so they cannot drift apart. */
-  arlaanRed: 0x9c2b2e,
-  arlaanGold: 0xd8ae4e,
+  /** Heraldic red and gold. The banner over the gate and the town guards'
+   *  livery both take these, so they cannot drift apart. */
+  bannerRed: 0x9c2b2e,
+  bannerGold: 0xd8ae4e,
 
-  // ── Arlaan: the wild ─────────────────────────────────────────────────────
-  /** The Trollschwein. Coarse dark bristle over a warmer hide, so the beast
-   *  reads as an animal rather than as a rock with legs when it is still. */
+  // ── The wild ─────────────────────────────────────────────────────────────
+  /** Boar hide. Coarse dark bristle over a warmer hide, so a beast reads as
+   *  an animal rather than as a rock with legs when it is still. */
   boarBristle: 0x3f3226,
   boarHide: 0x6b533b,
   boarSnout: 0x8f6f57,
@@ -518,8 +518,7 @@ export const HEX = {
   boneBase: 0xc4b391,
   boneShadow: 0x7d705a,
   /** Bandit cloth. Deliberately the most desaturated garment field in the
-   *  world: five figures breaking out of a treeline have to read as *shapes*
-   *  first, and colour is what would make them read as people. */
+   *  world: figures breaking out of a treeline read as *shapes* first. */
   banditLit: 0x5a565f,
   banditBase: 0x3d3b3f,
   banditShadow: 0x211f24

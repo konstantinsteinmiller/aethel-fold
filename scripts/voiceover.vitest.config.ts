@@ -9,7 +9,7 @@ import { defineConfig } from 'vitest/config'
  *
  * ── Why `node` and not `jsdom` ──────────────────────────────────────────────
  *
- * The tooling path is pure data: `lineIds.ts` → `script.ts` → nothing. No Vue,
+ * The tooling path is pure data: `src/voice/lines.ts` + `voices.ts`. No Vue,
  * no three.js, no composable, no DOM. Running it under jsdom would only add the
  * one landmine jsdom brings to this project — a `localStorage` stub whose
  * methods are all `undefined` (see `tests/save/setup.ts`) — in exchange for

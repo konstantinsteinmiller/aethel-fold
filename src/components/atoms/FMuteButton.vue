@@ -3,44 +3,92 @@ import { mobileCheck } from '@/utils/function'
 import { isMobilePortrait, isMobileLandscape } from '@/use/useUser'
 import { isMuted, toggleMute } from '@/use/useCrazyMuteSync'
 import { isMobileAudioMuted, toggleMobileAudioMute } from '@/use/useMobileAudioMute'
+import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
 </script>
 
 <template lang="pug">
   div.flex.flex-col.items-end.gap-1
     //- Desktop: volume-based mute (Web Audio gain works here).
-    button.mute-btn.rounded-full.backdrop-blur-sm.transition-all.cursor-pointer(
+    button.mute-btn(
       v-if="!mobileCheck()"
-      class="bg-black/20 hover:bg-black/40 active:scale-95 pointer-events-auto"
+      type="button"
+      :aria-pressed="isMuted"
       @click="toggleMute"
     )
-      span.mute-btn__icon {{ isMuted ? '🔇': '🔊' }}
+      span.mute-btn__shadow(aria-hidden="true")
+      span.mute-btn__body
+        OrigamiIcon.mute-btn__icon(:name="isMuted ? 'speakerMute' : 'speaker'" tone="blue")
     //- Mobile: hard silence toggle. The OS volume rocker owns the device level,
     //- so this suspends all engine audio + blocks new music/SFX instead of
     //- changing volume — letting players run their own music app.
-    button.mute-btn.rounded-full.backdrop-blur-sm.transition-all.cursor-pointer(
+    button.mute-btn(
       v-else-if="isMobilePortrait || isMobileLandscape"
-      class="bg-black/20 hover:bg-black/40 active:scale-95 pointer-events-auto"
+      type="button"
+      :aria-pressed="isMobileAudioMuted"
       @click="toggleMobileAudioMute"
     )
-      span.mute-btn__icon {{ isMobileAudioMuted ? '🔇': '🔊' }}
+      span.mute-btn__shadow(aria-hidden="true")
+      span.mute-btn__body
+        OrigamiIcon.mute-btn__icon(:name="isMobileAudioMuted ? 'speakerMute' : 'speaker'" tone="blue")
 </template>
 
 <style scoped lang="sass">
-// Sized deliberately, not by its glyph.
-//
-// `p-2` around a `text-2xl` emoji made this 49 px wide — the largest control in
-// the bottom row, and by some margin the least important one in it. Explicit
-// box sizing puts it a step BELOW the action buttons beside it, which is where
-// a rarely-touched toggle belongs; 2.25 rem still clears a comfortable thumb.
+@use '@/assets/css/paper' as paper
+
+// Sized deliberately, not by its glyph: a step BELOW the action buttons beside
+// it, which is where a rarely-touched toggle belongs, but never under the
+// 2.5rem touch floor. A parchment chip, so it reads as quieter than the
+// coloured action chips.
 .mute-btn
+  --bw: 2.5px
+  --depth: 3px
+  --ear: clamp(0.45rem, 1.8vw, 0.6rem)
+  position: relative
   display: inline-flex
   align-items: center
   justify-content: center
-  width: clamp(2.25rem, 9.2vw, 2.6rem)
-  height: clamp(2.25rem, 9.2vw, 2.6rem)
+  min-width: 2.5rem
+  min-height: 2.5rem
+  width: clamp(2.5rem, 9.2vw, 2.85rem)
+  height: clamp(2.5rem, 9.2vw, 2.85rem)
   padding: 0
+  border: 0
+  background: none
+  cursor: pointer
+  pointer-events: auto
+  touch-action: manipulation
+  -webkit-tap-highlight-color: transparent
+
+  @media (hover: hover)
+    &:hover .mute-btn__body
+      transform: translateY(-2px)
+
+  &:active .mute-btn__body
+    transform: translateY(2px)
+
+  &:focus-visible
+    outline: 3px solid paper.$blue
+    outline-offset: 4px
+
+.mute-btn__shadow
+  @include paper.shadow-plate
+
+.mute-btn__body
+  position: relative
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 100%
+  height: 100%
+  border: var(--bw) solid paper.$ink
+  background-image: paper.crease(paper.$parchment, paper.$parchment-shade, 135deg, 55%)
+  transition: transform 90ms ease-out
+  @include paper.dog-ear-clip
+
+  &::after
+    @include paper.dog-ear-flap(paper.$parchment-shade)
 
 .mute-btn__icon
-  font-size: clamp(1rem, 4.4vw, 1.35rem)
-  line-height: 1
+  position: relative
+  font-size: clamp(1.05rem, 4.4vw, 1.4rem)
 </style>

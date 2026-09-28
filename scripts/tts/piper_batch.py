@@ -11,7 +11,7 @@
 
 Loading a Piper ONNX model costs 1-2 s; rendering a short line costs 0.1-0.3 s.
 So the generator groups every line that shares a voice and hands them here in one
-batch — the difference between a few minutes for a chapter and a few hours.
+batch — the difference between a few minutes for a game's script and a few hours.
 
 One bad line must not sink the batch, so a synthesis failure is reported on
 stderr and skipped; the exit code is the number of FAILED lines (0 = all good).

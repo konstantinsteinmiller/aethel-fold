@@ -42,31 +42,36 @@ const props = withDefaults(defineProps<Props>(), {
 
 defineEmits(['click'])
 
+// Paper colours (lit → shaded half of the crease). `colorFrom` / `colorTo`
+// still override the two halves; `shadowColor` overrides the drop plate, which
+// otherwise is the periwinkle desk shadow — never black.
+const PAPER_SHADOW = 'rgba(76, 64, 120, 0.45)'
+
 const theme = computed(() => {
   switch (props.type) {
     case 'secondary':
       return {
-        from: props.colorFrom ?? '#50aaff',
-        to: props.colorTo ?? '#2266ff',
-        shadow: props.shadowColor ?? '#102e7a'
+        from: props.colorFrom ?? '#5f95ff',
+        to: props.colorTo ?? '#3464d6',
+        shadow: props.shadowColor ?? PAPER_SHADOW
       }
     case 'danger':
       return {
-        from: props.colorFrom ?? '#ff6b5a',
-        to: props.colorTo ?? '#c62828',
-        shadow: props.shadowColor ?? '#6b1212'
+        from: props.colorFrom ?? '#ff6a5c',
+        to: props.colorTo ?? '#d8433b',
+        shadow: props.shadowColor ?? PAPER_SHADOW
       }
     case 'success':
       return {
-        from: props.colorFrom ?? '#67e08a',
-        to: props.colorTo ?? '#1f9d4d',
-        shadow: props.shadowColor ?? '#0e5c2c'
+        from: props.colorFrom ?? '#7fdc7a',
+        to: props.colorTo ?? '#45a64a',
+        shadow: props.shadowColor ?? PAPER_SHADOW
       }
     default:
       return {
-        from: props.colorFrom ?? '#ffcd00',
-        to: props.colorTo ?? '#f7a000',
-        shadow: props.shadowColor ?? '#1a2b4b'
+        from: props.colorFrom ?? '#ffe066',
+        to: props.colorTo ?? '#f4b73a',
+        shadow: props.shadowColor ?? PAPER_SHADOW
       }
   }
 })
@@ -74,46 +79,47 @@ const theme = computed(() => {
 /**
  * Per-size fluid metrics. The `vw` term is what makes the button responsive;
  * the min/max clamp keeps it usable at both extremes. `--fbtn-min-h` is never
- * below 2.25rem (36px) for `sm` and 2.75rem (44px) elsewhere — the WCAG touch
+ * below 2.5rem (40px) for `sm` and 2.75rem (44px) elsewhere — the touch
  * target floor — so no parent layout can crush the control out of existence.
+ * `--ear` is the folded top-right corner.
  */
 const sizeVars = computed<Record<string, string>>(() => {
   switch (props.size) {
     case 'sm':
       return {
         '--fbtn-font': 'clamp(0.7rem, 2.6vw, 0.95rem)',
-        '--fbtn-px': 'clamp(0.6rem, 2.6vw, 1rem)',
+        '--fbtn-px': 'clamp(0.7rem, 2.8vw, 1.1rem)',
         '--fbtn-py': 'clamp(0.3rem, 1.2vw, 0.5rem)',
         '--fbtn-min-w': 'clamp(3.5rem, 18vw, 6rem)',
-        '--fbtn-min-h': '2.25rem',
-        '--fbtn-radius': 'clamp(0.5rem, 2vw, 0.85rem)'
+        '--fbtn-min-h': '2.5rem',
+        '--ear': 'clamp(0.45rem, 1.6vw, 0.65rem)'
       }
     case 'lg':
       return {
         '--fbtn-font': 'clamp(1rem, 4.2vw, 1.6rem)',
-        '--fbtn-px': 'clamp(1.1rem, 5vw, 2.2rem)',
+        '--fbtn-px': 'clamp(1.2rem, 5vw, 2.3rem)',
         '--fbtn-py': 'clamp(0.55rem, 2.2vw, 0.95rem)',
         '--fbtn-min-w': 'clamp(6.5rem, 34vw, 12rem)',
         '--fbtn-min-h': '3rem',
-        '--fbtn-radius': 'clamp(0.75rem, 3vw, 1.35rem)'
+        '--ear': 'clamp(0.65rem, 2.4vw, 1.05rem)'
       }
     case 'xl':
       return {
         '--fbtn-font': 'clamp(1.15rem, 5vw, 2rem)',
-        '--fbtn-px': 'clamp(1.4rem, 6vw, 2.8rem)',
+        '--fbtn-px': 'clamp(1.5rem, 6vw, 2.9rem)',
         '--fbtn-py': 'clamp(0.65rem, 2.6vw, 1.15rem)',
         '--fbtn-min-w': 'clamp(8rem, 42vw, 15rem)',
         '--fbtn-min-h': '3.25rem',
-        '--fbtn-radius': 'clamp(0.85rem, 3.4vw, 1.6rem)'
+        '--ear': 'clamp(0.75rem, 2.8vw, 1.25rem)'
       }
     default:
       return {
         '--fbtn-font': 'clamp(0.85rem, 3.4vw, 1.25rem)',
-        '--fbtn-px': 'clamp(0.85rem, 4vw, 1.6rem)',
+        '--fbtn-px': 'clamp(0.95rem, 4vw, 1.7rem)',
         '--fbtn-py': 'clamp(0.45rem, 1.8vw, 0.75rem)',
         '--fbtn-min-w': 'clamp(5rem, 26vw, 9rem)',
         '--fbtn-min-h': '2.75rem',
-        '--fbtn-radius': 'clamp(0.65rem, 2.6vw, 1.1rem)'
+        '--ear': 'clamp(0.55rem, 2vw, 0.85rem)'
       }
   }
 })
@@ -139,17 +145,20 @@ const styleVars = computed(() => ({
     :disabled="isDisabled"
     @click="!isDisabled && $emit('click')"
   )
-    //- 3D depth plate behind the body.
+    //- The paper's shadow on the desk, clipped to the same dog-eared outline.
     span.f-button__shadow(aria-hidden="true")
+    //- The folded sheet: crease across the face, dog-ear top-right (::after).
     span.f-button__body
-      //- Classic top shine.
-      span.f-button__shine(aria-hidden="true")
       span.f-button__text
         slot {{ label }}
 </template>
 
 <style scoped lang="sass">
+@use '@/assets/css/paper' as paper
+
 .f-button
+  --bw: 3px
+  --depth: 4px
   position: relative
   display: inline-flex
   align-items: center
@@ -164,40 +173,42 @@ const styleVars = computed(() => ({
   cursor: pointer
   touch-action: manipulation
   -webkit-tap-highlight-color: transparent
-  transition: transform 90ms ease-out, filter 90ms ease-out
+  transition: filter 90ms ease-out
 
   &.is-block
     display: flex
     width: 100%
 
-  &:hover:not(.is-disabled)
-    filter: brightness(1.08)
+  @media (hover: hover)
+    &:hover:not(.is-disabled) .f-button__body
+      transform: translateY(-2px)
+    &:hover:not(.is-disabled) .f-button__shadow
+      transform: translateY(calc(var(--depth) + 1px))
 
-  &:active:not(.is-disabled)
-    transform: translateY(2px) scale(0.97)
+  // Pressed: the sheet is pushed down onto the desk, so its shadow shrinks.
+  &:active:not(.is-disabled) .f-button__body
+    transform: translateY(3px)
+
+  &:focus-visible
+    outline: 3px solid paper.$blue
+    outline-offset: 4px
 
   &.is-disabled
-    opacity: 0.5
-    filter: grayscale(1)
+    opacity: 0.55
+    filter: grayscale(0.85)
     cursor: not-allowed
 
   &.is-brawl
-    transform: skewX(-10deg)
-
-    &:active:not(.is-disabled)
-      transform: skewX(-10deg) translateY(2px) scale(0.97)
+    transform: skewX(-8deg)
 
     .f-button__text
-      transform: skewX(10deg)
-      font-style: italic
+      transform: skewX(8deg)
       letter-spacing: -0.01em
 
 .f-button__shadow
-  position: absolute
-  inset: 0
-  transform: translateY(3px)
-  border-radius: var(--fbtn-radius)
+  @include paper.shadow-plate
   background-color: var(--fbtn-shadow)
+  transition: transform 90ms ease-out
 
 .f-button__body
   position: relative
@@ -206,31 +217,24 @@ const styleVars = computed(() => ({
   justify-content: center
   width: 100%
   min-height: var(--fbtn-min-h)
-  padding: var(--fbtn-py) var(--fbtn-px)
-  border: 2px solid #0f1a30
-  border-radius: var(--fbtn-radius)
-  background-image: linear-gradient(to bottom, var(--fbtn-from), var(--fbtn-to))
-  overflow: hidden
+  padding: var(--fbtn-py) calc(var(--fbtn-px) + var(--ear) * 0.25) var(--fbtn-py) var(--fbtn-px)
+  border: var(--bw) solid paper.$ink
+  background-image: paper.soft-crease(var(--fbtn-from), var(--fbtn-to))
+  transition: transform 90ms ease-out
+  @include paper.dog-ear-clip
 
-.f-button__shine
-  position: absolute
-  inset-inline: 0
-  top: 0
-  height: 48%
-  background-color: rgba(255, 255, 255, 0.25)
-  border-radius: var(--fbtn-radius) var(--fbtn-radius) 0 0
-  pointer-events: none
+  &::after
+    @include paper.dog-ear-flap(var(--fbtn-to))
 
 .f-button__text
   position: relative
   display: block
-  color: #fff
   font-weight: 900
   text-transform: uppercase
   font-size: var(--fbtn-font)
   line-height: 1.15
   white-space: nowrap
-  text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
+  @include paper.ink-text
 
 .attention-bounce
   animation: fbtn-bounce 0.6s infinite alternate
@@ -239,5 +243,5 @@ const styleVars = computed(() => ({
   from
     translate: 0 0
   to
-    translate: 0 -5px
+    translate: 0 -0.3rem
 </style>

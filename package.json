@@ -26,7 +26,8 @@
     "test:watch": "vitest",
     "voice-over:todo": "vitest run --config scripts/voiceover.vitest.config.ts",
     "voice-over:setup": "vitest run --config scripts/voiceover-setup.vitest.config.ts",
-    "voice-over:generate": "vitest run --config scripts/voiceover-gen.vitest.config.ts"
+    "voice-over:generate": "vitest run --config scripts/voiceover-gen.vitest.config.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@vueuse/core": "^14.2.1",
@@ -40,6 +41,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.6",
     "@intlify/unplugin-vue-i18n": "^11.0.7",
+    "@playwright/test": "1.56.1",
     "@tailwindcss/vite": "^4.2.1",
     "@tsconfig/node24": "^24.0.4",
     "@types/lodash.clonedeep": "^4.5.9",

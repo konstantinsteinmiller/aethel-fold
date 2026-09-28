@@ -40,13 +40,19 @@ const selectTab = (value: string | number): void => {
 </template>
 
 <style scoped lang="sass">
+@use '@/assets/css/paper' as paper
+
+// Paper tabs: parchment slips tucked behind the active one, which is a creased
+// sheet of red paper with a dog-ear, raised and outlined in ink.
 .f-tabs
   display: flex
   align-items: flex-end
   justify-content: center
-  gap: 0
+  gap: clamp(0.1rem, 0.6vw, 0.25rem)
   max-width: 100%
   padding-inline: clamp(0.25rem, 2vw, 1rem)
+  // Room for the raised active tab and its shadow inside the scroller.
+  padding-top: 0.35rem
   overflow-x: auto
   overflow-y: hidden
   scrollbar-width: none
@@ -55,67 +61,70 @@ const selectTab = (value: string | number): void => {
     display: none
 
 .f-tabs__tab
+  --bw: 3px
+  --ear: clamp(0.45rem, 1.8vw, 0.7rem)
+  --tab-from: #{paper.$parchment-mid}
+  --tab-to: #{paper.$parchment-shade}
   position: relative
   flex: 0 0 auto
   // Floor so a tab can never render as an invisible sliver.
   min-width: 3.25rem
-  min-height: 2.1rem
+  min-height: 2.5rem
   padding: 0
   border: 0
   background: none
   cursor: pointer
-  opacity: 0.8
-  transition: transform 140ms ease-out, opacity 140ms ease-out
+  transition: translate 140ms ease-out
   -webkit-tap-highlight-color: transparent
 
-  &:hover
-    opacity: 1
+  @media (hover: hover)
+    &:hover:not(.is-active)
+      translate: 0 -0.12rem
 
   &:active
-    transform: scale(0.94)
+    translate: 0 2px
+
+  &:focus-visible
+    outline: 3px solid paper.$blue
+    outline-offset: 2px
 
   &.is-active
+    --tab-from: #{paper.$red}
+    --tab-to: #{paper.$red-shade}
     z-index: 10
-    opacity: 1
-    translate: 0 -0.25rem
+    translate: 0 -0.3rem
 
 .f-tabs__shadow
   position: absolute
   inset: 0
+  background-color: paper.$shadow
   transform: translateY(3px)
-  border-radius: clamp(0.5rem, 2.4vw, 1rem) clamp(0.5rem, 2.4vw, 1rem) 0 0
-  background-color: #0f1a30
+  @include paper.dog-ear-clip
 
 .f-tabs__body
   position: relative
   display: flex
   align-items: center
   justify-content: center
-  min-height: 2.1rem
-  padding: clamp(0.2rem, 1vw, 0.4rem) clamp(0.6rem, 3.2vw, 1.35rem)
-  border-inline: 4px solid #0f1a30
-  border-top: 4px solid #0f1a30
-  border-radius: clamp(0.5rem, 2.4vw, 1rem) clamp(0.5rem, 2.4vw, 1rem) 0 0
-  background-color: #2a4372
-  color: #8fa7d1
-  transition: background-color 140ms ease-out
+  min-height: 2.5rem
+  padding: clamp(0.2rem, 1vw, 0.4rem) calc(clamp(0.6rem, 3.2vw, 1.35rem) + var(--ear) * 0.3) clamp(0.2rem, 1vw, 0.4rem) clamp(0.6rem, 3.2vw, 1.35rem)
+  border: var(--bw) solid paper.$ink
+  background-image: paper.crease(var(--tab-from), var(--tab-to), 150deg, 56%)
+  color: paper.$ink
+  @include paper.dog-ear-clip
 
-  .f-tabs__tab:hover &
-    background-color: #34538d
+  &::after
+    @include paper.dog-ear-flap(var(--tab-to))
 
   .f-tabs__tab.is-active &
-    background-image: linear-gradient(to bottom, #ffcd00, #f7a000)
-    color: #fff
-    box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.4)
+    @include paper.ink-text
 
 .f-tabs__label
   font-weight: 900
-  font-style: italic
   text-transform: uppercase
   letter-spacing: 0.05em
   white-space: nowrap
   font-size: clamp(0.65rem, 2.9vw, 1rem)
-  text-shadow: 2px 2px 0 #000
 
 .f-tabs__icon
   width: clamp(1.15rem, 5vw, 1.75rem)

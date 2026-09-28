@@ -212,7 +212,7 @@ export const loadAudioBuffer = async (src: string): Promise<AudioBuffer | null> 
 // procedural, so there is nothing else to block first paint on.
 const CRITICAL_IMAGE_SRCS: ReadonlyArray<string> = [
   // The splash logo used to be decoded here so `FLogoProgress` never painted a
-  // blank box on its first frame. It is now `ArlaanLogo.vue` — inline SVG, in
+  // blank box on its first frame. It is now `GameLogo.vue` — inline SVG, in
   // the same chunk as the component that mounts it — so there is nothing to
   // decode and nothing to wait for. Keeping the bitmap on this list would have
   // gated the loading bar on downloading a logo the game no longer shows.

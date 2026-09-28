@@ -1,15 +1,14 @@
 // ─── Rewarded-ad throttle ─────────────────────────────────────────────────
 //
 // Caps rewarded video views at MAX_REWARDED inside a AD_WINDOW_MS rolling
-// window per device. When throttled, `useAds` flips `isRewardedReady`
-// false so the UI hides every reward button (RouletteWheel respin, 2x
-// speed boost, AdRewardButton) — the same UX as a no-fill SDK state.
+// window. When throttled, `useAds` flips `isRewardedReady` false so any
+// reward button hides — the same UX as a no-fill SDK state. (The jury
+// build ships no rewarded ads; the gate stays wired for later.)
 //
-// Why per-device (localStorage), not per-account (cloud sync): this is
-// an anti-abuse gate, not progress. Stored under the
-// `__save_internal__` prefix so SaveManager skips forwarding it to the
-// strategy — we don't want a player's watch budget travelling across
-// devices.
+// The history is a `__save_internal__rewarded_history` field inside the
+// `aethel_state` blob, and that blob is what the cloud strategies upload,
+// so the watch budget does travel with the account across devices. That
+// is the stricter choice for an anti-abuse gate and costs nothing extra.
 //
 // Why the periodic prune timer: `isRewardedThrottled` is a `computed`
 // over a `ref` array, so it only re-evaluates when the array mutates.
@@ -19,7 +18,7 @@
 // matches the resolution players actually perceive.
 
 import { computed, ref } from 'vue'
-import { getState, setState, removeState } from '@/use/useTowerState'
+import { getState, setState, removeState } from '@/use/useAethelState'
 
 const STORAGE_KEY = '__save_internal__rewarded_history'
 

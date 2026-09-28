@@ -1,15 +1,16 @@
-# aethel-fold
+# Castle Fold
 
-A mobile-first 2D build-and-defend game. Stack blocks into a tower, bolt cannons
-and lightning coils onto it, and hold off waves of enemies marching in from both
-sides. Every block has HP. When one breaks, anything it was holding up
-**collapses**. The run ends when the Gate falls — then you spend what you earned
-in the tech tree and build a taller, meaner tower.
+A 3D origami pop-up-book castle siege. A paper army marches across the pages of
+a storybook, and you are the hand that folds it: swipe the dotted creases to
+raise walls and snap ravines shut, tap to stamp, spread to rip the castle
+towers flat. Then the castle unfolds into an origami dragon, and the last fold
+turns it into a frog.
 
-WIP: [playable demo](https://konstantinsteinmiller.github.io/aethel-fold/)
+Spec: [`aethel-fold-GDD.md`](./aethel-fold-GDD.md) · player-facing blurb and
+controls: [`description.md`](./description.md) · what comes next:
+[`roadmap.md`](./roadmap.md).
 
-
-Built with Vue 3 + TypeScript + Canvas 2D, shipping to CrazyGames, Playgama,
+Built with Vue 3 + TypeScript + raw three.js, shipping to CrazyGames, Playgama,
 GamePix, GameMonetize, GameDistribution, Glitch.fun, itch.io, Wavedash and
 Yandex Games from one codebase.
 
@@ -19,142 +20,167 @@ Yandex Games from one codebase.
 
 ```bash
 pnpm install
-pnpm dev          # http://localhost:5173
-pnpm test         # 376 unit + integration tests
+pnpm dev          # http://localhost:2050 — boots straight into page 1
+pnpm test         # unit + integration tests (vitest)
+pnpm test:e2e     # Playwright: gameplay, persistence, cloud hydration, responsive
 pnpm type-check   # vue-tsc
 pnpm build        # type-check + production build
 ```
 
+`pnpm test:e2e` starts two dev servers: `:2050` for the plain web build and
+`:2051` for the CrazyGames build, which runs against a fake SDK. On a machine
+short on memory, `E2E_PLAIN_ONLY=1 pnpm test:e2e gameplay persistence
+responsive` skips the second server. The first run needs a Chromium; in the
+cloud container it is found through `PLAYWRIGHT_BROWSERS_PATH`.
+
+DEV builds expose `window.__fold`:
+
+| Call | What it does |
+| --- | --- |
+| `jumpTo(page)` | Jump straight to a page |
+| `clearPage()` | Win the current page |
+| `fastForward(seconds)` | Advance the simulation |
+| `state()` | A plain-object snapshot of the game |
+| `screenOf(x, z)` | Page coordinates → screen pixels, for scripted gestures |
+
 ## Highlights
 
-* **No art payload.** Every block, enemy, projectile and background layer is
-  drawn procedurally — resolution-independent, crisp at any zoom, and the game
-  is interactive the moment the JS parses. Drop-in bitmap overrides are wired
-  up and documented in [`art-todo.md`](./art-todo.md).
-* **Synthesised combat audio.** Shots, impacts, explosions and collapses are
-  generated per event with randomised pitch and filter sweeps, so a 40-turret
-  tower never sounds like a loop. See [`sound-todo.md`](./sound-todo.md).
-* **One save object.** All persisted state lives in a single in-memory
-  `tower_state` record written to exactly one localStorage key, which the
-  platform save layer mirrors to the SDK cloud store as one object.
-* **Fully responsive.** 320×658 portrait through desktop fullscreen, with a
-  purpose-built landscape-phone layout and safe-area insets throughout. No
-  fixed pixel sizing in the UI — everything is `clamp()` / `vw` / `vh` / `%`.
-* **21 languages**, key-parity enforced by a test.
-
-## How it plays
-
-| Phase | What happens |
-|---|---|
-| **Build** | You are dealt four **Tetris-like shapes** — dominoes, L-bends, 2×2 squares, a cannon already mounted on its plinth. Tap one, tap a highlighted slot to drop it, and that slot rerolls. Some shapes come capped with a roof, which is cheap and sturdy but seals that column for good. A swap button on each tile trades one offer for a fresh draw, on a shared 10-second charge. The ground floor is capped at four cells either side of the Gate, so height has to come from actually building upward. A timer counts down to the wave — calling it early converts the unused seconds into a coin bonus (up to +40%). |
-| **Battle** | Enemies walk in from both sides, fly over the top, and — from wave 12 — swim in from the lake and breach to bite the base. From wave 11 **bombers** cruise above your crown and drop bombs and molotovs straight down, so building high stops being safety. From wave 14 they bring **siege engines**: rams that ignore your walls and drive at the Gate, ballistas and catapults that stand off and shell you, towers that unload troops three rows up, trebuchets parked 20 cells out — beyond every weapon you own — and an ironclad ram that arrows simply bounce off. The answer to the ones you cannot reach is **cavalry**, bought with gold mid-battle, who ride out at whichever side is worst. Weapon blocks fire automatically. You can keep building. 1×/2× speed toggle. |
-| **Wave clear** | Coins land in your wallet immediately, resources pay out, economy blocks yield, repair bays patch their neighbours, and you're back in Build. Anything still on fire keeps burning into the build phase. |
-| **Defeat** | The Gate falls. Bank the run's coins, spend them in the tech tree, build again. |
-
-Controls: tap a tray tile then tap the field to place · hover (or long-press) a
-tile for its resource cost · long-press a placed block to inspect it · drag to
-pan · pinch or scroll to zoom · Space calls the wave · `1`–`4` arm an offer ·
-`F` toggles battle speed · `Esc` deselects.
-
-Four axes of threat, each punishing a different lazy tower: **ground** units
-chew the base, **air** goes for the crown — divers close to melee range from
-wave 9, bombers hold station above it and drop from wave 11 — **sea creatures**
-surface from the lake to strike your lowest blocks from wave 12 (while submerged
-they cannot be shot at all, and only the wake gives them away), and **siege
-engines** from wave 14 break the rules infantry follow, several of them from
-ranges no block can reach.
-
-Every threat has a specific answer, and one of them invalidates a whole weapon:
-arrows bounce off the ironclad ram, so a tower built entirely out of cheap
-Archery blocks has nothing for it. The tech tree has no level cap on any stat
-node, so a run can specialise all the way down one line if you can afford it.
+- **Every mechanic in the GDD:**
+  - swipe-to-fold walls, shields, ravine traps, launch flaps and hill ridges
+  - tap-to-stamp
+  - two-finger spread (or drag / scroll) to tear towers
+  - the layer peel
+  - a five-weak-point origami dragon
+  - the frog finale and the VICTORY ribbon
+- **Wordless onboarding.** The first time a fold appears, time slows to a near
+  stop and a paper hand demonstrates it. The lesson ends the moment you copy it.
+  There is no main menu: the game boots into page 1.
+- **The look.**
+  - A single MRT pass renders colour and normal+id.
+  - One composite shader draws constant-width Sobel ink outlines, a pulsing
+    yellow highlight on everything actionable, tilt-shift, the lamp vignette and
+    paper grain.
+  - Two-band toon shading with periwinkle (never black) shadows, under a desk
+    lamp with PCF shadows.
+- **Juice:**
+  - hit-stop, camera kick and shake, haptics
+  - pooled score pops and comic words
+  - confetti, glowing gears and paper fire
+  - crumple-on-third-hit, page turns with zero downtime
+  - a procedural soundtrack that builds from pizzicato to boss brass, plus
+    synthesised ASMR paper foley
+- **Zero per-frame allocation** in the logic, render and input hot paths.
+  Standees are one instanced draw; adaptive render scale.
+- **One save object.** See below.
+- **Fully responsive.**
+  - 320×658 portrait through desktop fullscreen, with safe-area insets.
+  - The camera re-fits the book per aspect ratio.
+  - UI sizes come from `clamp()` / `vw` / `vh`.
+- **Only the Angry font**, and every player-facing string goes through vue-i18n.
 
 ## Architecture
 
 ```
-src/game/          pure, testable domain — no Vue, no DOM
-  types.ts         Block / Enemy / Projectile / WavePlan / RunSnapshot
-  blocks.ts        14-block catalogue with costs, HP, weapon specs
-  shapes.ts        polyomino build shapes + the 4-slot lane-locked offer deck
-  world.ts         shared world geometry (waterline, swim depth)
-  enemies.ts       11 enemy types across ground / air / sea
-  waves.ts         seeded, deterministic wave director
-  tech.ts          28-node tech DAG + effect accumulation
-  art.ts           palettes + drop-in bitmap probing
+src/fold/
+  logic/           pure TS — no three.js, no Vue; fully unit-tested
+    config.ts      dimensions, timings, scores, enemy table
+    pages.ts       the six pages, authored with builder helpers
+    folds.ts       fold state machine (grab → drag → snap → stamp → lower)
+    boss.ts        dragon FSM and weak points
+    lessons.ts     wordless onboarding controller
+    game.ts        FoldGame: waves, enemies, projectiles, tears, hearts,
+                   combos, hit-stop, time scale, page flow, finale
+    events.ts      pooled event queue (logic → view/audio/UI)
+  input/gestures.ts pointer events → game intents (fold, tap, spread, tear, peel)
+  render/          three.js view layer
+    FoldRenderer   MRT target, composite, adaptive scale, snapshots
+    paperMaterial  toon paper shader (grain, periwinkle shadow tint, dither)
+    compositeShader Sobel ink + highlight + tilt-shift + vignette
+    views/         Book, Page, Fold, Standee field, Units, Castle, Dragon,
+                   Finale, Sheet (turn / peel / crumple), Effects
+    art/           procedural page paintings and the standee atlas
+  audio/           WebAudio synth SFX + lookahead music sequencer
+  FoldEngine.ts    owns the loop: input → logic → view → audio
 
-src/use/           reactive layer (module-level singletons)
-  useTowerState    the single `tower_state` blob + debounced persistence
-  useTowerGame     the simulation — fixed 60 Hz accumulator
-  useTowerArt      the renderer — layered, sprite-cached, culled
-  useTowerVfx      pooled particles, floating text, decals, quality tiers
-  useTowerAudio    sample + synthesis cue router with per-cue throttling
-  useTowerCamera   spring-damped pan/zoom with auto-fit
-  useTowerProgress tech levels, lifetime stats, derived combat modifiers
-  useTowerEconomy  coins
-
-src/platforms/     platform registry, CSP, capability gates, resolvers
-src/utils/save/    SaveManager, BlobStorage, 8 cloud strategies
-src/components/    F-* design system + game HUD + modals
+src/views/FoldScene.vue   canvas + HUD + pause + lifecycle signals to SDKs
+src/components/fold/      PageBadge, HeartsBadge, ScoreBadge, BossMeter,
+                          FxLayer, GhostHand, CootieCatcherPause, VictoryPanel
+src/components/atoms|molecules  F-* design system (origami-styled)
+src/use/                  module-level singleton composables
+src/platforms/, src/utils/save/  platform registry, SaveManager, strategies
+src/voice/                voice-over system (kept for later use)
+src/world/                Meadowfall 3D world (bench route /world)
 ```
 
-**Performance contract:** the hot collections (`blocks`, `enemies`,
-`projectiles`) are plain non-reactive structures — Vue's proxy overhead on a few
-hundred entities mutated 60×/s is exactly what drops frames on a phone. Only
-HUD scalars are refs. Block bodies are cached into offscreen canvases per
-(type, damage stage, zoom bucket); particles live in typed arrays with a
-free-list; quality auto-degrades across three tiers off a rolling FPS average.
+### Unit art overrides
+
+Unit art can be replaced without touching code:
+
+1. Drop a transparent PNG or WebP (about 2:3, figure standing on the bottom edge) into
+   `public/images/fold/units/`.
+2. List it in that folder's `manifest.json`, for example
+   `{ "units": ["knight.png", "hero0.webp"] }`.
+
+The file name picks the frame. `knight.png` replaces every knight pose, and
+`knight1.png` replaces only that pose; the frame names are the `FrameName`
+values in `src/fold/render/art/standeeArt.ts`. The game adds the white die-cut
+margin itself. Anything not listed keeps its procedural vector drawing.
 
 ## Save & cloud hydration
 
 Everything persists inside one object:
 
 ```text
-tower_state = {
-  ts_coins, ts_tech, ts_best_wave, ts_runs, ts_total_kills, ...
-  ts_run: {                                    // resumable siege
-    wave, wood, stone,
-    blocks: [[c, r, type, hp, roof], ...],
-    offers: [shapeId x4]                       // so a reload can't reroll your hand
-  }
-  ts_user_language, ts_user_difficulty, ...    // settings
+aethel_state = {
+  fold_page, fold_cleared, fold_run: { score, hits, time },   // resumable run
+  fold_best, fold_wins, fold_runs, fold_lessons, fold_stats,  // progress
+  fold_settings: { haptics, shake, quality },
+  user_sound_volume, user_music_volume, user_language, mobile_mute,
+  __save_internal__rewarded_history
 }
 ```
 
-The load order is load-bearing and is what stops a returning player from being
-rendered as a fresh install:
+On plain web builds that is exactly one localStorage key. Cloud strategies
+upload `aethel_state` plus `__save_meta__` and nothing else. The load order is
+what stops a returning player from being treated as a fresh install:
 
 1. `main.ts` **awaits** the platform SDK init before `saveManager.init()`.
 2. It **awaits** `saveManager.init()` before importing `App.vue`, so the whole
    module graph evaluates against hydrated storage.
-3. `reloadTowerState()` runs **before** the `saveDataVersion` bump, so every
-   composable's watcher re-reads the hydrated blob rather than the stale one.
-4. If hydrate didn't return data **and** local looks fresh, `SaveManager` retries
-   3× at 1 s spacing before letting the app boot.
-5. Hard checkpoints (wave cleared, run ended, tech bought) call `flushSaveNow()`
-   to bypass both debounces.
+3. `reloadAethelState()` runs **before** the `saveDataVersion` bump, so every
+   composable re-reads the hydrated blob. A late cloud answer bumps
+   `progressRevision`, and the scene jumps to the restored page.
+4. If hydration returned nothing **and** local storage looks fresh,
+   `SaveManager` retries before letting the app boot.
+5. Hard checkpoints (page start, page cleared, victory) call `flushSaveNow()`.
 
-`tests/save/TowerStateCloudHydrate.test.ts` covers all of it end to end,
-including transient-SDK-failure recovery, corrupt-blob degradation, and a
-full write → cold-boot → read round trip.
+Covered by:
+- `tests/save/AethelStateCloudHydrate.test.ts`, plus a test per strategy;
+- in a real browser, `tests/e2e/cloud-hydration.spec.ts`, which runs a fake
+  CrazyGames SDK through returning-player, slow-SDK, transient-failure and
+  new-player boots.
 
 ## Building for platforms
 
 ```bash
-pnpm build:crazy-web        pnpm build:playgama
-pnpm build:gamepix          pnpm build:gamemonetize
+pnpm build:crazy-web         pnpm build:playgama
+pnpm build:gamepix           pnpm build:gamemonetize
 pnpm build:game-distribution pnpm build:glitch
-pnpm build:itch             pnpm build:wavedash
+pnpm build:itch              pnpm build:wavedash
 pnpm build:yandex
 ```
 
-Each mode reads its `.env.<platform>` file, DCEs the other platforms' SDK glue,
-and emits a per-platform CSP.
+Each mode reads `.env.<mode>`. That file is git-ignored: copy it from the
+committed `.env.<mode>.example`, in which every game id, title id, install id and
+token is deliberately blank. The build then strips the other platforms' SDK
+glue and emits a per-platform CSP. The jury build ships **no ads** of any kind.
 
 ## Docs
 
 | File | Contents |
 |---|---|
-| [`game-implementation-plan.md`](./game-implementation-plan.md) | Full design + architecture decisions + execution checklist |
-| [`retention-roadmap.md`](./retention-roadmap.md) | 20 prioritised retention / conversion features |
-| [`art-todo.md`](./art-todo.md) | Drop-in bitmap override manifest |
-| [`sound-todo.md`](./sound-todo.md) | Audio cue map + what's worth commissioning |
+| [`aethel-fold-GDD.md`](./aethel-fold-GDD.md) | The game design document (the contract) |
+| [`game-implementation-plan.md`](./game-implementation-plan.md) | Architecture decisions, task checklist, status log |
+| [`description.md`](./description.md) | Store blurb, how to play, controls |
+| [`roadmap.md`](./roadmap.md) | 20 prioritised retention / playtime / conversion features |
+| [`voice-over-workflow.md`](./voice-over-workflow.md) | The retained voice-over pipeline |

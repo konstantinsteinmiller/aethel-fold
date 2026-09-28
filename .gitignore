@@ -31,6 +31,9 @@ coverage
 # sync (Android versionCode counter — Play Console rejects re-uploads
 # of the same code, so the latest value MUST be committed).
 !.env.tauri.remote
+# Blank configuration templates (no secrets).
+!.env.example
+!.env.*.example
 
 # Editor directories and files
 .vscode/settings.json
@@ -82,3 +85,7 @@ tools/piper/
 # ignore rule here would silently swallow the one kind of file nobody can
 # regenerate. They also have to be in the repo for a platform build to contain
 # any voice-over at all.
+
+# Playwright
+test-results/
+playwright-report/

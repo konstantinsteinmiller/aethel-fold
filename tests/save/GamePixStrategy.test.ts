@@ -7,15 +7,20 @@
 // game booted at defaults and then overwrote the portal save with those
 // defaults. On localhost the raw-localStorage seed masked it (native storage
 // persists); inside the GamePix toolkit iframe native storage is ephemeral, so
-// every reload reset to stage 1 / 0 coins.
+// every reload reset to page 1 with nothing cleared.
 //
 // The fix polls the portal store for the STATE blob (not just the object's
 // existence) up to a timeout before concluding the player is new.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GamePixStrategy } from '@/utils/save/GamePixStrategy'
+import { STATE_KEY } from '@/use/useAethelState'
 
-const STATE_KEY = 'tower_state'
+// Fixture rule: the strategy polls the portal for the *current* state key
+// (`aethel_state`) until HYDRATE_DATA_TIMEOUT_MS (1.5 s). A fixture seeded
+// under any other key is a "new player" to it, so hydrate runs to the full
+// timeout — past the clock these tests advance — and `await p` never settles
+// under fake timers. Import the key rather than spelling it.
 
 interface FakeLocal {
   get: (k: string) => string | null
@@ -66,13 +71,13 @@ afterEach(() => {
 
 describe('GamePixStrategy.hydrate — async portal-data load (reload-reset bug)', () => {
   it('waits for late-arriving portal data instead of latching success-empty', async () => {
-    const cloud = JSON.stringify({ spinner_coins: 777, spinner_campaign_stage: 4 })
+    const cloud = JSON.stringify({ fold_page: 4, fold_cleared: 3 })
     installFakePortal({ seed: { [STATE_KEY]: cloud }, readyAfterMs: 1200 })
     const local = makeLocal()
     const strat = new GamePixStrategy()
 
     const p = strat.hydrate(local)
-    // Past the async-load delay but well under the 3s hydrate timeout.
+    // Past the async-load delay but under the 1.5 s hydrate timeout.
     await vi.advanceTimersByTimeAsync(1400)
     await p
 
@@ -84,7 +89,7 @@ describe('GamePixStrategy.hydrate — async portal-data load (reload-reset bug)'
     // The real GamePix portal `getItem` resolves a Promise (vs the localhost
     // test SDK's sync string). The old code did `typeof value === 'string'` on
     // the Promise → false → mirrored nothing → reset. Now we await it.
-    const cloud = JSON.stringify({ spinner_coins: 321, spinner_campaign_stage: 6 })
+    const cloud = JSON.stringify({ fold_page: 6, fold_cleared: 5, fold_wins: 1 })
     installFakePortal({ seed: { [STATE_KEY]: cloud }, readyAfterMs: 0, asyncGet: true })
     const local = makeLocal()
     const strat = new GamePixStrategy()
@@ -98,7 +103,7 @@ describe('GamePixStrategy.hydrate — async portal-data load (reload-reset bug)'
   })
 
   it('handles async getItem that also loads late', async () => {
-    const cloud = JSON.stringify({ spinner_coins: 42 })
+    const cloud = JSON.stringify({ fold_cleared: 1 })
     installFakePortal({ seed: { [STATE_KEY]: cloud }, readyAfterMs: 1000, asyncGet: true })
     const local = makeLocal()
     const strat = new GamePixStrategy()
@@ -112,7 +117,7 @@ describe('GamePixStrategy.hydrate — async portal-data load (reload-reset bug)'
   })
 
   it('restores immediately when portal data is already present (returning player, fast path)', async () => {
-    const cloud = JSON.stringify({ spinner_coins: 50 })
+    const cloud = JSON.stringify({ fold_runs: 2 })
     installFakePortal({ seed: { [STATE_KEY]: cloud }, readyAfterMs: 0 })
     const local = makeLocal()
     const strat = new GamePixStrategy()
@@ -140,11 +145,11 @@ describe('GamePixStrategy.hydrate — async portal-data load (reload-reset bug)'
 
   it('does not block boot waiting for the portal when the local blob already has state', async () => {
     // localhost / native-persistent platforms: the blob seed already holds the
-    // save, so hydrate must NOT stall for the full 3s — a quick portal peek
-    // only. We assert the hydrate promise settles well before the 3s timeout.
+    // save, so hydrate must NOT stall for the full 1.5 s — a quick portal peek
+    // only. We assert the hydrate promise settles well before the 1.5 s timeout.
     installFakePortal({ seed: {}, readyAfterMs: 0 }) // portal reachable, empty
     const local = makeLocal()
-    local.set(STATE_KEY, JSON.stringify({ spinner_coins: 10 })) // raw-seed fallback
+    local.set(STATE_KEY, JSON.stringify({ fold_page: 2 })) // raw-seed fallback
 
     const strat = new GamePixStrategy()
     let settled = false
@@ -154,13 +159,13 @@ describe('GamePixStrategy.hydrate — async portal-data load (reload-reset bug)'
     await p
     expect(settled).toBe(true)
     // The local seed is untouched — the game still has its save.
-    expect(local.get(STATE_KEY)).toBe(JSON.stringify({ spinner_coins: 10 }))
+    expect(local.get(STATE_KEY)).toBe(JSON.stringify({ fold_page: 2 }))
   })
 
   it('does NOT overwrite the local seed when the portal is slow — data wins once it loads', async () => {
     // Portal has the real save but it loads at 1s. Proves the poll keeps
     // waiting past the point where the old code (single read at ~0ms) gave up.
-    const cloud = JSON.stringify({ spinner_coins: 999 })
+    const cloud = JSON.stringify({ fold_cleared: 6, fold_wins: 3 })
     installFakePortal({ seed: { [STATE_KEY]: cloud }, readyAfterMs: 1000 })
     const local = makeLocal()
     const strat = new GamePixStrategy()

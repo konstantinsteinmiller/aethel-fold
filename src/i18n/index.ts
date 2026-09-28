@@ -1,6 +1,6 @@
 import type { I18n } from 'vue-i18n'
 import { DEFAULT_LOCALE, LANGUAGES } from '@/utils/enums'
-import { getState } from '@/use/useTowerState'
+import { getState } from '@/use/useAethelState'
 import { LANGUAGE_KEY } from '@/keys'
 
 /**
@@ -85,15 +85,10 @@ export const setI18nLocale = async (
 }
 
 /**
- * The game's own language.
- *
- * German, because that is what this game *is*: `Chroniken von Arlaan` is a
- * German manuscript, the chapter's dialogue is the author's own German with an
- * English translation beside it (`world/story/script.ts`), and the storyteller's
- * frame is a German grandfather telling his grandchildren a story. English is
- * still the **source of truth for the key shape** — `fallbackLocale` in
- * `main.ts` stays 'en' and `tests/i18nParity.test.ts` still measures every
- * locale against it — but it is no longer what the game opens in.
+ * The language the game opens in: the browser's language when it is one we
+ * ship (`LANGUAGES`), otherwise English. English stays the **source of truth
+ * for the key shape** — `fallbackLocale` in `main.ts` is 'en' and
+ * `tests/i18nParity.test.ts` measures every locale against it.
  */
 export { DEFAULT_LOCALE }
 

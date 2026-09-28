@@ -1,30 +1,26 @@
 <template lang="pug">
   Transition(name="fade")
     //- Ensure classes with special characters are in parentheses
-    div.fixed.inset-0.flex.flex-col.items-center.justify-center.backdrop-blur-md.touch-none.cursor-pointer(
+    div.f-reward.fixed.inset-0.flex.flex-col.items-center.justify-center.touch-none.cursor-pointer(
       v-if="modelValue"
-      class="bg-black/60"
-      :class="[isAdShowing ? 'z-0' : 'z-[100]', isCompact ? 'p-2' : 'p-4']"
-      :style="{\
-        paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))',\
-        paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',\
-        paddingLeft: 'calc(1rem + env(safe-area-inset-left, 0px))',\
-        paddingRight: 'calc(1rem + env(safe-area-inset-right, 0px))'\
-      }"
+      :class="[isAdShowing ? 'z-0' : 'z-[100]', isCompact ? 'is-compact' : '']"
       @click="handleOverlayClick"
     )
-      //- Parchment-ribbon header. Bitmap background scales to fit the
-      //- responsive wrap; the slot content (or a fallback "Rewards"
-      //- label) renders on top of the ribbon, centred horizontally and
-      //- biased above the bottom curl so the tails stay visible.
-      div.ribbon-wrap.relative.mb-10.shrink-0(
+      //- Die-cut paper ribbon header: a strip of red paper with swallow-tailed
+      //- ends and folded-back tails, drawn in CSS so it stays crisp at any
+      //- size. The slot content (or a fallback "Rewards" label) sits on it.
+      div.ribbon-wrap.relative.shrink-0(
         v-if="$slots.ribbon"
         :class="{ 'is-compact': isCompact, 'is-desktop': !isCompact && !isMobilePortrait }"
       )
         div.ribbon-banner
-          div.ribbon-content
-            slot(name="ribbon")
-              span.text-white.font-black.uppercase.italic.game-text {{ t('rewards') }}
+          span.ribbon-tail.is-left(aria-hidden="true")
+          span.ribbon-tail.is-right(aria-hidden="true")
+          span.ribbon-shadow(aria-hidden="true")
+          div.ribbon-body
+            div.ribbon-content
+              slot(name="ribbon")
+                span.font-black.uppercase {{ t('rewards') }}
 
       //- Content area. In landscape it scrolls inside the remaining height
       //- (min-h-0) so a tall reward block never collides with the inline
@@ -36,15 +32,13 @@
 
       //- Tap-to-continue hint. In landscape it sits INLINE in the flow (shrink-0)
       //- so it can never overlap the centred reward content; otherwise it floats
-      //- at the bottom of the viewport as before.
+      //- at the bottom of the viewport.
       Transition(name="fade")
-        div.flex.justify-center.animate-pulse.pointer-events-none(
+        div.continue-hint.flex.justify-center.animate-pulse.pointer-events-none(
           v-if="showContinue"
-          :class="isCompact ? 'shrink-0 pt-1 pb-1' : 'absolute bottom-8 left-0 right-0 sm:bottom-12'"
+          :class="isCompact ? 'is-inline shrink-0' : 'is-floating'"
         )
-          div.text-white.font-black.uppercase.italic.tracking-widest.brawl-text(
-            :class="isCompact ? 'text-xs' : 'text-sm md:text-2xl'"
-          )
+          div.continue-hint__text
             | {{ isMobile ? t('tapToContinue') : t('clickToContinue') }}
 </template>
 
@@ -116,71 +110,142 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="sass">
+@use '@/assets/css/paper' as paper
+
+.f-reward
+  // A warm veil over the desk rather than a black one.
+  background: radial-gradient(ellipse at 50% 40%, rgba(58, 36, 22, 0.55) 0%, rgba(30, 18, 11, 0.82) 75%)
+  backdrop-filter: blur(6px)
+  padding: calc(clamp(0.5rem, 3vw, 1rem) + env(safe-area-inset-top, 0px)) calc(clamp(0.5rem, 3vw, 1rem) + env(safe-area-inset-right, 0px)) calc(clamp(0.5rem, 3vw, 1rem) + env(safe-area-inset-bottom, 0px)) calc(clamp(0.5rem, 3vw, 1rem) + env(safe-area-inset-left, 0px))
+
+  &.is-compact
+    padding: calc(0.5rem + env(safe-area-inset-top, 0px)) calc(0.5rem + env(safe-area-inset-right, 0px)) calc(0.5rem + env(safe-area-inset-bottom, 0px)) calc(0.5rem + env(safe-area-inset-left, 0px))
+
 .fade-enter-active, .fade-leave-active
   transition: opacity 0.4s ease
 
 .fade-enter-from, .fade-leave-to
   opacity: 0
 
-.brawl-text
-  text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
+// ─── Continue hint ──────────────────────────────────────────────────────────
 
-// ─── Parchment ribbon ────────────────────────────────────────────────────────
+.continue-hint
+  &.is-inline
+    padding-block: 0.25rem
+
+  &.is-floating
+    position: absolute
+    left: 0
+    right: 0
+    bottom: calc(clamp(1.5rem, 7dvh, 3rem) + env(safe-area-inset-bottom, 0px))
+
+.continue-hint__text
+  font-weight: 900
+  text-transform: uppercase
+  letter-spacing: 0.1em
+  font-size: clamp(0.8rem, 2.6vw, 1.5rem)
+  @include paper.ink-text
+
+  .is-inline &
+    font-size: clamp(0.7rem, 2.4vh, 0.9rem)
+
+// ─── Paper ribbon ────────────────────────────────────────────────────────────
 
 .ribbon-wrap
+  --bw: 3px
+  --notch: clamp(0.8rem, 3.6vw, 1.4rem)
+  --tail: clamp(1.4rem, 6vw, 2.6rem)
   position: relative
-  width: 80vw
-  max-width: 480px
+  // The tails stick out of the band on both sides; keep them on screen.
+  width: min(80vw, 30rem)
+  margin-bottom: clamp(1rem, 5dvh, 2.5rem)
+  padding-inline: calc(var(--tail) * 0.7)
 
-  // Short-viewport treatment. Replaces the old `scale-90` utility, which
-  // shrank the ribbon's PAINT but not its layout box, leaving a dead band of
-  // margin exactly where vertical room was scarcest.
   &.is-compact
-    width: 62vw
-    max-width: 340px
+    width: min(62vw, 21.25rem)
     margin-top: -0.25rem
     margin-bottom: 0.25rem
 
   &.is-desktop
     @media (min-height: 501px)
-      width: 70vw
-      max-width: 360px
+      width: min(70vw, 22.5rem)
 
-// Parchment ribbon bitmap (553×188 source). The aspect ratio is built
-// into the wrap's `aspect-ratio` so the image scales without distorting
-// the curled tails. We use `background-image` rather than an `<img>`
-// so the slot content can layer cleanly on top without z-index gymnastics.
 .ribbon-banner
   position: relative
-  aspect-ratio: 553 / 188
   width: 100%
-  background-image: url('/images/bg/parchment-ribbon_553x188.webp')
-  background-repeat: no-repeat
-  background-position: center
-  background-size: contain
+  filter: drop-shadow(0 0.35rem 0.5rem rgba(20, 12, 8, 0.35))
+
+// clip-path deletes borders along a cut, so each die-cut piece is an ink
+// silhouette with the paper inset inside it by the border width.
+$band: polygon(0 0, 100% 0, calc(100% - var(--notch)) 50%, 100% 100%, 0 100%, var(--notch) 50%)
+$band-inner: polygon(0 0, 100% 0, calc(100% - var(--notch) + var(--bw) * 0.5) 50%, 100% 100%, 0 100%, calc(var(--notch) - var(--bw) * 0.5) 50%)
+
+.ribbon-shadow
+  position: absolute
+  inset: 0
+  background-color: paper.$shadow
+  transform: translateY(5px)
+  clip-path: $band
+
+.ribbon-body
+  position: relative
+  z-index: 1
   display: flex
   align-items: center
   justify-content: center
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5))
+  min-height: clamp(2.5rem, 10vw, 4rem)
+  padding: clamp(0.35rem, 1.6vw, 0.75rem) calc(var(--notch) + clamp(0.5rem, 3vw, 1.5rem))
+  background-color: paper.$ink
+  clip-path: $band
+
+  // Red paper with a lengthwise crease.
+  &::before
+    content: ''
+    position: absolute
+    inset: var(--bw)
+    background-image: linear-gradient(to bottom, paper.$red 0 52%, paper.$red-shade 52% 100%)
+    clip-path: $band-inner
+
+// Folded-back tails, hanging lower behind each end of the band.
+.ribbon-tail
+  position: absolute
+  top: 32%
+  bottom: -18%
+  width: var(--tail)
+  background-color: paper.$ink
+
+  &::before
+    content: ''
+    position: absolute
+    inset: var(--bw)
+    background-color: paper.$red-shade
+
+  &.is-left
+    left: calc(var(--tail) * -0.7)
+    &, &::before
+      clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 45% 50%)
+
+  &.is-right
+    right: calc(var(--tail) * -0.7)
+    &, &::before
+      clip-path: polygon(0 0, 100% 0, 55% 50%, 100% 100%, 0 100%)
 
 .ribbon-content
   position: relative
-  // The ribbon art's flat parchment panel sits ABOVE the bottom curl,
-  // so the content lifts ~14% of the banner height to land visually
-  // centred on that panel.
-  margin-top: -14%
   display: flex
   align-items: center
   justify-content: center
   text-align: center
-  // Leave generous horizontal room on each side so wider labels don't
-  // crash into the tail folds.
-  padding: 0 18%
+  font-size: clamp(1rem, 4.4vw, 1.9rem)
+  line-height: 1.1
+  // Slot content inherits white, ink-outlined lettering.
+  @include paper.ink-text
 
-// Landscape phone: 30% smaller than the compact treatment above (62vw/340px
-// → 43vw/238px). The banner is decoration and the short axis is the scarce
-// one — at 340px wide it stood 116px tall, nearly a third of a 390px-high
-// viewport spent on a title, and the CTAs below it fell off the bottom.
+  .is-compact &
+    font-size: clamp(0.85rem, 3.6vh, 1.2rem)
+
+// Landscape phone: the banner is decoration and the short axis is the scarce
+// one, so it shrinks further (the old 43vw / 238px cap, in rem).
 //
 // `.is-compact` is always on in mobile landscape and is a compound selector,
 // so it outranks a bare `.ribbon-wrap` here however far down the file it sits.
@@ -188,18 +253,17 @@ onUnmounted(() => {
 @media (orientation: landscape) and (max-height: 500px)
   .ribbon-wrap,
   .ribbon-wrap.is-compact
-    width: 43vw
-    max-width: 238px
+    width: min(43vw, 15rem)
+
+  .ribbon-body
+    min-height: 2.25rem
+    padding-block: 0.2rem
 
 // Short but not landscape-mobile (e.g. CG iframe in landscape with the
-// portal chrome bar visible — ~700–860 px viewport). The default desktop
-// ribbon (max 400 px wide → ~136 px tall) eats too much vertical room
-// here, leaving no space for the result text + wheel + spin-again
-// buttons. Cap it tighter so the roulette overlay's chrome fits the
-// viewport. CG QA caught the overflow 2026-05-05.
+// portal chrome bar visible — ~700–860 px viewport). Cap the ribbon tighter so
+// the roulette overlay's chrome fits the viewport. CG QA caught the overflow
+// 2026-05-05.
 @media (orientation: landscape) and (min-height: 501px) and (max-height: 860px)
   .ribbon-wrap.is-desktop
-    width: 50vw
-    max-width: 320px
-
+    width: min(50vw, 20rem)
 </style>
