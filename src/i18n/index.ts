@@ -101,7 +101,7 @@ export { DEFAULT_LOCALE }
  *      portal locale or the player's stored choice from `useUser`. Caller
  *      is responsible for picking the right source; this function does
  *      not touch sessionStorage (CG QA: NO locally-saved data).
- *   2. `tower_state.ts_user_language` — the cloud-hydrated player
+ *   2. `aethel_state.user_language` — the cloud-hydrated player
  *      choice. On CG builds this has already been populated from
  *      `sdk.data` by `SaveManager.init()` before `main.ts` calls us.
  *   3. `DEFAULT_LOCALE` — German. See below.

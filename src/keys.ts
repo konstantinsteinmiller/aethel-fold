@@ -5,7 +5,7 @@
 // persisted object — but they are still a contract with the player base:
 // renaming any of them strands existing players' progress on the old field.
 
-// ─── Castle Fold progress ───────────────────────────────────────────────────
+// ─── Aethel Fold progress ───────────────────────────────────────────────────
 
 /** Page (1…6) the player resumes on after a reload. */
 export const PAGE_KEY = 'fold_page'
@@ -25,6 +25,12 @@ export const LESSONS_KEY = 'fold_lessons'
 export const STATS_KEY = 'fold_stats'
 /** Game settings: `{ haptics, shake, quality }`. */
 export const SETTINGS_KEY = 'fold_settings'
+/** Book (1 or 2) the resume page belongs to. */
+export const BOOK_KEY = 'fold_book'
+/** Book 2 ("The Homefront"): highest page cleared, records `{ score, time }`, victories. */
+export const CLEARED2_KEY = 'fold_cleared2'
+export const BEST2_KEY = 'fold_best2'
+export const WINS2_KEY = 'fold_wins2'
 
 // ─── User settings (shared platform layer) ──────────────────────────────────
 
@@ -35,3 +41,7 @@ export const LANGUAGE_KEY = 'user_language'
  *  the device level and the Web Audio gain has no effect, so the on-screen mute
  *  is a silence toggle instead: suspend all audio + block new music/SFX. */
 export const MOBILE_MUTE_KEY = 'mobile_mute'
+/** The volumes `{ music, sound }` from before the mute button silenced the
+ *  game, so the next tap restores exactly those (null/absent = not muted by
+ *  the button). Inside `aethel_state`, so it survives reloads and devices. */
+export const MUTED_VOLUMES_KEY = 'user_muted_volumes'

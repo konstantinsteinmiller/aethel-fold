@@ -1,4 +1,4 @@
-# Castle Fold
+# Aethel Fold
 
 A 3D origami pop-up-book castle siege. A paper army marches across the pages of
 a storybook, and you are the hand that folds it: swipe the dotted creases to

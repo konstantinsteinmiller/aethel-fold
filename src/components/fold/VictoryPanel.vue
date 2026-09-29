@@ -2,14 +2,20 @@
 /**
  * Page 6 finale (GDD §8): "A beautiful die-cut ribbon drops down saying
  * 'VICTORY' with massive confetti bursts." The ribbon drops with a bounce;
- * under it the run summary is printed on a paper card, then Play again.
+ * under it the run summary is printed on a paper card, then the choice of
+ * what to read next: winning book 1 opens book 2 ("The Homefront"); after
+ * that, either book can be picked again.
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FButton from '@/components/atoms/FButton.vue'
 import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
+import PaperRibbon from '@/components/fold/PaperRibbon.vue'
+import type { BookId } from '@/fold/logic/types'
 
 const props = defineProps<{
+  /** The book just finished. */
+  book: BookId
   open: boolean
   score: number
   best: number
@@ -17,7 +23,10 @@ const props = defineProps<{
   hits: number
   newBest: boolean
 }>()
-const emit = defineEmits<{ (e: 'again'): void }>()
+const emit = defineEmits<{
+  (e: 'again'): void
+  (e: 'book', book: BookId): void
+}>()
 const { t } = useI18n()
 const showCard = ref(false)
 
@@ -35,12 +44,13 @@ const timeText = computed(() => {
 <template lang="pug">
   div.victory(v-if="open" role="dialog" :aria-label="t('fold.victory.title')")
     div.victory__ribbon
-      span.victory__word {{ t('fold.victory.title') }}
+      PaperRibbon(size="xl") {{ t('fold.victory.title') }}
     transition(name="card")
       div.victory__card(v-if="showCard")
         div.victory__frog
-          OrigamiIcon(name="frog")
-        p.victory__subtitle {{ hits === 0 ? t('fold.victory.flawless') : t('fold.victory.subtitle') }}
+          OrigamiIcon(:name="book === 2 ? 'crane' : 'frog'")
+        p.victory__subtitle {{ hits === 0 ? t('fold.victory.flawless') : t(book === 2 ? 'fold.victory.subtitle2' : 'fold.victory.subtitle') }}
+        p.victory__story {{ t(book === 2 ? 'fold.victory.story2' : 'fold.victory.story1') }}
         div.victory__stats
           div.victory__stat
             OrigamiIcon(name="star" tone="yellow")
@@ -59,10 +69,24 @@ const timeText = computed(() => {
             span.victory__stat-label {{ t('fold.victory.hits') }}
             span.victory__stat-value {{ hits }}
         div.victory__record(v-if="newBest") {{ t('fold.victory.newBest') }}
-        FButton(type="success" size="lg" block :attention="true" @click="emit('again')")
-          span.flex.items-center.justify-center.gap-2
-            OrigamiIcon(name="restart" tone="white")
-            span {{ t('fold.victory.playAgain') }}
+        template(v-if="book === 1")
+          FButton(type="success" size="lg" block :attention="true" data-testid="victory-book2" @click="emit('book', 2)")
+            span.flex.items-center.justify-center.gap-2
+              OrigamiIcon(name="book" tone="white")
+              span {{ t('fold.victory.nextBook') }}
+          FButton(type="primary" size="sm" block data-testid="victory-again" @click="emit('again')")
+            span.flex.items-center.justify-center.gap-2
+              OrigamiIcon(name="restart" tone="white")
+              span {{ t('fold.victory.playAgain') }}
+        template(v-else)
+          FButton(type="success" size="lg" block :attention="true" data-testid="victory-again" @click="emit('again')")
+            span.flex.items-center.justify-center.gap-2
+              OrigamiIcon(name="restart" tone="white")
+              span {{ t('fold.victory.playAgain') }}
+          FButton(type="secondary" size="sm" block data-testid="victory-book1" @click="emit('book', 1)")
+            span.flex.items-center.justify-center.gap-2
+              OrigamiIcon(name="book" tone="white")
+              span {{ t('fold.victory.backToBook1') }}
 </template>
 
 <style scoped lang="sass">
@@ -74,31 +98,19 @@ const timeText = computed(() => {
   flex-direction: column
   align-items: center
   justify-content: flex-start
-  padding: calc(clamp(0.5rem, 2vh, 1rem) + env(safe-area-inset-top, 0px)) calc(0.75rem + env(safe-area-inset-right, 0px)) calc(0.75rem + env(safe-area-inset-bottom, 0px)) calc(0.75rem + env(safe-area-inset-left, 0px))
+  // Starts under the HUD strip (`--hud-h`, set by FoldScene) so the ribbon never covers it.
+  padding: calc(var(--hud-h, 0px) + clamp(0.3rem, 1.5vh, 0.8rem)) calc(0.75rem + env(safe-area-inset-right, 0px)) calc(0.75rem + env(safe-area-inset-bottom, 0px)) calc(0.75rem + env(safe-area-inset-left, 0px))
   pointer-events: none
   gap: clamp(0.6rem, 2vh, 1rem)
   overflow-y: auto
 
-// A die-cut ribbon with swallow-tailed ends, dropping on strings.
+// The die-cut ribbon drops in on a bounce.
 .victory__ribbon
-  position: relative
-  margin-top: clamp(0.5rem, 3vh, 2rem)
-  padding: clamp(0.5rem, 2vh, 0.9rem) clamp(2.4rem, 12vw, 4.5rem)
-  background: linear-gradient(180deg, #ff6a5c 0 52%, #d8433b 52% 100%)
-  border: 3px solid #1c1724
-  clip-path: polygon(0 0, 100% 0, 92% 50%, 100% 100%, 0 100%, 8% 50%)
-  filter: drop-shadow(0 8px 0 rgba(76, 64, 120, 0.5))
+  flex: none
+  display: flex
+  justify-content: center
+  max-width: 100%
   animation: ribbon-drop 1.1s cubic-bezier(.3, 1.6, .5, 1) both
-  min-width: min(80vw, 22rem)
-  text-align: center
-
-.victory__word
-  color: #ffe066
-  font-size: clamp(2rem, 11vw, 4rem)
-  letter-spacing: 0.08em
-  -webkit-text-stroke: 0.06em #1c1724
-  paint-order: stroke fill
-  text-shadow: 0 0.1em 0 #1c1724
 
 @keyframes ribbon-drop
   0%
@@ -140,6 +152,12 @@ const timeText = computed(() => {
   text-align: center
   color: #1c1724
   font-size: clamp(0.9rem, 3.8vw, 1.15rem)
+
+.victory__story
+  text-align: center
+  color: #3a3142
+  font-size: clamp(0.78rem, 3.2vw, 0.95rem)
+  line-height: 1.3
 
 .victory__stats
   display: grid
@@ -196,10 +214,29 @@ const timeText = computed(() => {
     flex-direction: row
     align-items: center
     justify-content: center
+  .victory
+    gap: clamp(0.5rem, 2vw, 1rem)
   .victory__ribbon
-    margin-top: 0
-  .victory__stats
-    grid-template-columns: repeat(4, 1fr)
+    flex: 0 1 auto
+    min-width: 0
+    max-width: 38vw
+  .victory__frog
+    display: none
   .victory__card
-    width: min(58vw, 30rem)
+    gap: 0.4rem
+    padding: 0.55rem 0.8rem
+  .victory__stats
+    grid-template-columns: repeat(4, minmax(0, 1fr))
+  .victory__stat
+    grid-template-columns: 1fr
+    justify-items: center
+    padding: 0.25rem 0.3rem
+    :deep(.origami-icon)
+      display: none
+  .victory__card
+    flex: 0 1 auto
+    min-width: 0
+    width: min(56vw, 30rem)
+    max-height: 100%
+    overflow-y: auto
 </style>

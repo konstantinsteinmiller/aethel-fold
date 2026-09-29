@@ -12,7 +12,7 @@
 
 import { FoldGame, type GameOptions } from './logic/game'
 import type { FoldEvent } from './logic/events'
-import type { PageId } from './logic/types'
+import type { BookId, PageDef, PageId } from './logic/types'
 import { GestureRecognizer, type GestureFeedback } from './input/gestures'
 import { GameView, type ScreenPoint } from './render/GameView'
 import { FoldAudio } from './audio/FoldAudio'
@@ -26,6 +26,8 @@ export interface EngineHooks {
   word(key: string, x: number, y: number, size: number, tone: string): void
   /** Called once per frame after rendering (cheap HUD sync). */
   onFrame?(game: FoldGame, dt: number): void
+  /** The storybook line printed on a page. */
+  caption?(def: PageDef): string
 }
 
 export interface EngineOptions extends GameOptions {
@@ -58,7 +60,8 @@ export class FoldEngine {
     this.canvas = canvas
     this.game = new FoldGame(opts)
     this.view = new GameView(canvas, this.game, {
-      word: (key, x, y, size = 1, tone = 'default') => hooks.word(key, x, y, size, tone)
+      word: (key, x, y, size = 1, tone = 'default') => hooks.word(key, x, y, size, tone),
+      caption: (def) => hooks.caption?.(def) ?? ''
     })
     const ctx = getAudioContext()
     this.audio = ctx ? new FoldAudio(ctx) : null
@@ -145,17 +148,39 @@ export class FoldEngine {
     return this.view.project(x, y, z, out)
   }
 
-  /** Start over from page 1 (Play again). */
-  newRun(): void {
+  /** Start over from page 1 of a book (Play again / pick a book). */
+  newRun(book: BookId = this.game.book): void {
     this.gestures.cancel()
     this.view.units.showCrowd(false)
-    this.game.startRun(1, 0)
+    this.game.startRun(1, 0, book)
   }
 
-  jumpTo(page: PageId, score = this.game.score): void {
+  jumpTo(page: PageId, score = this.game.score, book: BookId = this.game.book): void {
     this.gestures.cancel()
     this.view.units.showCrowd(false)
-    this.game.startRun(page, score)
+    this.game.startRun(page, score, book)
+  }
+
+  /** Repaint the printed story lines (font loaded / language changed). */
+  refreshCaptions(): void {
+    this.view.refreshCaptions(true)
+  }
+
+  /** Test/debug: run the simulation `seconds` ahead in fixed steps. */
+  fastForward(seconds: number): void {
+    const g = this.game
+    const step = 1 / 60
+    for (let t = 0; t < seconds; t += step) {
+      g.update(step)
+      const ev = g.events
+      for (let i = 0; i < ev.count; i++) {
+        const e = ev.items[i]!
+        this.view.onEvent(e)
+        this.hooks.onEvent(e, g)
+      }
+      ev.clear()
+      this.view.update(step)
+    }
   }
 
   restartPage(): void {

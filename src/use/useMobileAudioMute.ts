@@ -32,6 +32,12 @@ import { MOBILE_MUTE_KEY } from '@/keys'
 
 const onMobile = mobileCheck()
 
+// The mute button is a volume mute on every device now (see FMuteButton), so
+// this hard-suspend is never switched on any more. A phone that saved it on
+// in an older build is released here once, so it can't boot silent with no
+// button to undo it.
+if (getState<boolean>(MOBILE_MUTE_KEY, false) === true) setState(MOBILE_MUTE_KEY, false)
+
 const readPersisted = (): boolean => onMobile && getState<boolean>(MOBILE_MUTE_KEY, false) === true
 
 /** Reactive mute state. Only ever true on mobile — desktop reads false so its

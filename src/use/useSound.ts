@@ -1,7 +1,7 @@
 import { prependBaseUrl } from '@/utils/function'
 import useUser from '@/use/useUser'
 
-/** Legacy streamed track (unused by Castle Fold, whose music is procedural). */
+/** Legacy streamed track (unused by Aethel Fold, whose music is procedural). */
 const MUSIC_FILE = 'bg-cozy.ogg'
 import { getAudioContext, loadAudioBuffer, resourceCache, registerHtmlAudio, unregisterHtmlAudio, isAudioSuspended, registerOneShotSource } from '@/use/useAssets'
 import { isGamePaused } from '@/use/useGamePause'

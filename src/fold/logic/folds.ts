@@ -42,7 +42,10 @@ export const createFold = (def: FoldDef): FoldState => {
     timer: 0,
     hp: def.hp,
     flash: 0,
-    rev: 0
+    rev: 0,
+    ammo: 0,
+    aimX: (def.ax + def.bx) / 2,
+    aimZ: -7
   }
 }
 
@@ -124,6 +127,11 @@ export const releaseFold = (f: FoldState, speed = 0): boolean => {
   return false
 }
 
+/** Drop a drag without judging it (pause, lost pointer): the flap springs back. */
+export const abandonFold = (f: FoldState): void => {
+  if (f.phase === 'dragging') f.phase = 'ready'
+}
+
 /** Force-snap (lesson auto-complete, tests, keyboard accessibility). */
 export const snapFold = (f: FoldState): boolean => {
   if (f.phase !== 'ready' && f.phase !== 'dragging') return false
@@ -201,7 +209,8 @@ export const updateFold = (f: FoldState, dt: number): number => {
         f.flash = 1
         f.rev++
         const k = f.def.kind
-        if (k === 'launch' || k === 'frog') f.phase = 'spent'
+        // A launch flap with a hold folds back after a beat and re-arms.
+        if (k === 'frog' || (k === 'launch' && !(f.def.hold > 0))) f.phase = 'spent'
         else {
           f.phase = 'up'
           f.timer = f.def.hold

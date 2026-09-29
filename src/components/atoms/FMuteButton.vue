@@ -1,35 +1,26 @@
 <script setup lang="ts">
-import { mobileCheck } from '@/utils/function'
-import { isMobilePortrait, isMobileLandscape } from '@/use/useUser'
+/**
+ * The mute toggle, on every device: a volume mute. Tapping it saves the music
+ * and sound volumes in `aethel_state` (`MUTED_VOLUMES_KEY`) and zeroes them;
+ * the next tap restores exactly those. The game's audio is Web Audio, whose
+ * gain silences it on phones too, so the older mobile-only "suspend
+ * everything" mode (which never restored the volumes) is no longer used.
+ */
 import { isMuted, toggleMute } from '@/use/useCrazyMuteSync'
-import { isMobileAudioMuted, toggleMobileAudioMute } from '@/use/useMobileAudioMute'
 import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
 </script>
 
 <template lang="pug">
   div.flex.flex-col.items-end.gap-1
-    //- Desktop: volume-based mute (Web Audio gain works here).
     button.mute-btn(
-      v-if="!mobileCheck()"
       type="button"
+      data-testid="mute"
       :aria-pressed="isMuted"
       @click="toggleMute"
     )
       span.mute-btn__shadow(aria-hidden="true")
       span.mute-btn__body
         OrigamiIcon.mute-btn__icon(:name="isMuted ? 'speakerMute' : 'speaker'" tone="blue")
-    //- Mobile: hard silence toggle. The OS volume rocker owns the device level,
-    //- so this suspends all engine audio + blocks new music/SFX instead of
-    //- changing volume — letting players run their own music app.
-    button.mute-btn(
-      v-else-if="isMobilePortrait || isMobileLandscape"
-      type="button"
-      :aria-pressed="isMobileAudioMuted"
-      @click="toggleMobileAudioMute"
-    )
-      span.mute-btn__shadow(aria-hidden="true")
-      span.mute-btn__body
-        OrigamiIcon.mute-btn__icon(:name="isMobileAudioMuted ? 'speakerMute' : 'speaker'" tone="blue")
 </template>
 
 <style scoped lang="sass">

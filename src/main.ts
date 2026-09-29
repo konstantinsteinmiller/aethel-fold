@@ -1,5 +1,6 @@
 import { createApp, watch } from 'vue'
 import router from '@/router'
+import { BOOT, bootStage } from '@/use/useBoot'
 import '@/assets/css/tailwind.css'
 import '@/assets/css/index.sass'
 import { createI18n } from 'vue-i18n'
@@ -29,6 +30,7 @@ import { bootstrapVConsoleFromUrl } from '@/use/useVConsole'
 // builds while keeping the diagnostic alive on every other build.
 
 const bootstrap = async () => {
+  bootStage(BOOT.js)
   // Wire the universal pause gate → audio mute before anything can show an
   // ad. One subscriber, every build: rewarded / interstitial ads, tab-hide,
   // platform SDK pause, and app modals all suspend music + SFX through this
@@ -238,6 +240,7 @@ const bootstrap = async () => {
   // `reloadAethelState()` defensively, so this is the early-flush companion, not
   // a replacement.
   reloadAethelState()
+  bootStage(BOOT.save)
 
   // ─── Background / close flush — critical for mobile webviews ───────────
   //
@@ -423,6 +426,7 @@ const bootstrap = async () => {
   app.use(i18n)
 
   app.mount('#app')
+  bootStage(BOOT.app)
 
   // Kick off the ad provider's init after mount. For CrazyGames the
   // SDK is already up (initCrazyGames ran above) so this is a no-op;

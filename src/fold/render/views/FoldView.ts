@@ -7,13 +7,16 @@
  *   valley — two panels dip into a V (the ravine), stretched so they meet.
  *   launch — one panel flips 180° over its hinge.
  *   ridge  — two panels rise into a ∧ mountain.
+ *   ballista — no panel: a ballista lies folded on a castle tower and flips
+ *            upright (t → 1), turning toward each bolt's aim point.
  */
 
 import { Group, Mesh, type Texture } from 'three'
 import type { FoldState } from '../../logic/types'
 import { clamp01, easeOutBack } from '../../logic/math'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
-import { shieldGeometry, towerGeometry, wallGeometry } from '../models'
+import { ballistaGeometry, shieldGeometry, towerGeometry, wallGeometry } from '../models'
+import { CASTLE } from '../../logic/config'
 import { buildFlapGeometry } from './flapGeometry'
 import { GuideLine } from './GuideLine'
 
@@ -64,7 +67,16 @@ export class FoldView {
   private jolt = 0
   private reveal = 0
 
-  constructor(private f: FoldState, art: Texture) {
+  /**
+   * `pageId` is the outline id of the page this flap is cut from. While the
+   * flap lies flat (and isn't asking to be touched) it borrows that id, so the
+   * ink pass doesn't draw a heavy box around every fold line; the printed cut
+   * line and the dotted guide mark it instead.
+   */
+  private readonly ownId: number
+  private readonly pageId: number
+
+  constructor(private f: FoldState, art: Texture, pageId = -1) {
     const d = f.def
     this.lastHp = f.hp
     this.artMat = createPaperMaterial({ map: art, vertexColors: true, grain: 0.05 })
@@ -72,6 +84,8 @@ export class FoldView {
     const mats = [this.artMat, this.paperMat]
     // Both materials share one outline id so the flap reads as a single card.
     this.paperMat.uniforms.uObjectId.value = this.artMat.uniforms.uObjectId.value
+    this.ownId = this.artMat.uniforms.uObjectId.value
+    this.pageId = pageId
 
     const { ux, uz, nx, nz, len } = f
     if (d.kind === 'wall' || d.kind === 'launch') {
@@ -91,6 +105,7 @@ export class FoldView {
     }
 
     if (d.kind === 'wall' && d.structure !== 'none') this.buildStructure()
+    if (d.kind === 'ballista') this.buildBallista()
 
     // Guide path.
     const c = { x: f.cx, z: f.cz }
@@ -154,6 +169,23 @@ export class FoldView {
     this.group.add(s)
   }
 
+  private readonly ballistaYaw = { value: 0 }
+  private ballistaKick = 0
+
+  private buildBallista(): void {
+    const s = new Group()
+    this.structMat = createPaperMaterial({ vertexColors: true, grain: 0.05 })
+    const mesh = new Mesh(ballistaGeometry(), this.structMat)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    // Pivot at the back of the stock, so it flips up from lying flat.
+    mesh.position.z = -0.1
+    s.add(mesh)
+    s.position.set(this.f.cx, CASTLE.towerTop, CASTLE.towerZ)
+    this.structure = s
+    this.group.add(s)
+  }
+
   /** Re-point at a fresh fold state (same definition) — page restarts reuse the view. */
   bind(f: FoldState): void {
     this.f = f
@@ -183,9 +215,13 @@ export class FoldView {
     return f.def.depth * Math.tan(a) * (1 - Math.min(1, Math.abs(d) / f.def.depth))
   }
 
-  update(time: number, dt: number, highlight: boolean): void {
+  update(time: number, dt: number, highlight: boolean, rise = 1): void {
     const f = this.f
     const k = f.def.kind
+    if (k === 'ballista') {
+      this.updateBallista(time, dt, highlight, rise)
+      return
+    }
     // Snap/stamp wobble (a spring kicked on every snap).
     if (f.rev !== this.lastRev) {
       this.lastRev = f.rev
@@ -254,14 +290,54 @@ export class FoldView {
 
     const hl = highlight ? 1 : 0
     const flash = Math.max(f.flash * 0.35, this.hitFlash * 0.5)
-    for (const m of [this.artMat, this.paperMat]) {
+    const flat = t < 0.02 && !highlight && this.pageId >= 0
+    const id = flat ? this.pageId : this.ownId
+    for (let i = 0; i < 2; i++) {
+      const m = i === 0 ? this.artMat : this.paperMat
       m.uniforms.uHighlight.value = hl
       m.uniforms.uFlash.value = f.flash * 0.25
+      m.uniforms.uObjectId.value = id
     }
     if (this.structMat) {
       this.structMat.uniforms.uHighlight.value = hl
       this.structMat.uniforms.uFlash.value = flash
     }
+  }
+
+  private updateBallista(time: number, dt: number, highlight: boolean, rise: number): void {
+    const f = this.f
+    const s = this.structure!
+    // Sits on the tower top, which rises with the page.
+    s.position.y = CASTLE.towerTop * Math.max(0.001, rise)
+    s.visible = rise > 0.01
+    // Folded: lying back over the tower top, pointing at the player. Flipping
+    // open swings it over the top until it aims up the page.
+    const t = f.t
+    if (f.flash > 0.95) this.ballistaKick = 1
+    this.ballistaKick = Math.max(0, this.ballistaKick - dt * 6)
+    // Aim: turn toward the last target (open), rest straight up the page.
+    const dx = f.aimX - f.cx
+    const dz = f.aimZ - s.position.z
+    const want = f.phase === 'up' ? Math.atan2(-dx, -dz) : 0
+    this.ballistaYaw.value += (want - this.ballistaYaw.value) * Math.min(1, dt * 14)
+    s.rotation.set((1 - t) * Math.PI * 0.92 + this.ballistaKick * 0.25, this.ballistaYaw.value, 0)
+    s.scale.setScalar(0.9 + t * 0.25)
+    // Guide arrow on the strip in front of the tower.
+    let op = 0
+    let active = false
+    if (f.phase === 'ready') {
+      this.reveal = Math.min(1, this.reveal + dt * 3)
+      op = this.reveal
+      active = true
+    } else if (f.phase === 'dragging') {
+      op = Math.max(0, 1 - f.drag * 2.6)
+      active = true
+    } else if (f.phase === 'cooldown') op = 0.4
+    this.guide.update(time, op * Math.min(1, rise), active)
+    // Loaded and waiting for a tap: keep the actionable outline pulsing.
+    const armed = f.phase === 'up' && f.ammo > 0
+    this.structMat!.uniforms.uHighlight.value = highlight || armed ? 1 : 0
+    this.structMat!.uniforms.uFlash.value = f.flash * 0.4
   }
 
   dispose(): void {

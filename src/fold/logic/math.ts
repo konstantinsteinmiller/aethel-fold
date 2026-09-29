@@ -109,3 +109,6 @@ export const angleDelta = (a: number, b: number): number => {
   if (d <= -Math.PI) d += Math.PI * 2
   return d
 }
+
+/** Gravity for everything thrown (page units / s²) — floaty on purpose: it's paper. */
+export const G_PAPER = 14

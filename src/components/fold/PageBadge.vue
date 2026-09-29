@@ -12,22 +12,32 @@ const props = defineProps<{
   total: number
   nameKey: string
   boss?: boolean
+  /** Book 2 shows its number in the label; book 1 (the tutorial book) doesn't. */
+  book?: number
 }>()
 
 const { t } = useI18n()
 const name = computed(() => t(`fold.page.${props.nameKey}`))
+// The page number is already on the book icon, so book 2's label only needs
+// the book ("Buch 2"); the full "Book 2 · Page 6/6" stays in the aria-label.
+const label = computed(() => (props.book && props.book > 1
+  ? t('fold.hud.book', { b: props.book })
+  : t('fold.hud.page', { n: props.page, total: props.total })))
+const aria = computed(() => (props.book && props.book > 1
+  ? t('fold.hud.bookPage', { b: props.book, n: props.page, total: props.total })
+  : label.value))
 </script>
 
 <template lang="pug">
   div.page-badge.relative.flex.items-center(
     :class="{ 'page-badge--boss': boss }"
-    :aria-label="t('fold.hud.page', { n: page, total })"
+    :aria-label="aria"
   )
     div.page-badge__num.relative.flex.items-center.justify-center
       OrigamiIcon.page-badge__icon(name="book" :tone="boss ? 'red' : 'paper'")
       span.page-badge__digit.game-text {{ page }}
     div.page-badge__text.flex.flex-col.leading-tight.min-w-0
-      span.page-badge__label.uppercase {{ t('fold.hud.page', { n: page, total }) }}
+      span.page-badge__label.uppercase.truncate {{ label }}
       span.page-badge__name.truncate {{ name }}
 </template>
 
@@ -39,7 +49,10 @@ const name = computed(() => t(`fold.page.${props.nameKey}`))
   border: 2px solid #1c1724
   border-radius: 0.55rem 0.2rem 0.55rem 0.55rem
   box-shadow: 0 4px 0 rgba(76, 64, 120, 0.45)
-  max-width: min(46vw, 15rem)
+  // Never wider than its HUD grid column: a long label ("Buch 2 · Seite 6/6")
+  // next to a five-digit score used to spill over the score badge.
+  max-width: min(100%, 15rem)
+  min-width: 0
   min-height: 2.6rem
   clip-path: polygon(0 0, calc(100% - 0.7rem) 0, 100% 0.7rem, 100% 100%, 0 100%)
   &::after

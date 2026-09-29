@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Castle Fold — the game screen.
+ * Aethel Fold — the game screen.
  *
  * No main menu (GDD §6): mounting drops the player straight onto their page —
  * page 1 for a new player, or the page they left off on (from `aethel_state`,
@@ -17,10 +17,10 @@ import { useI18n } from 'vue-i18n'
 import { FoldEngine } from '@/fold/FoldEngine'
 import type { FoldEvent } from '@/fold/logic/events'
 import type { FoldGame } from '@/fold/logic/game'
-import { PAGES, PAGE_COUNT } from '@/fold/logic/pages'
+import { PAGE_COUNT, pageDef } from '@/fold/logic/pages'
 import { LESSON_IDS } from '@/fold/logic/lessons'
 import { brokenCount } from '@/fold/logic/boss'
-import type { LessonId, PageId } from '@/fold/logic/types'
+import type { BookId, LessonId, PageDef, PageId } from '@/fold/logic/types'
 import type { ScreenPoint } from '@/fold/render/GameView'
 import PageBadge from '@/components/fold/PageBadge.vue'
 import HeartsBadge from '@/components/fold/HeartsBadge.vue'
@@ -37,12 +37,13 @@ import useUser from '@/use/useUser'
 import { isGamePaused } from '@/use/useGamePause'
 import { syncGameplayLifecycle } from '@/use/useGameplayLifecycle'
 import {
-  addStats, bankScore, checkpoint, foldSettings, learnLesson, lessons, progressRevision, recordVictory,
-  records, resumePage, runCheckpoint, startNewRun
+  addStats, bankScore, bookUnlocked, checkpoint, foldSettings, learnLesson, lessons, progressRevision, recordVictory,
+  recordsFor, resumeBook, resumePage, runCheckpoint, startNewRun
 } from '@/use/useFoldProgress'
 import { mobileCheck } from '@/utils/function'
+import { BOOT, bootStage, markGameReady } from '@/use/useBoot'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const { userSoundVolume, userMusicVolume } = useUser()
 
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -54,6 +55,7 @@ const engine = shallowRef<FoldEngine | null>(null)
 const isTouch = mobileCheck() || (typeof window !== 'undefined' && 'ontouchstart' in window)
 
 const hud = reactive({
+  book: 1 as BookId,
   page: 1 as PageId,
   score: 0,
   hp: 3,
@@ -68,24 +70,26 @@ const hud = reactive({
   newBest: false
 })
 const pauseOpen = ref(false)
-const nameKey = computed(() => PAGES[hud.page].nameKey)
+const nameKey = computed(() => pageDef(hud.book, hud.page).nameKey)
+const best = computed(() => recordsFor(hud.book).score)
+const book2Open = computed(() => bookUnlocked(2))
 
 // ─── Engine hooks ────────────────────────────────────────────────────────────
 
 const sp: ScreenPoint = { x: 0, y: 0, visible: false }
-let statsBase = { launched: 0, crushed: 0, torn: 0, folds: 0, stamps: 0, blocks: 0 }
+const BANKED = ['launched', 'crushed', 'torn', 'folds', 'stamps', 'blocks', 'runners', 'leapers', 'shots', 'shotKills'] as const
+type Banked = Record<(typeof BANKED)[number], number>
+const zeroBase = (): Banked => ({ launched: 0, crushed: 0, torn: 0, folds: 0, stamps: 0, blocks: 0, runners: 0, leapers: 0, shots: 0, shotKills: 0 })
+let statsBase = zeroBase()
 
 const bankStats = (g: FoldGame): void => {
   const s = g.stats
-  addStats({
-    launched: s.launched - statsBase.launched,
-    crushed: s.crushed - statsBase.crushed,
-    torn: s.torn - statsBase.torn,
-    folds: s.folds - statsBase.folds,
-    stamps: s.stamps - statsBase.stamps,
-    blocks: s.blocks - statsBase.blocks
-  })
-  statsBase = { launched: s.launched, crushed: s.crushed, torn: s.torn, folds: s.folds, stamps: s.stamps, blocks: s.blocks }
+  const delta = zeroBase()
+  for (const k of BANKED) {
+    delta[k] = s[k] - statsBase[k]
+    statsBase[k] = s[k]
+  }
+  addStats(delta)
 }
 
 const onEvent = (e: FoldEvent, g: FoldGame): void => {
@@ -103,19 +107,23 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       hud.hp = e.b
       break
     case 'pageIntro':
+      hud.book = g.book
       hud.page = e.a as PageId
       hud.hp = g.hero.hp
       hud.maxHp = g.hero.maxHp
-      hud.boss = e.a === 5
+      hud.boss = g.page.exit === 'boss'
       hud.victory = false
       // Checkpoint: a reload resumes on this page with this score.
-      checkpoint(e.a as PageId, { score: g.pageStartScore, hits: g.runHits, time: g.runTime }, g.pagesCleared)
+      checkpoint(e.a as PageId, { score: g.pageStartScore, hits: g.runHits, time: g.runTime }, g.pagesCleared, g.book)
       break
     case 'pageCleared':
       bankStats(g)
-      bankScore(g.score)
+      bankScore(g.score, g.book)
       // Resume on the *next* page with everything banked so far.
-      checkpoint(Math.min(6, e.a + 1) as PageId, { score: g.score, hits: g.runHits, time: g.runTime }, Math.max(g.pagesCleared, e.a))
+      checkpoint(
+        Math.min(PAGE_COUNT, e.a + 1) as PageId, { score: g.score, hits: g.runHits, time: g.runTime },
+        Math.max(g.pagesCleared, e.a), g.book
+      )
       break
     case 'lesson':
       if (e.b === 0) {
@@ -125,7 +133,8 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       break
     case 'victory': {
       bankStats(g)
-      const res = recordVictory(g.score, g.runTime)
+      hud.book = g.book
+      const res = recordVictory(g.score, g.runTime, g.book)
       hud.victoryScore = g.score
       hud.victoryTime = g.runTime
       hud.victoryHits = g.runHits
@@ -144,10 +153,13 @@ const word = (key: string, x: number, y: number, size: number, tone: string): vo
   fx.value?.word(key, x, y, size, tone, { n: g?.combo ?? 0 })
 }
 
+/** The storybook line printed on each page (`fold.story.b<book>p<page>`). */
+const caption = (def: PageDef): string => t(`fold.story.b${def.book}p${def.id}`)
+
 const onFrame = (g: FoldGame): void => {
   if (hud.score !== g.score) hud.score = g.score
   if (hud.hp !== g.hero.hp) hud.hp = g.hero.hp
-  if (g.pageId === 5) {
+  if (hud.boss) {
     const broken = brokenCount(g.boss)
     if (hud.bossBroken !== broken) hud.bossBroken = broken
     const exp = g.boss.exposed >= 0
@@ -168,6 +180,8 @@ const layout = (): void => {
   const h = el.clientHeight
   // Keep the page clear of the HUD strip at the top.
   const topPx = (hudTop.value?.getBoundingClientRect().bottom ?? 0) - el.getBoundingClientRect().top
+  // Overlays that share the screen with the HUD (the victory ribbon) start below it.
+  el.style.setProperty('--hud-h', `${Math.max(0, Math.round(topPx))}px`)
   eng.resize(w, h, {
     top: Math.min(0.24, Math.max(0.06, (topPx + 6) / Math.max(1, h))),
     bottom: 0.02,
@@ -179,24 +193,31 @@ const layout = (): void => {
 
 const learnedMap = (): Partial<Record<LessonId, boolean>> => ({ ...lessons.value })
 
-const bootPage = (): { page: PageId; score: number } => {
+const bootPage = (): { page: PageId; score: number; book: BookId } => {
   const page = resumePage.value
+  // A book-2 bookmark without book 2 unlocked (a hand-edited or torn save) falls back to book 1.
+  const book: BookId = resumeBook.value === 2 && bookUnlocked(2) ? 2 : 1
   const score = page > 1 ? runCheckpoint.value?.score ?? 0 : 0
-  return { page, score }
+  return { page, score, book }
 }
 
 onMounted(() => {
   const c = canvas.value
   if (!c) return
-  const { page, score } = bootPage()
-  if (page === 1) startNewRun()
-  const eng = markRaw(new FoldEngine(c, { onEvent, word, onFrame }, { learned: learnedMap(), startPage: page, startScore: score }))
+  bootStage(BOOT.scene)
+  const { page, score, book } = bootPage()
+  if (page === 1) startNewRun(book)
+  const eng = markRaw(new FoldEngine(
+    c, { onEvent, word, onFrame, caption },
+    { learned: learnedMap(), startPage: page, startScore: score, book }
+  ))
   engine.value = eng
   eng.attach()
   eng.setVolumes(userSoundVolume.value, userMusicVolume.value)
   eng.setQuality(foldSettings.value.quality)
   eng.setShake(foldSettings.value.shake)
   eng.setHaptics(foldSettings.value.haptics)
+  hud.book = book
   hud.page = page
   hud.score = score
   ro = new ResizeObserver(layout)
@@ -204,8 +225,15 @@ onMounted(() => {
   if (hudTop.value) ro.observe(hudTop.value)
   layout()
   eng.start()
+  bootStage(BOOT.engine)
+  // Two frames later the first page is on screen: the splash may go.
+  requestAnimationFrame(() => requestAnimationFrame(() => markGameReady()))
   publishDebugHandle(eng)
+  // The printed story lines use the Angry font: repaint once it has loaded.
+  void document.fonts?.load('40px Angry').then(() => engine.value?.refreshCaptions()).catch(() => undefined)
 })
+
+watch(locale, () => engine.value?.refreshCaptions())
 
 onBeforeUnmount(() => {
   ro?.disconnect()
@@ -242,15 +270,19 @@ const restartPage = (): void => {
   pauseOpen.value = false
   engine.value?.restartPage()
 }
-const newGame = (): void => {
+/** Start a book from its first page (restart, play again, or a pick from the shelf). */
+const openBook = (book: BookId): void => {
   pauseOpen.value = false
-  startNewRun()
-  statsBase = { launched: 0, crushed: 0, torn: 0, folds: 0, stamps: 0, blocks: 0 }
-  engine.value?.newRun()
-}
-const playAgain = (): void => {
   hud.victory = false
-  newGame()
+  startNewRun(book)
+  statsBase = zeroBase()
+  engine.value?.newRun(book)
+}
+const newGame = (): void => openBook(hud.book)
+const playAgain = (): void => openBook(hud.book)
+const pickBook = (book: BookId): void => {
+  if (!bookUnlocked(book)) return
+  openBook(book)
 }
 
 const onKey = (e: KeyboardEvent): void => {
@@ -279,8 +311,9 @@ watch(progressRevision, () => {
   const g = eng.game
   for (const id of LESSON_IDS) if (lessons.value[id]) g.learned[id] = true
   const saved = resumePage.value
-  const early = g.pageId === 1 && g.runTime < 90 && g.pagesCleared === 0
-  if (saved > g.pageId && early) eng.jumpTo(saved, runCheckpoint.value?.score ?? 0)
+  const savedBook: BookId = resumeBook.value === 2 && bookUnlocked(2) ? 2 : 1
+  const early = g.book === 1 && g.pageId === 1 && g.runTime < 90 && g.pagesCleared === 0
+  if (early && (saved > g.pageId || savedBook !== g.book)) eng.jumpTo(saved, runCheckpoint.value?.score ?? 0, savedBook)
 })
 
 // ─── Debug / e2e handle ──────────────────────────────────────────────────────
@@ -296,9 +329,12 @@ const publishDebugHandle = (eng: FoldEngine): void => {
   ;(window as unknown as Record<string, unknown>).__fold = {
     engine: eng,
     game: eng.game,
-    jumpTo: (p: number) => eng.jumpTo(Math.max(1, Math.min(PAGE_COUNT, p)) as PageId),
+    jumpTo: (p: number, book?: number) =>
+      eng.jumpTo(Math.max(1, Math.min(PAGE_COUNT, p)) as PageId, eng.game.score, book === 2 ? 2 : book === 1 ? 1 : eng.game.book),
     clearPage: () => eng.game.debugClearPage(),
+    fastForward: (s: number) => eng.fastForward(s),
     state: () => ({
+      book: eng.game.book,
       page: eng.game.pageId,
       phase: eng.game.phase,
       score: eng.game.score,
@@ -307,7 +343,8 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       timeScale: eng.game.timeScale,
       folds: eng.game.folds.map((f) => ({ id: f.def.id, kind: f.def.kind, phase: f.phase, t: f.t })),
       enemies: eng.game.aliveCount(),
-      boss: eng.game.boss.phase
+      boss: eng.game.boss.phase,
+      sling: eng.game.sling ? { x: eng.game.sling.def.x, z: eng.game.sling.def.z, cool: eng.game.sling.cool, shots: eng.game.sling.shots } : null
     }),
     /** Screen position (CSS px) of a page point — lets tests aim real pointer gestures. */
     screenOf: (x: number, z: number, y = 0) => {
@@ -331,10 +368,10 @@ const pageAria = computed(() => t('fold.a11y.board'))
     //- ── HUD ──
     div.hud-top(ref="hudTop")
       div.hud-left.flex.flex-col.items-start
-        PageBadge(:page="hud.page" :total="PAGE_COUNT" :name-key="nameKey" :boss="hud.boss")
+        PageBadge(:page="hud.page" :total="PAGE_COUNT" :name-key="nameKey" :boss="hud.boss" :book="hud.book")
         HeartsBadge(:hp="hud.hp" :max="hud.maxHp")
       div.hud-centre.flex.flex-col.items-center
-        ScoreBadge(:score="hud.score" :best="records.score")
+        ScoreBadge(:score="hud.score" :best="best")
         BossMeter(v-if="hud.boss" :total="5" :broken="hud.bossBroken" :exposed="hud.bossExposed")
       div.hud-right.flex.items-start
         FMuteButton
@@ -343,19 +380,24 @@ const pageAria = computed(() => t('fold.a11y.board'))
 
     VictoryPanel(
       :open="hud.victory"
+      :book="hud.book"
       :score="hud.victoryScore"
-      :best="records.score"
+      :best="best"
       :time="hud.victoryTime"
       :hits="hud.victoryHits"
       :new-best="hud.newBest"
       @again="playAgain"
+      @book="pickBook"
     )
 
     CootieCatcherPause(
       :open="pauseOpen"
+      :book="hud.book"
+      :unlocked="book2Open"
       @resume="resume"
       @restart-page="restartPage"
       @new-game="newGame"
+      @pick-book="pickBook"
     )
 </template>
 
@@ -396,6 +438,9 @@ const pageAria = computed(() => t('fold.a11y.board'))
 .hud-left
   gap: clamp(0.25rem, 1vh, 0.45rem)
   min-width: 0
+  // Children (page badge, hearts) are clamped to the column, never past it.
+  > *
+    max-width: 100%
 
 .hud-centre
   gap: clamp(0.2rem, 0.9vh, 0.4rem)

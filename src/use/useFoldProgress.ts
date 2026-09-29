@@ -1,14 +1,15 @@
 import { ref, watch, type Ref } from 'vue'
 import {
-  BEST_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUN_KEY, RUNS_KEY, SETTINGS_KEY, STATS_KEY, WINS_KEY
+  BEST2_KEY, BEST_KEY, BOOK_KEY, CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUN_KEY, RUNS_KEY, SETTINGS_KEY,
+  STATS_KEY, WINS2_KEY, WINS_KEY
 } from '@/keys'
 import { aethelState, getState, setState, setStates } from '@/use/useAethelState'
 import { saveDataVersion, flushSaveNow } from '@/use/useSaveStatus'
-import type { LessonId, PageId } from '@/fold/logic/types'
+import type { BookId, LessonId, PageId } from '@/fold/logic/types'
 import { emptyStats, type GameStats } from '@/fold/logic/game'
 
 /**
- * Castle Fold progress — a module-level singleton view over the fields of
+ * Aethel Fold progress — a module-level singleton view over the fields of
  * `aethel_state` that belong to the game (see `src/keys.ts`).
  *
  * Every ref here is re-read whenever the blob is replaced (`aethelState`
@@ -51,6 +52,8 @@ const asPage = (v: unknown): PageId => {
 const obj = <T extends object>(v: unknown, fallback: T): T =>
   v && typeof v === 'object' && !Array.isArray(v) ? { ...fallback, ...(v as Partial<T>) } : { ...fallback }
 
+const asBook = (v: unknown): BookId => (Math.round(num(v, 1)) === 2 ? 2 : 1)
+
 const readSettings = (): FoldSettings => {
   const s = obj<FoldSettings>(getState(SETTINGS_KEY), DEFAULT_SETTINGS)
   if (s.quality !== 'auto' && s.quality !== 'high' && s.quality !== 'low') s.quality = 'auto'
@@ -66,10 +69,18 @@ const readCheckpoint = (): RunCheckpoint | null => {
   return { score: Math.max(0, num(r.score)), hits: Math.max(0, num(r.hits)), time: Math.max(0, num(r.time)) }
 }
 
+const readCleared = (key: string): number => Math.max(0, Math.min(6, num(getState(key))))
+
 export const resumePage: Ref<PageId> = ref(asPage(getState(PAGE_KEY)))
-export const pagesCleared: Ref<number> = ref(Math.max(0, Math.min(6, num(getState(CLEARED_KEY)))))
+/** The book `resumePage` belongs to. */
+export const resumeBook: Ref<BookId> = ref(asBook(getState(BOOK_KEY)))
+export const pagesCleared: Ref<number> = ref(readCleared(CLEARED_KEY))
 export const records: Ref<Records> = ref(obj<Records>(getState(BEST_KEY), { score: 0, time: 0 }))
 export const wins: Ref<number> = ref(num(getState(WINS_KEY)))
+/** Book 2 ("The Homefront") progress. */
+export const pagesCleared2: Ref<number> = ref(readCleared(CLEARED2_KEY))
+export const records2: Ref<Records> = ref(obj<Records>(getState(BEST2_KEY), { score: 0, time: 0 }))
+export const wins2: Ref<number> = ref(num(getState(WINS2_KEY)))
 export const runs: Ref<number> = ref(num(getState(RUNS_KEY)))
 export const lessons: Ref<Partial<Record<LessonId, boolean>>> = ref(obj(getState(LESSONS_KEY), {}))
 export const lifetime: Ref<GameStats> = ref(obj<GameStats>(getState(STATS_KEY), emptyStats()))
@@ -80,9 +91,13 @@ export const progressRevision = ref(0)
 
 const refresh = (): void => {
   resumePage.value = asPage(getState(PAGE_KEY))
-  pagesCleared.value = Math.max(0, Math.min(6, num(getState(CLEARED_KEY))))
+  resumeBook.value = asBook(getState(BOOK_KEY))
+  pagesCleared.value = readCleared(CLEARED_KEY)
   records.value = obj<Records>(getState(BEST_KEY), { score: 0, time: 0 })
   wins.value = num(getState(WINS_KEY))
+  pagesCleared2.value = readCleared(CLEARED2_KEY)
+  records2.value = obj<Records>(getState(BEST2_KEY), { score: 0, time: 0 })
+  wins2.value = num(getState(WINS2_KEY))
   runs.value = num(getState(RUNS_KEY))
   lessons.value = obj(getState(LESSONS_KEY), {})
   lifetime.value = obj<GameStats>(getState(STATS_KEY), emptyStats())
@@ -97,14 +112,26 @@ watch(saveDataVersion, () => {
 })
 
 /** Is there anything worth resuming (a run past page 1)? */
-export const hasProgress = (): boolean => resumePage.value > 1 || pagesCleared.value > 0 || wins.value > 0
+export const hasProgress = (): boolean =>
+  resumePage.value > 1 || resumeBook.value > 1 || pagesCleared.value > 0 || wins.value > 0 || pagesCleared2.value > 0
+
+/** Book 2 opens once book 1 has been won. */
+export const bookUnlocked = (book: BookId): boolean => book === 1 || wins.value > 0 || wins2.value > 0 || pagesCleared2.value > 0
+
+/** Records for a book. */
+export const recordsFor = (book: BookId): Records => (book === 2 ? records2.value : records.value)
+
+const bookKeys = (book: BookId) => book === 2
+  ? { cleared: CLEARED2_KEY, best: BEST2_KEY, wins: WINS2_KEY, clearedRef: pagesCleared2, bestRef: records2, winsRef: wins2 }
+  : { cleared: CLEARED_KEY, best: BEST_KEY, wins: WINS_KEY, clearedRef: pagesCleared, bestRef: records, winsRef: wins }
 
 // ─── Writers ───────────────────────────────────────────────────────────────
 
-/** A new run starts on page 1. */
-export const startNewRun = (): void => {
+/** A new run starts on page 1 of a book. */
+export const startNewRun = (book: BookId = resumeBook.value): void => {
   setStates({
     [PAGE_KEY]: 1,
+    [BOOK_KEY]: book,
     [RUN_KEY]: { score: 0, hits: 0, time: 0 },
     [RUNS_KEY]: runs.value + 1
   })
@@ -114,12 +141,17 @@ export const startNewRun = (): void => {
  * Checkpoint at the start of a page: a reload resumes here with this score.
  * `cleared` is the highest page finished so far.
  */
-export const checkpoint = (page: PageId, run: RunCheckpoint, cleared: number): void => {
+export const checkpoint = (page: PageId, run: RunCheckpoint, cleared: number, book: BookId = 1): void => {
+  const k = bookKeys(book)
   setStates({
     [PAGE_KEY]: page,
+    [BOOK_KEY]: book,
     [RUN_KEY]: { score: Math.round(run.score), hits: run.hits, time: Math.round(run.time * 10) / 10 },
-    [CLEARED_KEY]: Math.max(pagesCleared.value, Math.min(6, cleared))
+    [k.cleared]: Math.max(k.clearedRef.value, Math.min(6, cleared))
   })
+  // A hard checkpoint: don't wait for the debounce, or a tab closed right after
+  // a page turn resumes one page too early.
+  void flushSaveNow()
 }
 
 export const learnLesson = (id: LessonId): void => {
@@ -139,16 +171,22 @@ export const addStats = (delta: Partial<GameStats>): void => {
   if (changed) setState(STATS_KEY, next)
 }
 
-/** The run is won: bank records and reset the resume point to a fresh book. */
-export const recordVictory = (score: number, time: number): { newBest: boolean; newFastest: boolean } => {
-  const r = records.value
+/**
+ * The book is won: bank its records and reset the resume point. Winning book 1
+ * moves the bookmark on to book 2 (which it unlocks); winning book 2 keeps it
+ * there. The victory panel lets the player pick either book next.
+ */
+export const recordVictory = (score: number, time: number, book: BookId = 1): { newBest: boolean; newFastest: boolean } => {
+  const k = bookKeys(book)
+  const r = k.bestRef.value
   const newBest = score > r.score
   const newFastest = time > 0 && (r.time === 0 || time < r.time)
   setStates({
-    [BEST_KEY]: { score: Math.max(r.score, Math.round(score)), time: newFastest ? Math.round(time * 10) / 10 : r.time },
-    [WINS_KEY]: wins.value + 1,
-    [CLEARED_KEY]: 6,
+    [k.best]: { score: Math.max(r.score, Math.round(score)), time: newFastest ? Math.round(time * 10) / 10 : r.time },
+    [k.wins]: k.winsRef.value + 1,
+    [k.cleared]: 6,
     [PAGE_KEY]: 1,
+    [BOOK_KEY]: 2,
     [RUN_KEY]: { score: 0, hits: 0, time: 0 }
   })
   void flushSaveNow()
@@ -156,9 +194,10 @@ export const recordVictory = (score: number, time: number): { newBest: boolean; 
 }
 
 /** Keep the best score even for runs that never finish. */
-export const bankScore = (score: number): void => {
-  if (score <= records.value.score) return
-  setState(BEST_KEY, { ...records.value, score: Math.round(score) })
+export const bankScore = (score: number, book: BookId = 1): void => {
+  const k = bookKeys(book)
+  if (score <= k.bestRef.value.score) return
+  setState(k.best, { ...k.bestRef.value, score: Math.round(score) })
 }
 
 export const setFoldSetting = <K extends keyof FoldSettings>(key: K, value: FoldSettings[K]): void => {

@@ -6,7 +6,7 @@
 // All scenarios use the CrazyGames SDK shape; the same logic is
 // exercised against Glitch in GlitchStrategy.test.ts.
 //
-// Castle Fold persists exactly one gameplay entry — the `aethel_state`
+// Aethel Fold persists exactly one gameplay entry — the `aethel_state`
 // blob, whose fields are the `fold_*` progress keys — plus the META blob.
 //
 // Fixture rule (why these once hung for 30 s each): a fixture whose

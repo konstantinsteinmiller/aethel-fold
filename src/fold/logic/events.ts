@@ -26,7 +26,7 @@ export type FoldEventType =
   | 'spawn'         // a = enemy slot
   | 'shoot'         // a = projectile slot, c = type code
   | 'blocked'       // a = projectile slot, x/z, b = fold index
-  | 'impact'        // a = projectile slot, x/z (hit the ground / a target)
+  | 'impact'        // a = projectile slot, x/z, b = kind (1 fling, 2 catapult, 3 arrow, 4 boulder, 5 sling stone)
   | 'heroHit'       // x/z, b = hearts left
   | 'heroDown'
   | 'breach'        // a = enemy slot, x/z
@@ -48,12 +48,21 @@ export type FoldEventType =
   | 'frog'          // the finale fold completed
   | 'victory'
   | 'tap'           // x/z — a tap that hit nothing (little ripple)
+  | 'slingGrab'     // the sling's cup was taken
+  | 'slingFire'     // a = projectile slot, x/z = where it will land
+  | 'slingCancel'   // let go without enough pull
+  | 'slingReady'    // reloaded
+  | 'bossHit'       // a sling stone hit the dragon's body: x/z, b = hits so far, c = 1 if it interrupted the breath
+  | 'ballistaFire'  // a = fold index, b = projectile slot, x/z = aim point
+  | 'leap'          // a = enemy slot, c = 1 vaulting a wall / 0 a lane hop, x/z = take-off
 
 export const KILL_LAUNCH = 1
 export const KILL_CRUSH = 2
 export const KILL_TEAR = 3
 export const KILL_FLING = 4
 export const KILL_RIDGE = 5
+export const KILL_SHOT = 6
+export const KILL_BOLT = 7
 
 export interface FoldEvent {
   type: FoldEventType

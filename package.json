@@ -15,6 +15,7 @@
     "build:game-distribution": "vite build --mode game-distribution --base=./",
     "build:playgama": "vite build --mode playgama --base=./ && cd dist && tar -a -cf ../aethel-fold-playgama.zip * && cd .. && move aethel-fold-playgama.zip dist\\",
     "build:gamepix": "vite build --mode gamepix --base=./ && cd dist && tar -a -cf ../aethel-fold-gamepix.zip * && cd .. && move aethel-fold-gamepix.zip dist\\",
+    "build:poki": "vite build --mode poki --base=./ && cd dist && tar -a -cf ../aethel-fold-poki.zip * && cd .. && move aethel-fold-poki.zip dist\\",
     "build:gamemonetize": "vite build --mode gamemonetize --base=./ && cd dist && tar -a -cf ../aethel-fold-gamemonetize.zip * && cd .. && move aethel-fold-gamemonetize.zip dist\\",
     "build:yandex": "vite build --mode yandex --base=./ && cd dist && tar -a -cf ../aethel-fold-yandex.zip * && cd .. && move aethel-fold-yandex.zip dist\\",
     "build-github-main": "vite build --base=/aethel-fold/ --outDir=dist",

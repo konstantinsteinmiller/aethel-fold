@@ -3,7 +3,7 @@
 // this folder mirror the shape. Vite ships each non-English locale as its own
 // lazy chunk (see `src/i18n/index.ts`).
 export default {
-  'gameName': 'Castle Fold',
+  'gameName': 'Aethel Fold',
   'cancel': 'Cancel',
   'close': 'Close',
   'ok': 'Ok',
@@ -30,7 +30,13 @@ export default {
     'dismiss': 'dismiss'
   },
   'loading': {
-    'tooLong': 'Loading taking too long? Try disabling your ad blocker and refresh.'
+    'tooLong': 'Loading taking too long? Try disabling your ad blocker and refresh.',
+    'tip1': 'Swipe along a dotted arrow to fold a wall up.',
+    'tip2': 'Tap a raised wall to slam it down on the knights bashing it.',
+    'tip3': 'Fold the ravine shut, then tap it to crush everyone inside.',
+    'tip4': 'Flip a flap under a catapult to fling it back at its own archers.',
+    'tip5': 'Swipe a castle tower up to open its ballista, then tap to shoot.',
+    'tip6': 'Leapers jump over walls. The sling brings them down.'
   },
   'license': {
     'denied': 'Access Denied: Please purchase a license.'
@@ -257,6 +263,8 @@ export default {
   'fold': {
     'hud': {
       'page': 'Page {n}/{total}',
+      'book': 'Book {b}',
+      'bookPage': 'Book {b} · Page {n}/{total}',
       'score': 'Score',
       'best': 'Best',
       'settings': 'Pause and settings',
@@ -270,7 +278,36 @@ export default {
       'siege': 'The Siege',
       'gates': 'The Castle Gates',
       'core': 'The Castle Core',
-      'finale': 'The Last Fold'
+      'finale': 'The Last Fold',
+      'home': 'The Home Keep',
+      'orchard': 'The Orchard',
+      'mill': 'Windmill Hill',
+      'camp': 'The Siege Camp',
+      'return': 'The Dragon Returns',
+      'homecoming': 'Peace at Last'
+    },
+    'story': {
+      'b1p1': 'The Paper King’s knights are marching on the border…',
+      'b1p2': 'Beyond the ravine: heavier knights, and a catapult!',
+      'b1p3': 'Archers on the walls. Shields up, and fling them back!',
+      'b1p4': 'The castle gates. Tear them open!',
+      'b1p5': 'Deep inside the castle, something is unfolding…',
+      'b1p6': 'The dragon is only paper now. One last fold.',
+      'b2p1': 'The frog hopped home… now the King marches on YOUR keep!',
+      'b2p2': 'Leapers on paper springs jump any wall. Use the sling!',
+      'b2p3': 'Catapults on Windmill Hill. Fling them back, again and again!',
+      'b2p4': 'The whole siege camp is coming for the gate.',
+      'b2p5': 'The dragon returns!',
+      'b2p6': 'Fold it into a crane, and let it fly away in peace.'
+    },
+    'books': {
+      'title': 'Books',
+      'hint': 'Pick a book. It starts on page 1.',
+      'name1': 'Book 1: The Paper Dragon',
+      'name2': 'Book 2: The Homefront',
+      'blurb1': 'March on the enemy castle.',
+      'blurb2': 'Defend your own keep.',
+      'locked': 'Win book 1 to unlock.'
     },
     'fx': {
       'snap': 'SNAP!',
@@ -284,7 +321,11 @@ export default {
       'crash': 'CRASH!',
       'blocked': 'BLOCKED!',
       'perfect': 'PERFECT PAGE!',
-      'combo': 'COMBO ×{n}'
+      'combo': 'COMBO ×{n}',
+      'thwack': 'THWACK!',
+      'boing': 'BOING!',
+      'twang': 'TWANG!',
+      'flap': 'FLAP!'
     },
     'hint': {
       'swipe': 'Swipe along the dotted arrow to fold the page',
@@ -296,14 +337,18 @@ export default {
       'spreadMouse': 'Drag across the glowing crease (or scroll on it)',
       'peel': 'Drag the corner to peel back the page',
       'crease': 'Swipe along the glowing crease',
-      'frog': 'One last fold…'
+      'frog': 'One last fold…',
+      'ballista': 'Swipe up the tower to open the ballista, then tap to shoot',
+      'crush': 'Tap the wall to slam it down on them',
+      'sling': 'Pull the sling back, aim, and let go',
+      'leaper': 'Leapers jump walls. Sling them!'
     },
     'pause': {
       'title': 'Paused',
       'resume': 'Resume',
       'restartPage': 'Restart page',
-      'newGame': 'New book',
-      'confirmNew': 'Start a new book from page 1? This run will be lost.',
+      'newGame': 'Start book over',
+      'confirmNew': 'Start this book again from page 1? This run will be lost.',
       'confirmYes': 'Yes, start over',
       'confirmNo': 'Keep playing',
       'settings': 'Settings',
@@ -329,10 +374,15 @@ export default {
       'time': 'Time',
       'hits': 'Hearts lost',
       'newBest': 'New record!',
-      'playAgain': 'Play again'
+      'playAgain': 'Play again',
+      'subtitle2': 'The dragon is a paper crane now!',
+      'story1': '…but the frog hopped away to warn the Paper King. He is coming for your keep!',
+      'story2': 'Your keep stands. The crane flies home in peace.',
+      'nextBook': 'Book 2: The Homefront',
+      'backToBook1': 'Read book 1 again'
     },
     'a11y': {
-      'board': 'Castle Fold — a pop-up book on a desk'
+      'board': 'Aethel Fold — a pop-up book on a desk'
     }
   }
 }

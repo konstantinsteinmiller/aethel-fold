@@ -3,7 +3,7 @@
  * The small corner indicator used inside `FHudButton`'s `badge` slot —
  * a claim count, a reward amount, or a countdown. Fluidly sized so it stays
  * legible on a 320 px phone without swallowing the chip it sits on.
- * Castle Fold look: a small creased paper tag with an ink border.
+ * Aethel Fold look: a small creased paper tag with an ink border.
  */
 interface Props {
   tone?: 'red' | 'blue' | 'gold' | 'green'

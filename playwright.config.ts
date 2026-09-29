@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
- * End-to-end tests for Castle Fold. Two dev servers:
+ * End-to-end tests for Aethel Fold. Two dev servers:
  *   :2050 — the plain web build (LocalStorage strategy)
  *   :2051 — the CrazyGames build (cloud-only saves) against a fake SDK the
  *           tests inject, so remote hydration can be verified end to end.

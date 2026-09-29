@@ -29,7 +29,7 @@ export const createProjectilePool = (): Projectile[] => {
     out.push({
       id: i, alive: false, type: 'arrow',
       x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, tx: 0, tz: 0,
-      age: 0, life: 0, owner: -1, stuck: false, serial: 0
+      age: 0, life: 0, owner: -1, stuck: false, serial: 0, hits: 0
     })
   }
   return out
@@ -99,6 +99,7 @@ export const spawnProjectile = (
     p.life = life
     p.owner = owner
     p.stuck = false
+    p.hits = 0
     p.serial = serialCounter++
     return i
   }
@@ -107,7 +108,7 @@ export const spawnProjectile = (
 
 /** Enemy counts as "on the board" for wave/page completion. */
 export const isAlive = (e: Enemy): boolean =>
-  e.state === 'march' || e.state === 'blocked' || e.state === 'trapped' || e.state === 'stand'
+  e.state === 'march' || e.state === 'blocked' || e.state === 'trapped' || e.state === 'stand' || e.state === 'leap'
 
 /** Anything still animating (flying, being crushed) — the slot is not free yet. */
 export const isActive = (e: Enemy): boolean => e.state !== 'dead'

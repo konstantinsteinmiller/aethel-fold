@@ -44,3 +44,33 @@ for (const vp of VIEWPORTS) {
     await page.screenshot({ path: `test-results/responsive-${vp.name}.png` })
   })
 }
+
+// The reported case: German ("Buch 2 · Seite 6/6 / Endlich Frieden") next to a
+// five-digit score on a phone in portrait. The page badge must stay in its
+// column and never slide under the score badge.
+for (const width of [320, 360, 390, 412]) {
+  test(`long page label + five-digit score never overlap at ${width}px portrait (de)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 860 })
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('__seeded')) return
+      sessionStorage.setItem('__seeded', '1')
+      localStorage.setItem('aethel_state', JSON.stringify({
+        user_language: 'de', fold_wins: 1, fold_book: 2, fold_page: 6,
+        fold_run: { score: 44720, hits: 0, time: 300 }, fold_best: { score: 44720, time: 300 }
+      }))
+    })
+    await page.goto('/')
+    await waitForGame(page)
+    await expect(page.locator('.page-badge[aria-label="Buch 2 · Seite 6/6"]')).toBeAttached()
+    await page.waitForTimeout(800)
+    const b = await page.evaluate(() => {
+      const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect()
+      const p = r('.page-badge')
+      const s = r('.score__tag')
+      const h = r('.hearts')
+      return { pRight: p.right, pBottom: p.bottom, sLeft: s.left, sBottom: s.bottom, hRight: h.right }
+    })
+    expect(b.pRight, 'page badge right edge vs score left edge').toBeLessThanOrEqual(b.sLeft + 0.5)
+    expect(b.hRight).toBeLessThanOrEqual(b.sLeft + 0.5)
+  })
+}

@@ -111,8 +111,10 @@ export class FoldRenderer {
     this.mrt.setSize(w, h)
     const u = this.composite.uniforms
     u.uRes!.value.set(w, h)
-    // Ink width in drawing pixels: bold, and constant on screen whatever the scale.
-    u.uInkWidth!.value = Math.max(1.1, 2.1 * this.dpr * this.effectiveScale)
+    // Ink width in drawing pixels, constant on screen whatever the scale. Kept
+    // fine (≈1.4 CSS px): at 2.1 the outlines clogged small props and the
+    // faceted trees read as heavy black scribbles.
+    u.uInkWidth!.value = Math.max(1, 1.4 * this.dpr * this.effectiveScale)
     u.uTiltRadius!.value = 5.5 * this.dpr * this.effectiveScale
   }
 
@@ -173,7 +175,7 @@ export class FoldRenderer {
     u.uNear!.value = camera.near
     u.uFar!.value = camera.far
     u.uRes!.value.set(target.width, target.height)
-    u.uInkWidth!.value = Math.max(1.5, target.width / 520)
+    u.uInkWidth!.value = Math.max(1.2, target.width / 720)
     u.uTiltBand!.value = 0
     u.uVignette!.value = 0
     u.uGrain!.value = 0

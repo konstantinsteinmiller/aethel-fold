@@ -3,7 +3,7 @@ import { ref, type Ref } from 'vue'
 /**
  * ─── `aethel_state` — the single persisted state object ──────────────────────
  *
- * EVERY persisted value Castle Fold touches — the page to resume on, the run
+ * EVERY persisted value Aethel Fold touches — the page to resume on, the run
  * checkpoint, records, the wordless lessons already learned, lifetime stats
  * and the player's settings — lives inside ONE in-memory record
  * (`aethelState: Record<string, any>`), and exactly ONE localStorage key is

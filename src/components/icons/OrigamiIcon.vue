@@ -2,7 +2,7 @@
 /**
  * Origami icon set — every glyph is folded paper: two-tone facets (a lit and a
  * shaded side of each crease) under a bold ink outline, so icons match the
- * Castle Fold look instead of generic line icons. Colour comes from the
+ * Aethel Fold look instead of generic line icons. Colour comes from the
  * `tone` prop (paper colours) and the whole icon scales with font-size (1em).
  */
 import { computed } from 'vue'

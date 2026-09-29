@@ -88,3 +88,44 @@ describe('useCrazyMuteSync.toggleMute', () => {
     expect(getState(SOUND_KEY)).toBe(0.5)
   })
 })
+
+describe('mute button — remembers the previous volumes in aethel_state', () => {
+  it('a second tap restores exactly the volumes from before the mute', async () => {
+    const { setState } = await import('@/use/useAethelState')
+    setState(MUSIC_KEY, 0.3)
+    setState(SOUND_KEY, 0.85)
+    const { isMuted, toggleMute } = await import('@/use/useCrazyMuteSync')
+    const { getState } = await import('@/use/useAethelState')
+    expect(isMuted.value).toBe(false)
+
+    toggleMute()
+    expect(isMuted.value).toBe(true)
+    expect(getState(MUSIC_KEY)).toBe(0)
+    expect(getState(SOUND_KEY)).toBe(0)
+    expect(getState('user_muted_volumes')).toEqual({ music: 0.3, sound: 0.85 })
+
+    toggleMute()
+    expect(isMuted.value).toBe(false)
+    expect(getState(MUSIC_KEY)).toBe(0.3)
+    expect(getState(SOUND_KEY)).toBe(0.85)
+    expect(getState('user_muted_volumes')).toBe(null)
+  })
+
+  it('survives a reload: muted in one session, restored in the next', async () => {
+    const first = await import('@/use/useAethelState')
+    first.setState(MUSIC_KEY, 0.4)
+    first.setState(SOUND_KEY, 0.6)
+    ;(await import('@/use/useCrazyMuteSync')).toggleMute()
+    first.flushPersist()
+
+    // "Reload": fresh modules reading the persisted aethel_state.
+    vi.resetModules()
+    const { isMuted, toggleMute } = await import('@/use/useCrazyMuteSync')
+    const { getState } = await import('@/use/useAethelState')
+    expect(isMuted.value).toBe(true)
+    toggleMute()
+    expect(getState(MUSIC_KEY)).toBe(0.4)
+    expect(getState(SOUND_KEY)).toBe(0.6)
+  })
+})
+

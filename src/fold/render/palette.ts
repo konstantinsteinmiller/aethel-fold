@@ -1,5 +1,5 @@
 /**
- * Castle Fold palette (aethel-fold-GDD §2).
+ * Aethel Fold palette (aethel-fold-GDD §2).
  *
  * "Pastel base terrain with highly saturated, contrasting primary colors for
  * interactive elements." Everything that draws — materials, canvas painters,

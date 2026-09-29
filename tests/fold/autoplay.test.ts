@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { FoldGame } from '@/fold/logic/game'
 import { isGrabbable, isStampable, onFootprint } from '@/fold/logic/folds'
-import type { PageId } from '@/fold/logic/types'
+import { SLING_GAIN } from '@/fold/logic/config'
+import type { BookId, PageId } from '@/fold/logic/types'
 
 /**
  * A scripted "perfect-ish" player: it does what the wordless lessons teach,
@@ -30,6 +31,8 @@ const botStep = (g: FoldGame): void => {
       if (g.enemies.some((e) => e.type === 'catapult' && e.state === 'stand' && onFootprint(f, e.x, e.z, 0.2))) g.foldNow(i)
     } else if (k === 'ridge' || k === 'frog') {
       g.foldNow(i)
+    } else if (k === 'ballista') {
+      if (g.enemies.some((e) => e.state === 'march' && e.z > 0.5)) g.foldNow(i)
     }
   }
   // Tears.
@@ -46,6 +49,42 @@ const botStep = (g: FoldGame): void => {
   }
   // Peel.
   if (g.phase === 'peel') g.peelDrag(1)
+  // Ballistas: shoot the enemy closest to the castle.
+  for (let n = 0; n < 2; n++) {
+    let lead = -1
+    let lz = -Infinity
+    for (let j = 0; j < g.enemies.length; j++) {
+      const e = g.enemies[j]!
+      if ((e.state === 'march' || e.state === 'blocked') && e.z > lz && e.z < 4.5) {
+        lz = e.z
+        lead = j
+      }
+    }
+    if (lead < 0 || g.armedBallista(g.enemies[lead]!.x) < 0) break
+    if (!g.fireBallista(g.enemies[lead]!.x, g.enemies[lead]!.z)) break
+  }
+  // Sling (book 2): leapers first, then whoever is closest to the keep.
+  const s = g.sling
+  if (s && s.cool <= 0 && g.acceptsInput()) {
+    let best = -1
+    let bestScore = -Infinity
+    for (let j = 0; j < g.enemies.length; j++) {
+      const e = g.enemies[j]!
+      if (e.state !== 'march' && e.state !== 'stand' && e.state !== 'blocked') continue
+      const sc = e.z + (e.type === 'leaper' ? 6 : e.type === 'runner' ? 2 : 0)
+      if (e.z > -5.5 && sc > bestScore) {
+        bestScore = sc
+        best = j
+      }
+    }
+    if (best >= 0) {
+      const e = g.enemies[best]!
+      const tz = e.state === 'march' ? e.z + e.speed * 0.8 : e.z
+      g.grabSling()
+      g.aimSling(-(e.x - s.def.x) / SLING_GAIN, -(tz - s.def.z) / SLING_GAIN)
+      g.releaseSling()
+    }
+  }
 }
 
 const run = (g: FoldGame, seconds: number, until: () => boolean, bot = true): boolean => {
@@ -59,7 +98,7 @@ const run = (g: FoldGame, seconds: number, until: () => boolean, bot = true): bo
   return false
 }
 
-describe('Castle Fold autoplay', () => {
+describe('Aethel Fold autoplay', () => {
   it('the swipe lesson freezes time until the player folds, then launches the column', () => {
     const g = new FoldGame({ seed: 1 })
     g.startRun(1)
@@ -129,11 +168,34 @@ describe('Castle Fold autoplay', () => {
     expect(g.hero.hp).toBe(3)
   })
 
+  it.each([1, 2, 3, 4] as PageId[])('book 2: a competent player clears page %i and moves on', (page) => {
+    const g = new FoldGame({ seed: 70 + page, book: 2 })
+    g.startRun(page)
+    const ok = run(g, 300, () => g.pageId !== page)
+    expect(ok, `stuck on book 2 page ${page} in phase ${g.phase}, wave ${g.waveIndex}, alive ${g.aliveCount()}`).toBe(true)
+    expect(g.hero.hp).toBeGreaterThan(0)
+  })
+
+  it('book 2: the returning dragon can be beaten and the book ends after the crane fold', () => {
+    const g = new FoldGame({ seed: 5, book: 2 })
+    g.startRun(5)
+    const ok = run(g, 400, () => g.phase === 'victory')
+    expect(ok, `ended in ${g.phase} / boss ${g.boss.phase}`).toBe(true)
+    expect(g.book).toBe(2 as BookId)
+  })
+
   it('plays the whole game from page 1 to victory', () => {
     const g = new FoldGame({ seed: 2024 })
     g.startRun(1)
     const ok = run(g, 1500, () => g.phase === 'victory')
     expect(ok, `ended on page ${g.pageId} phase ${g.phase}`).toBe(true)
     expect(g.pagesCleared).toBeGreaterThanOrEqual(5)
+  })
+
+  it('plays the whole of book 2 from page 1 to victory', () => {
+    const g = new FoldGame({ seed: 4048, book: 2 })
+    g.startRun(1)
+    const ok = run(g, 1800, () => g.phase === 'victory')
+    expect(ok, `ended on page ${g.pageId} phase ${g.phase}`).toBe(true)
   })
 })

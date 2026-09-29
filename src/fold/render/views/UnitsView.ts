@@ -7,6 +7,7 @@
 import { Group, Mesh, type PerspectiveCamera } from 'three'
 import type { FoldGame } from '../../logic/game'
 import { MAX_ENEMIES } from '../../logic/entities'
+import { CASTLE } from '../../logic/config'
 import type { Enemy } from '../../logic/types'
 import { clamp01, easeOutBack } from '../../logic/math'
 import type { FrameName, StandeeAtlas } from '../art/standeeArt'
@@ -59,6 +60,16 @@ class CatapultModel {
       g.scale.setScalar(1.05)
     }
   }
+}
+
+/** Walk A, walk B, flail/wind-up frame per enemy type. */
+const FRAMES: Record<Enemy['type'], readonly [FrameName, FrameName, FrameName]> = {
+  knight: ['knight0', 'knight1', 'knightFlail'],
+  brute: ['brute0', 'brute1', 'bruteFlail'],
+  archer: ['archer0', 'archer0', 'archerDraw'],
+  catapult: ['knight0', 'knight1', 'knightFlail'],
+  runner: ['runner0', 'runner1', 'runnerFlail'],
+  leaper: ['leaper0', 'leaper1', 'leaperFlail']
 }
 
 export class UnitsView {
@@ -185,13 +196,16 @@ export class UnitsView {
         break
     }
     this.hero.setFrame(0, frame)
+    // The hero stands on the roof of the player's keep, above the castle gate.
+    const hx = h.x
+    const hz = CASTLE.keepZ - 0.05
     const pitch = h.mood === 'down' ? -1.35 : 0
-    this.hero.place(0, h.x, hop, h.z, Math.atan2(cam.x - h.x, cam.z - h.z) * 0.3, roll, pitch, 1.18)
+    this.hero.place(0, hx, CASTLE.keepTop + hop, hz, Math.atan2(cam.x - hx, cam.z - hz) * 0.3, roll, pitch, 0.95)
     const f = 1 + this.heroFlash * 1.2
     this.hero.tint(0, f, f * (1 - this.heroFlash * 0.5), f * (1 - this.heroFlash * 0.5))
     this.hero.commit()
-    this.banner.position.set(h.x + 0.62, 0, h.z - 0.18)
-    this.banner.rotation.y = Math.sin(time * 1.3) * 0.08
+    // The keep flies its own flag; the camp banner is not needed any more.
+    this.banner.visible = false
     for (let k = 0; k < 3; k++) {
       const heart = this.hearts[k]!
       const alive = k < h.hp
@@ -200,7 +214,7 @@ export class UnitsView {
       heart.visible = alive || pop > 0
       const bob = Math.sin(time * 2.6 + k * 1.1) * 0.06
       const lift = alive ? 0 : (1 - pop) * 1.4
-      heart.position.set(h.x - 0.55 + k * 0.55, 1.62 + bob + lift, h.z + 0.05)
+      heart.position.set(hx - 0.55 + k * 0.55, CASTLE.keepTop + 1.45 + bob + lift, hz + 0.05)
       heart.rotation.y = alive ? Math.sin(time * 1.7 + k) * 0.35 : (1 - pop) * 9
       heart.scale.setScalar(alive ? 0.6 : 0.6 * pop)
     }
@@ -233,10 +247,10 @@ export class UnitsView {
     const size = e.size
     const walkA = Math.floor(e.phase / Math.PI) % 2 === 0
     const isBrute = e.type === 'brute'
-    const isArcher = e.type === 'archer'
-    const walk0: FrameName = isBrute ? 'brute0' : isArcher ? 'archer0' : 'knight0'
-    const walk1: FrameName = isBrute ? 'brute1' : isArcher ? 'archer0' : 'knight1'
-    const flail: FrameName = isBrute ? 'bruteFlail' : isArcher ? 'archerDraw' : 'knightFlail'
+    const fr = FRAMES[e.type]
+    const walk0 = fr[0]
+    const walk1 = fr[1]
+    const flail = fr[2]
     // Spawn: the standee unfolds up from flat (pop-up book!).
     const rise = clamp01(e.age / 0.28)
     const risePitch = (1 - easeOutBack(rise, 2)) * -1.4
@@ -258,6 +272,13 @@ export class UnitsView {
         F.setFrame(i, Math.floor(time * 8 + i) % 2 ? flail : walk0)
         const y = surf.dip(e.fold, e.x, e.z)
         F.place(i, e.x, y, e.z, yaw, Math.sin(time * 18 + i * 2) * 0.22, 0, size)
+        break
+      }
+      case 'leap': {
+        // Springs out, tilting into the jump and back down for the landing.
+        F.setFrame(i, 'leaperJump')
+        const tilt = Math.max(-0.35, Math.min(0.35, -e.vy * 0.05))
+        F.place(i, e.x, e.y, e.z, yaw, Math.sin(e.phase * 3) * 0.08, tilt, size * (1 + Math.min(0.12, e.y * 0.05)))
         break
       }
       case 'launched':

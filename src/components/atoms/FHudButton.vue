@@ -12,7 +12,7 @@
  * hard 2.5rem floor, so the row is compact on a 320px phone, comfortable on a
  * tablet, and never collapses.
  *
- * Castle Fold look: each chip is a square of folded paper — crease, dog-ear,
+ * Aethel Fold look: each chip is a square of folded paper — crease, dog-ear,
  * ink border and a periwinkle desk shadow. `gold` is yellow paper and `slate`
  * is plain parchment.
  *

@@ -2,25 +2,37 @@
  * One page of the book, fully dressed: the printed sheet (with die-cut holes),
  * its fold lines, pop-up scenery (paper pines, folded trees, bushes, rocks
  * that spring up when the page opens) and its set pieces — the battlement of
- * Page 3, the castle of Pages 4–5, the dragon, and the finale sheet.
+ * Page 3, the castle of Pages 4–5, the dragon, and the finale sheet — and the
+ * player's own castle along the bottom edge of every page.
+ *
+ * Everything that stands up lives in `riser`, a group scaled on y by `rise`:
+ * a page built under a turning (or peeling) sheet is held flat and unfolds as
+ * the sheet uncovers it, the way a pop-up book opens — instead of its towers
+ * poking through the page that is still turning over them.
  */
 
 import { Group, InstancedMesh, Mesh, PlaneGeometry, type BufferGeometry, type Scene, type Texture } from 'three'
-import { PAGE_HALF_D, PAGE_HALF_W } from '../../logic/config'
+import { CASTLE, HERO_INVULN, PAGE_HALF_D, PAGE_HALF_W } from '../../logic/config'
 import type { FoldGame } from '../../logic/game'
 import type { FoldState, PageDef } from '../../logic/types'
-import { isStampable, onFootprint } from '../../logic/folds'
+import { acrossHinge, alongHinge, isStampable, onFootprint } from '../../logic/folds'
 import { clamp01, easeOutBack } from '../../logic/math'
 import { createRng } from '../../logic/rng'
 import { paintPage, type PageTextures } from '../art/pageArt'
 import type { SpriteTextures } from '../art/spriteArt'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
 import { TMP } from '../paperGeometry'
-import { battlementGeometry, bushGeometry, pineGeometry, rockGeometry, roundTreeGeometry } from '../models'
+import {
+  appleTreeGeometry, battlementGeometry, bushGeometry, castleBaileyGeometry, millSailsGeometry, millTowerGeometry,
+  playerCastleGeometry, pineGeometry,
+  rockGeometry, roundTreeGeometry, tentGeometry
+} from '../models'
 import { FoldView } from './FoldView'
 import { CastleView } from './CastleView'
 import { DragonView } from './DragonView'
 import { FinaleView } from './FinaleView'
+import { SlingView } from './SlingView'
+import { CaptionLabel, captionZ } from './CaptionLabel'
 
 interface PropInstance {
   x: number
@@ -49,15 +61,27 @@ export class PageView {
   castle: CastleView | null = null
   dragon: DragonView | null = null
   finale: FinaleView | null = null
+  sling: SlingView | null = null
+  caption: CaptionLabel | null = null
+  private sails: Mesh | null = null
   private readonly pageMat: PaperMaterial
   private readonly propMat: PaperMaterial
   private readonly props: { mesh: InstancedMesh; items: PropInstance[] }[] = []
   private battlement: Mesh | null = null
+  /** The player's castle (own material so it can flash when it is hit). */
+  private readonly castleMat: PaperMaterial
+  private readonly playerCastle: Mesh
+  /** Everything that stands up off the page (see the file header). */
+  private readonly riser = new Group()
+  /** 0…1 how far the pop-ups have risen; 1 = fully up. */
+  rise = 1
+  /** Held flat under a turning/peeling sheet: the transition drives `rise`. */
+  private held = false
   /** 0…1 pop-up of the scenery as the page opens. */
   intro = 0
   private foldStates: FoldState[]
 
-  constructor(readonly def: PageDef, folds: FoldState[], sprites: SpriteTextures, overlay: Scene) {
+  constructor(readonly def: PageDef, folds: FoldState[], sprites: SpriteTextures, overlay: Scene, captionText = '') {
     this.foldStates = folds
     this.textures = paintPage(def)
     this.pageMat = createPaperMaterial({ map: this.textures.page, grain: 0.05 })
@@ -68,34 +92,69 @@ export class PageView {
     this.group.add(page)
 
     folds.forEach((f) => {
-      const v = new FoldView(f, this.textures.art)
+      const v = new FoldView(f, this.textures.art, this.pageMat.uniforms.uObjectId.value)
       this.folds.push(v)
       this.group.add(v.group)
     })
 
     this.propMat = createPaperMaterial({ vertexColors: true, grain: 0.05 })
+    this.group.add(this.riser)
     this.placeProps()
+
+    // The player's castle: keep in the middle, ballista towers, curtain walls.
+    this.castleMat = createPaperMaterial({ vertexColors: true, grain: 0.05 })
+    this.playerCastle = new Mesh(
+      playerCastleGeometry(CASTLE.keepZ, CASTLE.towerX, CASTLE.towerZ, CASTLE.keepTop, CASTLE.towerTop), this.castleMat
+    )
+    this.playerCastle.castShadow = true
+    this.playerCastle.receiveShadow = true
+    this.riser.add(this.playerCastle)
+    // …and the rest of it, unfolding out past the page's bottom edge.
+    const bailey = new Mesh(castleBaileyGeometry(), this.castleMat)
+    bailey.castShadow = true
+    bailey.receiveShadow = true
+    this.riser.add(bailey)
 
     if (def.theme === 'siege') {
       this.battlement = new Mesh(battlementGeometry(9.2), this.propMat)
       this.battlement.position.set(0, 0, -6.2)
       this.battlement.castShadow = true
       this.battlement.receiveShadow = true
-      this.group.add(this.battlement)
+      this.riser.add(this.battlement)
     }
     if (def.theme === 'gates' || def.theme === 'core') {
       this.castle = new CastleView(def.theme === 'gates' ? 'gates' : 'core', sprites, overlay)
-      this.group.add(this.castle.group)
+      this.riser.add(this.castle.group)
     }
     if (def.theme === 'core') {
       this.dragon = new DragonView(sprites, overlay)
-      this.group.add(this.dragon.group)
+      this.riser.add(this.dragon.group)
     }
     if (def.theme === 'finale') {
-      this.finale = new FinaleView()
+      this.finale = new FinaleView(def.finale ?? 'frog')
       this.group.add(this.finale.group)
     }
-    this.group.userData.perfTag = `fold.page${def.id}`
+    if (def.sling) {
+      this.sling = new SlingView()
+      this.riser.add(this.sling.group)
+    }
+    if (def.theme === 'mill') {
+      const tower = new Mesh(millTowerGeometry(), this.propMat)
+      tower.position.set(4.3, 0, -1.4)
+      tower.castShadow = true
+      tower.receiveShadow = true
+      this.sails = new Mesh(millSailsGeometry(), this.propMat)
+      this.sails.position.set(4.3, 1.45, -0.83)
+      this.sails.castShadow = true
+      this.riser.add(tower, this.sails)
+    }
+    const cz = captionZ(def)
+    if (cz !== null) {
+      this.caption = new CaptionLabel(cz)
+      this.caption.set(captionText)
+      this.group.add(this.caption.mesh)
+    }
+    this.group.userData.perfTag = `fold.book${def.book}.page${def.id}`
   }
 
   get artTexture(): Texture {
@@ -104,13 +163,25 @@ export class PageView {
 
   private placeProps(): void {
     const def = this.def
-    const rng = createRng(def.id * 131 + 7)
-    const types: { geo: BufferGeometry; weight: number; scale: [number, number] }[] = [
-      { geo: pineGeometry(), weight: 0.42, scale: [0.55, 0.8] },
-      { geo: roundTreeGeometry(), weight: 0.28, scale: [0.5, 0.72] },
-      { geo: bushGeometry(), weight: 0.18, scale: [0.7, 1] },
-      { geo: rockGeometry(), weight: 0.12, scale: [0.6, 0.95] }
-    ]
+    const rng = createRng(def.book * 977 + def.id * 131 + 7)
+    const types: { geo: BufferGeometry; weight: number; scale: [number, number] }[] = def.theme === 'orchard'
+      ? [
+          { geo: appleTreeGeometry(), weight: 0.6, scale: [0.55, 0.78] },
+          { geo: roundTreeGeometry(), weight: 0.15, scale: [0.5, 0.7] },
+          { geo: bushGeometry(), weight: 0.25, scale: [0.7, 1] }
+        ]
+      : def.theme === 'camp'
+        ? [
+            { geo: tentGeometry(), weight: 0.5, scale: [0.8, 1.05] },
+            { geo: pineGeometry(), weight: 0.3, scale: [0.55, 0.8] },
+            { geo: rockGeometry(), weight: 0.2, scale: [0.6, 0.95] }
+          ]
+        : [
+            { geo: pineGeometry(), weight: 0.42, scale: [0.55, 0.8] },
+            { geo: roundTreeGeometry(), weight: 0.28, scale: [0.5, 0.72] },
+            { geo: bushGeometry(), weight: 0.18, scale: [0.7, 1] },
+            { geo: rockGeometry(), weight: 0.12, scale: [0.6, 0.95] }
+          ]
     const buckets: PropInstance[][] = types.map(() => [])
     const tries = 260
     const want = def.theme === 'core' ? 8 : def.theme === 'finale' ? 16 : 18
@@ -136,7 +207,7 @@ export class PageView {
       mesh.castShadow = true
       mesh.receiveShadow = true
       this.props.push({ mesh, items })
-      this.group.add(mesh)
+      this.riser.add(mesh)
     })
     this.applyProps(0)
   }
@@ -146,13 +217,31 @@ export class PageView {
     // Keep clear of the roads.
     for (let l = 0; l < def.lanes.length; l++) if (Math.abs(laneXAt(def, l, z) - x) < 1.05) return false
     // …of every fold (a tree on a flap would ride it up — and hide the guide).
-    for (const f of this.foldStates) if (onFootprint(f, x, z, 0.45)) return false
+    for (const f of this.foldStates) {
+      if (onFootprint(f, x, z, 0.45)) return false
+      // A launch flap flips 180° over its hinge and lands on the far side:
+      // keep that landing strip clear too, or the flipped flap cuts a tree.
+      if (f.def.kind === 'launch') {
+        const s = alongHinge(f, x, z)
+        const d = acrossHinge(f, x, z)
+        if (s > -0.7 && s < f.len + 0.7 && d < 0.3 && d > -f.def.depth - 0.9) return false
+      }
+    }
     // …of the hero's camp, the castle and the set pieces.
     if (z > 4.1 && Math.abs(x) < 2.8) return false
     if ((def.theme === 'gates' || def.theme === 'core') && z < -2.3) return false
     if (def.theme === 'siege' && z < -5.3) return false
     if (def.theme === 'finale' && Math.abs(x) < 3.9 && z > -2.4 && z < 3.6) return false
     if (def.theme === 'core' && Math.abs(x) < 4.4 && z < 1) return false
+    // The player's castle and its grounds along the bottom edge.
+    if (z > 5.2) return false
+    if (def.sling && Math.hypot(x - def.sling.x, z - def.sling.z) < 2.2) return false
+    if (def.theme === 'mill' && Math.hypot(x - 4.3, z + 1.4) < 1.4) return false
+    // The caption label along the top edge.
+    // (Standing props project up the screen, so keep well below it.)
+    const cz = captionZ(def)
+    if (cz !== null && cz < 0 && z < cz + 1.5) return false
+    if (cz !== null && cz > 0 && z > cz - 0.6) return false
     // Not on the frame's very edge.
     if (Math.abs(x) > PAGE_HALF_W - 0.35 || Math.abs(z) > PAGE_HALF_D - 0.4) return false
     // Not on top of another prop.
@@ -182,6 +271,30 @@ export class PageView {
     folds.forEach((f, i) => this.folds[i]?.bind(f))
   }
 
+  /** Hold every pop-up flat until a page transition lets it rise. */
+  hold(): void {
+    this.held = true
+    this.setRise(0)
+  }
+
+  /** The transition is over: stand fully up and resume the normal intro. */
+  release(): void {
+    this.held = false
+    this.setRise(1)
+  }
+
+  /** 0…1: how far the pop-ups have risen out of the page (with a paper bounce). */
+  setRise(r: number): void {
+    const k = clamp01(r)
+    this.rise = k
+    this.riser.scale.y = Math.max(0.001, k >= 1 ? 1 : easeOutBack(k, 1.8))
+    this.riser.visible = k > 0.002
+    if (this.held) {
+      this.intro = k * 1.2
+      this.applyProps(this.intro)
+    }
+  }
+
   /** Valley dip under a trapped enemy (see FoldView.dipAt). */
   dip(fold: number, x: number, z: number): number {
     return this.folds[fold]?.dipAt(x, z) ?? 0
@@ -194,12 +307,15 @@ export class PageView {
   }
 
   update(game: FoldGame, time: number, dt: number): void {
-    if (this.intro < 1.2) {
+    if (!this.held && this.intro < 1.2) {
       this.intro = Math.min(1.2, this.intro + dt * 1.2)
       this.applyProps(this.intro)
     }
     const lesson = game.lesson
-    const lessonFold = lesson.id && lesson.id !== 'spread' && lesson.id !== 'peel' && lesson.id !== 'crease' && lesson.id !== 'core' ? lesson.target : -1
+    const lid = lesson.id
+    const lessonFold = lid && lid !== 'spread' && lid !== 'peel' && lid !== 'crease' && lid !== 'core' && lid !== 'sling' && lid !== 'leaper'
+      ? lesson.target
+      : -1
     for (let i = 0; i < this.folds.length; i++) {
       const f = this.foldStates[i]!
       let hl = false
@@ -211,6 +327,10 @@ export class PageView {
               hl = true
               break
             }
+          }
+          // A folded ballista glows once enemies are past the middle of the page.
+          if (!hl && f.def.kind === 'ballista') {
+            for (const e of game.enemies) if ((e.state === 'march' || e.state === 'blocked') && e.z > 0) hl = true
           }
           if (!hl && f.def.structure === 'shield') {
             for (const e of game.enemies) if (e.state === 'stand' && e.windup > 0.2) hl = true
@@ -225,10 +345,19 @@ export class PageView {
           }
         }
       }
-      this.folds[i]!.update(time, dt, hl && Math.floor(time * 2.5) % 2 === 0 ? true : hl)
+      this.folds[i]!.update(time, dt, hl && Math.floor(time * 2.5) % 2 === 0 ? true : hl, this.rise)
     }
+    // The castle flashes and shudders while it recovers from a hit.
+    const inv = game.page === this.def ? Math.max(0, game.hero.invuln) / HERO_INVULN : 0
+    this.castleMat.uniforms.uFlash.value = inv * 0.45
+    this.playerCastle.position.x = inv > 0.4 ? Math.sin(time * 60) * 0.04 * inv : 0
     this.castle?.update(game, time, dt)
     this.dragon?.update(game, time, dt)
+    // Only the page in play drives the sling (a preview under a turn stays at rest).
+    if (this.sling) {
+      if (game.page === this.def) this.sling.update(game, time, dt)
+    }
+    if (this.sails) this.sails.rotation.z = time * 0.9
     const frogFold = this.foldStates.findIndex((f) => f.def.kind === 'frog')
     this.finale?.update(game, time, dt, frogFold >= 0 && this.foldStates[frogFold]!.phase === 'ready')
   }
@@ -239,11 +368,14 @@ export class PageView {
     this.castle?.dispose()
     this.dragon?.dispose()
     this.finale?.dispose()
+    this.sling?.dispose()
+    this.caption?.dispose()
     this.group.traverse((o) => {
       if (o instanceof Mesh && !(o instanceof InstancedMesh) && !o.geometry.userData.shared) o.geometry.dispose()
     })
     this.pageMat.dispose()
     this.propMat.dispose()
+    this.castleMat.dispose()
     this.textures.dispose()
   }
 }

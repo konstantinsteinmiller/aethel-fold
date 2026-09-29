@@ -185,7 +185,7 @@ describe('SaveMergePolicy.decideMerge', () => {
     expect(decideMerge(null, meta({ progressScore: 5000 }))).toEqual({ kind: 'remote-only' })
   })
 
-  it('returns \'remote-wins\' with NO bonus even when local had progress (Castle Fold has no currency)', () => {
+  it('returns \'remote-wins\' with NO bonus even when local had progress (Aethel Fold has no currency)', () => {
     const local = meta({ progressScore: 2000, maxStage: 2 })
     const remote = meta({ progressScore: 8000, maxStage: 6 })
     expect(decideMerge(local, remote)).toEqual({ kind: 'remote-wins', bonusCoins: 0 })

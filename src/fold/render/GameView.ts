@@ -1,5 +1,5 @@
 /**
- * GameView — the three.js side of Castle Fold, driven entirely by FoldGame.
+ * GameView — the three.js side of Aethel Fold, driven entirely by FoldGame.
  *
  * Owns the scene (desk, book, the current page and the one being revealed),
  * the lamp, units, projectiles, VFX and the transition sheet. Each frame it
@@ -11,12 +11,12 @@
 import { Color, Scene, SpotLight, Vector3, type WebGLRenderTarget } from 'three'
 import type { FoldGame } from '../logic/game'
 import type { FoldEvent } from '../logic/events'
-import { KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_TEAR } from '../logic/events'
-import { PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME } from '../logic/config'
-import { PAGES } from '../logic/pages'
-import type { PageId } from '../logic/types'
+import { KILL_BOLT, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from '../logic/events'
+import { CASTLE, PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME } from '../logic/config'
+import { PAGE_COUNT, pageDef } from '../logic/pages'
+import type { PageDef, PageId } from '../logic/types'
 import { createFold } from '../logic/folds'
-import { clamp01, easeInOutCubic } from '../logic/math'
+import { clamp01, easeInOutCubic, smoothstep } from '../logic/math'
 import { FoldRenderer } from './FoldRenderer'
 import { DeskCamera, type CameraFrame } from './camera'
 import { paperGlobals } from './paperMaterial'
@@ -41,6 +41,8 @@ export interface ScreenPoint {
 /** What the view tells the HUD (comic words at a screen point, etc.). */
 export interface ViewSignals {
   word(key: string, x: number, y: number, size?: number, tone?: string): void
+  /** The storybook line printed on a page (localised by the host). */
+  caption?(def: PageDef): string
 }
 
 export class GameView {
@@ -58,7 +60,7 @@ export class GameView {
   page: PageView | null = null
   /** A page built ahead (under a turning/peeling sheet). */
   private incoming: PageView | null = null
-  private incomingId: PageId | null = null
+  private incomingDef: PageDef | null = null
   private snapshotRT: WebGLRenderTarget | null = null
   private snapshotMRT: WebGLRenderTarget | null = null
   private transition: 'none' | 'turn' | 'peel' | 'crumple' | 'drop' = 'none'
@@ -157,33 +159,43 @@ export class GameView {
 
   // ─── Pages ───────────────────────────────────────────────────────────────
 
-  private buildPage(id: PageId, folds = this.game.folds): PageView {
-    const v = new PageView(PAGES[id], folds, this.sprites, this.renderer.overlay)
+  private buildPage(def: PageDef, folds = this.game.folds): PageView {
+    const v = new PageView(def, folds, this.sprites, this.renderer.overlay, this.signals.caption?.(def) ?? '')
     this.scene.add(v.group)
     return v
   }
 
   /** Build the page the player is about to see (under a turn/peel). */
   private prebuild(id: PageId, visible = true): void {
-    if (this.incomingId === id && this.incoming) {
+    const def = pageDef(this.game.book, id)
+    if (this.incomingDef === def && this.incoming) {
       this.incoming.group.visible = visible
       return
     }
     this.incoming?.dispose()
     this.incoming?.group.removeFromParent()
     // Placeholder fold states until the real ones arrive with loadPage.
-    const folds = PAGES[id].folds.map(createFold)
+    const folds = def.folds.map(createFold)
     for (const f of folds) if (f.def.fromWave === 0) f.phase = 'ready'
-    this.incoming = this.buildPage(id, folds)
+    this.incoming = this.buildPage(def, folds)
+    // Flat until the transition that reveals it lets its pop-ups rise.
+    this.incoming.hold()
     this.incoming.group.visible = visible
-    this.incomingId = id
+    this.incomingDef = def
+  }
+
+  /** Repaint the storybook captions (the font arrived, or the language changed). */
+  refreshCaptions(force = false): void {
+    for (const p of [this.page, this.incoming]) {
+      if (p?.caption) p.caption.set(this.signals.caption?.(p.def) ?? '', force)
+    }
   }
 
   private adoptPage(): void {
     const g = this.game
-    const id = g.pageId
+    const def = g.page
     // Same page again (restart / drop): keep the painted page, re-bind its folds.
-    if (this.page && this.page.def.id === id) {
+    if (this.page && this.page.def === def) {
       this.page.bindFolds(g.folds)
       this.page.group.visible = true
       this.page.intro = 0
@@ -191,14 +203,16 @@ export class GameView {
     }
     const old = this.page
     let next: PageView
-    if (this.incoming && this.incomingId === id) {
+    if (this.incoming && this.incomingDef === def) {
       next = this.incoming
       this.incoming = null
-      this.incomingId = null
+      this.incomingDef = null
       next.bindFolds(g.folds)
       next.group.visible = true
+      // Adopted without a turn/peel still running (a jump): stand up now.
+      if (this.transition !== 'turn' && this.transition !== 'peel') next.release()
     } else {
-      next = this.buildPage(id)
+      next = this.buildPage(def)
     }
     if (old) {
       if (this.transition === 'turn') {
@@ -288,6 +302,35 @@ export class GameView {
         else if (e.c === KILL_TEAR || e.c === KILL_FLING) fx.burst(e.x, 0.6, e.z, { count: 18, palette: 'festive', speed: 4, up: 5 })
         else if (e.c === KILL_RIDGE) fx.burst(e.x, 0.8, e.z, { count: 10, palette: 'festive', speed: 3, up: 4 })
         else if (e.c === KILL_LAUNCH) fx.burst(e.x, 0.4, e.z, { count: 8, palette: 'festive', speed: 2.5, up: 5 })
+        else if (e.c === KILL_BOLT) fx.burst(e.x, 0.6, e.z, { count: 14, palette: 'festive', speed: 4, up: 4 })
+        else if (e.c === KILL_SHOT) fx.burst(e.x, 0.5, e.z, { count: 16, palette: 'festive', speed: 3.5, up: 4.5 })
+        break
+      }
+      case 'bossHit': {
+        fx.burst(e.x, 1.6, e.z, { count: 26, palette: 'dragon', speed: 4, up: 4 })
+        this.wordAt('thwack', e.x, 2.4, e.z, e.c ? 1.3 : 1, 'stamp')
+        this.desk.shake(e.c ? 0.14 : 0.08)
+        break
+      }
+      case 'ballistaFire': {
+        const f = g.folds[e.a]
+        if (f) {
+          fx.burst(f.cx, CASTLE.towerTop + 0.5, CASTLE.towerZ - 0.4, { count: 12, palette: 'paper', speed: 2.5, up: 2, size: 0.7 })
+          this.wordAt('twang', f.cx, CASTLE.towerTop + 1.2, CASTLE.towerZ, 0.8, 'snap')
+        }
+        this.desk.kick(0.35)
+        break
+      }
+      case 'slingFire': {
+        const s = g.sling
+        if (s) fx.burst(s.def.x, 0.9, s.def.z, { count: 10, palette: 'paper', speed: 2.2, up: 2, size: 0.7 })
+        this.desk.kick(0.3)
+        break
+      }
+      case 'leap': {
+        // Springs: a puff of paper flecks at take-off; a vault gets a word.
+        fx.burst(e.x, 0.05, e.z, { count: e.c ? 10 : 5, palette: 'paper', speed: 2, up: 1.5, size: 0.6 })
+        if (e.c) this.wordAt('boing', e.x, 1.4, e.z, 0.8, 'snap')
         break
       }
       case 'tear': {
@@ -318,6 +361,12 @@ export class GameView {
           fx.ring(e.x, e.z, 1.2, 0.35)
         } else if (e.b === 1) {
           fx.burst(e.x, 0.2, e.z, { count: 12, palette: 'festive', speed: 3, up: 3 })
+        } else if (e.b === 5) {
+          // Sling stone lands: a thump ring, paper flecks, a word if it hit.
+          this.desk.shake(e.c > 0 ? 0.1 : 0.05)
+          fx.ring(e.x, e.z, 2.2, 0.35, 'highlight')
+          fx.burst(e.x, 0.15, e.z, { count: 18, palette: 'paper', speed: 3.5, up: 3, size: 0.9 })
+          if (e.c > 0) this.wordAt('thwack', e.x, 1.1, e.z, 1 + Math.min(0.4, e.c * 0.1), 'stamp')
         }
         break
       }
@@ -359,7 +408,7 @@ export class GameView {
         if (this.page) this.page.group.visible = false
         this.units.group.visible = false
         this.projectiles.group.visible = false
-        this.prebuild(Math.min(6, e.b) as PageId)
+        this.prebuild(Math.min(PAGE_COUNT, e.b) as PageId)
         this.transition = 'turn'
         this.transT = 0
         break
@@ -447,10 +496,12 @@ export class GameView {
         if (this.page) this.page.group.visible = false
         this.units.group.visible = false
         this.projectiles.group.visible = false
-        this.prebuild(5)
+        this.prebuild(Math.min(PAGE_COUNT, g.pageId + 1) as PageId)
         this.transition = 'peel'
       }
       this.sheet.set(easeInOutCubic(clamp01(g.peel)) * 1.02)
+      // The layer below unfolds as the corner comes away.
+      this.incoming?.setRise(smoothstep(0.3, 0.95, g.peel))
     }
 
     switch (this.transition) {
@@ -458,16 +509,20 @@ export class GameView {
         this.transT += dt
         const k = clamp01(this.transT / PAGE_TURN_TIME)
         this.sheet.set(easeInOutCubic(k))
+        // The new page's pop-ups unfold as the turning sheet clears them.
+        ;(this.incoming ?? this.page)?.setRise(smoothstep(0.42, 0.97, k))
         if (k >= 1 && g.phase !== 'turn') {
           this.sheet.hide()
           this.transition = 'none'
+          this.page?.release()
         }
         break
       }
       case 'peel':
-        if (g.phase !== 'peel' && g.pageId === 5) {
+        if (g.phase !== 'peel' && g.page.exit === 'boss') {
           this.sheet.hide()
           this.transition = 'none'
+          this.page?.release()
         }
         break
       case 'crumple': {
@@ -525,7 +580,7 @@ export class GameView {
     if (fin?.popped) {
       this.effects.burst(0, 1.6, 0.6, { count: 80, palette: 'dragon', speed: 5, up: 5 })
       this.effects.glow(0, 1.2, 0.6, 5, 0.8, 'star', 'highlightHot', 3)
-      this.wordAt('ribbit', 0, 2.4, 0.6, 1.3, 'good')
+      this.wordAt(this.page?.def.finale === 'crane' ? 'flap' : 'ribbit', 0, 2.4, 0.6, 1.3, 'good')
     }
 
     this.effects.update(dt)
@@ -558,7 +613,7 @@ export class GameView {
         t.pz = this.anchorOut.z
       }
     }
-    if (p.dragon && g.pageId === 5) {
+    if (p.dragon && g.page.exit === 'boss') {
       const b = g.boss
       for (let i = 0; i < b.weakPoints.length; i++) {
         const w = b.weakPoints[i]!
@@ -578,7 +633,8 @@ export class GameView {
 
   /** Prebuild a page's view off the hot path (idle time). */
   warm(id: PageId): void {
-    if (this.game.pageId === id || this.incomingId === id) return
+    const def = pageDef(this.game.book, id)
+    if (this.game.page === def || this.incomingDef === def) return
     this.prebuild(id, false)
   }
 

@@ -4,8 +4,14 @@
  * origami cootie catcher)." Four triangular paper flaps fold in from the
  * corners and meet in the middle; the menu is printed on the folded paper.
  *
- * Two faces: the menu (resume / restart page / new book / settings) and the
- * settings (music, effects, vibration, screen shake, graphics, language).
+ * Faces: the menu (resume / restart page / settings / books / start over),
+ * the settings (music, effects, vibration, screen shake, graphics, language),
+ * the bookshelf (pick book 1 or, once it has been won, book 2) and a confirm.
+ *
+ * Layout: the card is a flex column — the ribbon sits in its own row, pulled
+ * half-way above the card's top edge, and only the body below it scrolls. (The
+ * ribbon used to be absolutely positioned inside the scrolling card, which
+ * clipped it at every viewport size.)
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -14,23 +20,35 @@ import FSlider from '@/components/atoms/FSlider.vue'
 import FSwitch from '@/components/atoms/FSwitch.vue'
 import FSelect from '@/components/atoms/FSelect.vue'
 import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
+import PaperRibbon from '@/components/fold/PaperRibbon.vue'
+import type { BookId } from '@/fold/logic/types'
 import useUser from '@/use/useUser'
 import { foldSettings, setFoldSetting, type Quality } from '@/use/useFoldProgress'
 import { LANGUAGES, LANGUAGE_AUTONYMS } from '@/utils/enums'
 import { setI18nLocale } from '@/i18n'
 import useSounds from '@/use/useSound'
 
-const props = defineProps<{ open: boolean }>()
+const props = defineProps<{
+  open: boolean
+  /** The book being played. */
+  book: BookId
+  /** Has book 2 been unlocked (book 1 won)? */
+  unlocked: boolean
+}>()
 const emit = defineEmits<{
   (e: 'resume'): void
   (e: 'restartPage'): void
   (e: 'newGame'): void
+  (e: 'pickBook', book: BookId): void
 }>()
 
 const { t } = useI18n()
 const { userSoundVolume, userMusicVolume, userLanguage, setSettingValue } = useUser()
 const { playSound } = useSounds()
-const face = ref<'menu' | 'settings' | 'confirm'>('menu')
+const BOOK_IDS: readonly BookId[] = [1, 2]
+const face = ref<'menu' | 'settings' | 'confirm' | 'books'>('menu')
+const title = computed(() =>
+  face.value === 'settings' ? t('fold.pause.settings') : face.value === 'books' ? t('fold.books.title') : t('fold.pause.title'))
 const folded = ref(false)
 
 watch(() => props.open, (o) => {
@@ -106,66 +124,91 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       div.cootie__flap.cootie__flap--br
       div.cootie__card(@click.stop)
         div.cootie__ribbon
-          span.game-text {{ face === 'settings' ? t('fold.pause.settings') : t('fold.pause.title') }}
-        //- ── Menu ──
-        div.cootie__body.flex.flex-col.items-stretch(v-if="face === 'menu'")
-          FButton(type="success" size="lg" block @click="click(() => emit('resume'))")
-            span.flex.items-center.justify-center.gap-2
-              OrigamiIcon(name="play" tone="white")
-              span {{ t('fold.pause.resume') }}
-          FButton(type="secondary" size="md" block @click="click(() => emit('restartPage'))")
-            span.flex.items-center.justify-center.gap-2
-              OrigamiIcon(name="restart" tone="white")
-              span {{ t('fold.pause.restartPage') }}
-          FButton(type="primary" size="md" block @click="click(() => (face = 'settings'))")
-            span.flex.items-center.justify-center.gap-2
-              OrigamiIcon(name="gear" tone="yellow")
-              span {{ t('fold.pause.settings') }}
-          FButton(type="danger" size="sm" block @click="click(() => (face = 'confirm'))")
-            span.flex.items-center.justify-center.gap-2
-              OrigamiIcon(name="book" tone="white")
-              span {{ t('fold.pause.newGame') }}
-        //- ── Confirm new book ──
-        div.cootie__body.flex.flex-col.items-stretch(v-else-if="face === 'confirm'")
-          p.cootie__text {{ t('fold.pause.confirmNew') }}
-          FButton(type="danger" size="md" block @click="click(() => emit('newGame'))") {{ t('fold.pause.confirmYes') }}
-          FButton(type="success" size="md" block @click="click(() => (face = 'menu'))") {{ t('fold.pause.confirmNo') }}
-        //- ── Settings ──
-        div.cootie__body.cootie__settings.flex.flex-col(v-else)
-          label.cootie__row
-            span.cootie__row-label.flex.items-center.gap-2
-              OrigamiIcon(name="music" tone="blue")
-              span {{ t('fold.settings.music') }}
-            FSlider(v-model="music" :min="0" :max="100" :step="5")
-          label.cootie__row
-            span.cootie__row-label.flex.items-center.gap-2
-              OrigamiIcon(name="speaker" tone="yellow")
-              span {{ t('fold.settings.sfx') }}
-            FSlider(v-model="sfx" :min="0" :max="100" :step="5")
-          div.cootie__row.cootie__row--toggle
-            span.cootie__row-label.flex.items-center.gap-2
-              OrigamiIcon(name="vibrate" tone="green")
-              span {{ t('fold.settings.haptics') }}
-            FSwitch(v-model="haptics")
-          div.cootie__row.cootie__row--toggle
-            span.cootie__row-label.flex.items-center.gap-2
-              OrigamiIcon(name="shake" tone="purple")
-              span {{ t('fold.settings.shake') }}
-            FSwitch(v-model="shake")
-          div.cootie__row
-            span.cootie__row-label.flex.items-center.gap-2
-              OrigamiIcon(name="quality" tone="blue")
-              span {{ t('fold.settings.quality') }}
-            FSelect(v-model="quality" :options="qualityOptions")
-          div.cootie__row
-            span.cootie__row-label.flex.items-center.gap-2
-              OrigamiIcon(name="globe" tone="green")
-              span {{ t('fold.settings.language') }}
-            FSelect(v-model="language" :options="languageOptions")
-          FButton(type="primary" size="md" block @click="click(() => (face = 'menu'))")
-            span.flex.items-center.justify-center.gap-2
-              OrigamiIcon(name="left" tone="white")
-              span {{ t('fold.pause.back') }}
+          PaperRibbon {{ title }}
+        div.cootie__scroll
+          //- ── Menu ──
+          div.cootie__body.cootie__menu.flex.flex-col.items-stretch(v-if="face === 'menu'")
+            FButton.cootie__resume(type="success" size="lg" block @click="click(() => emit('resume'))")
+              span.flex.items-center.justify-center.gap-2
+                OrigamiIcon(name="play" tone="white")
+                span {{ t('fold.pause.resume') }}
+            FButton(type="secondary" size="md" block @click="click(() => emit('restartPage'))")
+              span.flex.items-center.justify-center.gap-2
+                OrigamiIcon(name="restart" tone="white")
+                span {{ t('fold.pause.restartPage') }}
+            FButton(type="primary" size="md" block @click="click(() => (face = 'settings'))")
+              span.flex.items-center.justify-center.gap-2
+                OrigamiIcon(name="gear" tone="yellow")
+                span {{ t('fold.pause.settings') }}
+            FButton(v-if="unlocked" type="secondary" size="md" block data-testid="pause-books" @click="click(() => (face = 'books'))")
+              span.flex.items-center.justify-center.gap-2
+                OrigamiIcon(name="book" tone="white")
+                span {{ t('fold.books.title') }}
+            FButton(type="danger" size="sm" block @click="click(() => (face = 'confirm'))")
+              span.flex.items-center.justify-center.gap-2
+                OrigamiIcon(name="book" tone="white")
+                span {{ t('fold.pause.newGame') }}
+          //- ── Confirm new book ──
+          div.cootie__body.flex.flex-col.items-stretch(v-else-if="face === 'confirm'")
+            p.cootie__text {{ t('fold.pause.confirmNew') }}
+            FButton(type="danger" size="md" block @click="click(() => emit('newGame'))") {{ t('fold.pause.confirmYes') }}
+            FButton(type="success" size="md" block @click="click(() => (face = 'menu'))") {{ t('fold.pause.confirmNo') }}
+          //- ── Bookshelf ──
+          div.cootie__body.flex.flex-col.items-stretch(v-else-if="face === 'books'")
+            p.cootie__text {{ t('fold.books.hint') }}
+            button.cootie__book(
+              v-for="b in BOOK_IDS"
+              :key="b"
+              type="button"
+              :class="{ 'cootie__book--current': b === book, 'cootie__book--locked': b === 2 && !unlocked }"
+              :disabled="b === 2 && !unlocked"
+              :data-testid="`book-${b}`"
+              @click="click(() => emit('pickBook', b))"
+            )
+              OrigamiIcon.cootie__book-icon(name="book" :tone="b === 1 ? 'red' : 'blue'")
+              span.cootie__book-text.flex.flex-col.min-w-0
+                span.cootie__book-name {{ t(`fold.books.name${b}`) }}
+                span.cootie__book-sub {{ b === 2 && !unlocked ? t('fold.books.locked') : t(`fold.books.blurb${b}`) }}
+            FButton(type="primary" size="md" block @click="click(() => (face = 'menu'))")
+              span.flex.items-center.justify-center.gap-2
+                OrigamiIcon(name="left" tone="white")
+                span {{ t('fold.pause.back') }}
+          //- ── Settings ──
+          div.cootie__body.cootie__settings.flex.flex-col(v-else)
+            label.cootie__row
+              span.cootie__row-label.flex.items-center.gap-2
+                OrigamiIcon(name="music" tone="blue")
+                span {{ t('fold.settings.music') }}
+              FSlider(v-model="music" :min="0" :max="100" :step="5")
+            label.cootie__row
+              span.cootie__row-label.flex.items-center.gap-2
+                OrigamiIcon(name="speaker" tone="yellow")
+                span {{ t('fold.settings.sfx') }}
+              FSlider(v-model="sfx" :min="0" :max="100" :step="5")
+            div.cootie__row.cootie__row--toggle
+              span.cootie__row-label.flex.items-center.gap-2
+                OrigamiIcon(name="vibrate" tone="green")
+                span {{ t('fold.settings.haptics') }}
+              FSwitch(v-model="haptics")
+            div.cootie__row.cootie__row--toggle
+              span.cootie__row-label.flex.items-center.gap-2
+                OrigamiIcon(name="shake" tone="purple")
+                span {{ t('fold.settings.shake') }}
+              FSwitch(v-model="shake")
+            div.cootie__row
+              span.cootie__row-label.flex.items-center.gap-2
+                OrigamiIcon(name="quality" tone="blue")
+                span {{ t('fold.settings.quality') }}
+              FSelect(v-model="quality" :options="qualityOptions")
+            div.cootie__row
+              span.cootie__row-label.flex.items-center.gap-2
+                OrigamiIcon(name="globe" tone="green")
+                span {{ t('fold.settings.language') }}
+              FSelect(v-model="language" :options="languageOptions")
+            FButton(type="primary" size="md" block @click="click(() => (face = 'menu'))")
+              span.flex.items-center.justify-center.gap-2
+                OrigamiIcon(name="left" tone="white")
+                span {{ t('fold.pause.back') }}
 </template>
 
 <style scoped lang="sass">
@@ -226,10 +269,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 .cootie__card
   position: relative
+  display: flex
+  flex-direction: column
   width: min(92vw, 26rem)
   max-height: 100%
-  overflow-y: auto
-  padding: clamp(2.2rem, 7vh, 3rem) clamp(1rem, 4vw, 1.6rem) clamp(1rem, 3vh, 1.4rem)
+  min-height: 0
   background: linear-gradient(160deg, #fff6e3 0 60%, #f3e3bf 60% 100%)
   border: 3px solid #1c1724
   border-radius: 0.9rem
@@ -237,28 +281,31 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   transform: scale(0.2) rotate(-8deg)
   opacity: 0
   transition: transform 0.38s cubic-bezier(.34, 1.4, .64, 1) 0.22s, opacity 0.2s 0.22s
-  margin-top: clamp(1rem, 4vh, 2rem)
+  // Room above the card for the half of the ribbon that sticks out.
+  margin-top: clamp(1.1rem, 4.5vh, 1.9rem)
 .cootie--folded .cootie__card
   transform: none
   opacity: 1
 
+// Its own row, pulled up so the ribbon straddles the card's top edge; it is
+// outside the scroller, so nothing ever clips it.
 .cootie__ribbon
-  position: absolute
-  top: calc(clamp(1.1rem, 4vh, 1.6rem) * -1)
-  left: 50%
-  transform: translateX(-50%)
-  min-width: 60%
-  max-width: 94%
-  padding: clamp(0.35rem, 1.4vh, 0.55rem) clamp(1.4rem, 6vw, 2.2rem)
-  background: linear-gradient(180deg, #ff6a5c 0 55%, #d8433b 55% 100%)
-  border: 3px solid #1c1724
-  clip-path: polygon(0 0, 100% 0, 94% 50%, 100% 100%, 0 100%, 6% 50%)
-  text-align: center
-  color: #fff
-  font-size: clamp(1.1rem, 4.8vw, 1.6rem)
-  white-space: nowrap
-  overflow: hidden
-  text-overflow: ellipsis
+  flex: none
+  display: flex
+  justify-content: center
+  min-width: 0
+  max-width: 100%
+  padding: 0 clamp(0.6rem, 3vw, 1.2rem)
+  margin-top: calc(clamp(1.05rem, 4.2vw + 0.2vh, 1.55rem) * -0.95)
+  position: relative
+  z-index: 1
+
+.cootie__scroll
+  flex: 1 1 auto
+  min-height: 0
+  overflow-y: auto
+  overscroll-behavior: contain
+  padding: clamp(0.6rem, 2vh, 1rem) clamp(1rem, 4vw, 1.6rem) clamp(1rem, 3vh, 1.4rem)
 
 .cootie__body
   gap: clamp(0.5rem, 1.8vh, 0.8rem)
@@ -284,9 +331,53 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   :deep(.origami-icon)
     font-size: 1.35em
 
+// The bookshelf: a book per row, its cover icon, name and one line.
+.cootie__book
+  display: flex
+  align-items: center
+  gap: clamp(0.5rem, 2vw, 0.8rem)
+  min-height: 3rem
+  padding: clamp(0.45rem, 1.4vh, 0.65rem) clamp(0.6rem, 2.5vw, 0.9rem)
+  background: rgba(255, 255, 255, 0.6)
+  border: 2px solid #1c1724
+  border-radius: 0.6rem
+  box-shadow: 0 4px 0 rgba(76, 64, 120, 0.4)
+  text-align: left
+  cursor: pointer
+  transition: transform 0.12s
+  &:hover:not(:disabled)
+    transform: translateY(-2px)
+  &:active:not(:disabled)
+    transform: translateY(2px)
+    box-shadow: 0 1px 0 rgba(76, 64, 120, 0.4)
+  &--current
+    background: linear-gradient(135deg, #fff2b8 0 55%, #ffe38a 55% 100%)
+  &--locked
+    cursor: not-allowed
+    opacity: 0.6
+    filter: grayscale(0.7)
+
+.cootie__book-icon
+  flex: none
+  font-size: clamp(1.8rem, 7vw, 2.4rem)
+
+.cootie__book-name
+  color: #1c1724
+  font-size: clamp(0.9rem, 3.6vw, 1.1rem)
+
+.cootie__book-sub
+  color: #3a3142
+  font-size: clamp(0.7rem, 2.8vw, 0.85rem)
+
 @media (max-height: 520px)
   .cootie__card
     width: min(94vw, 40rem)
+  // Short landscape screens: the menu as two columns so nothing needs scrolling.
+  .cootie__menu
+    display: grid !important
+    grid-template-columns: 1fr 1fr
+    :deep(.cootie__resume)
+      grid-column: 1 / -1
   .cootie__settings
     display: grid !important
     grid-template-columns: 1fr 1fr

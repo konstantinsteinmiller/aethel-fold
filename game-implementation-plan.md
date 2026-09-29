@@ -1,6 +1,6 @@
-# Castle Fold — implementation plan
+# Aethel Fold — implementation plan
 
-Living plan for **Castle Fold** (`aethel-fold`), the origami pop-up-book siege
+Living plan for **Aethel Fold** (`aethel-fold`), the origami pop-up-book siege
 game specified in [`aethel-fold-GDD.md`](./aethel-fold-GDD.md). Resume from here
 if a session ends: every task has a checkbox, and the **Status log** at the
 bottom says what was last touched.
@@ -14,10 +14,10 @@ bottom says what was last touched.
 
 | Topic | Decision | Why |
 |---|---|---|
-| Product | Castle Fold boots at `/` straight into Page 1 — no main menu (GDD §6). Meadowfall sandbox moves to `/world` (lazy, dev bench). | GDD: "Booting the app drops the player instantly into the tutorial." |
+| Product | Aethel Fold boots at `/` straight into Page 1 — no main menu (GDD §6). Meadowfall sandbox moves to `/world` (lazy, dev bench). | GDD: "Booting the app drops the player instantly into the tutorial." |
 | Code home | `src/fold/` — `logic/` (pure TS, no three/Vue/DOM), `render/` (raw three.js), `audio/` (WebAudio synth), `input/`, `FoldEngine.ts` (glue). Vue HUD in `src/components/fold/`, view `src/views/FoldScene.vue`. | Pure logic is unit-testable headlessly; the renderer only *reads* logic state. |
 | Rendering | Raw three.js (same reasoning as GDD.md §0). Custom `PaperMaterial` (GLSL3 `ShaderMaterial`, toon bands + hard spot-lamp shadow + procedural paper grain + MRT normal output) → one composite pass: **Sobel ink outlines on depth+normals** (GDD §10.1), **tilt-shift** blur top/bottom 15 % (GDD §2), warm lamp vignette, grain. | GDD §2/§10 ask for exactly this; MRT gives the normals for free in the colour pass (no second geometry pass). |
-| Outlines | Bold, near-black ink (`ink` in the Castle Fold palette), constant screen width scaled with resolution. | This game's GDD overrides Meadowfall's "never #000" rule — different product, different contract. |
+| Outlines | Bold, near-black ink (`ink` in the Aethel Fold palette), constant screen width scaled with resolution. | This game's GDD overrides Meadowfall's "never #000" rule — different product, different contract. |
 | Lighting | One warm `SpotLight` above the desk (desk lamp), `BasicShadowMap`-sharp shadows, flat unlit-style toon (2 bands). | GDD §2 "warm localized point light from above… sharp hard-edged shadows". Spot, not point: one shadow map instead of six. |
 | Hinges | Paper flaps are `Object3D` pivots (the "bones" of GDD §10.2) → shadows & MRT stay correct with zero custom depth materials. | Vertex-shader folding would need a custom depth material per flap. |
 | Units | Knights etc. are **paper standees**: extruded die-cut silhouettes whose faces are programmatically drawn vector art (canvas atlas). `/public/images/fold/<name>.webp` overrides a frame automatically when present. | "Tiny 2D paper knights" (GDD §6) + "allow easy image update" (brief). |
@@ -83,7 +83,7 @@ Pages flow with **zero downtime**: clearing a page folds its pop-ups flat and im
 * Pause = the screen folds like a **cootie catcher** (four triangular flaps close in) → origami `FModal` with Resume / Restart page / Restart game / Settings (music, sfx, haptics, shake, quality, language).
 * Victory panel on the die-cut ribbon (`FReward` restyled) + Play again.
 * All F-components restyled as folded paper (crease highlight, dog-ear corners, offset paper shadow), fluid sizes, minimum sizes so nothing collapses to 0, FModal header never overlaps content. Origami SVG icons replace emoji/raster icons.
-* `FLogoProgress` → Castle Fold crane logo; the static splash in `index.html` hands over on the first rendered frame.
+* `FLogoProgress` → Aethel Fold crane logo; the static splash in `index.html` hands over on the first rendered frame.
 
 ## 6. Save — `aethel_state`
 
@@ -156,7 +156,7 @@ aethel_state = {
 ### C. Rendering (`src/fold/render`)
 - [x] C1 `FoldRenderer` (renderer, MRT target, adaptive scale, resize, dispose)
 - [x] C2 `PaperMaterial` + composite shader (Sobel ink, tilt-shift, vignette, grain, flash/fade uniforms)
-- [x] C3 `palette.ts` (Castle Fold colours) + `camera.ts` (fit, shake, focus)
+- [x] C3 `palette.ts` (Aethel Fold colours) + `camera.ts` (fit, shake, focus)
 - [x] C4 Desk (wood planks, lamp pool), page sheet + layer stack, painted page art per theme (canvas texture)
 - [x] C5 Fold flaps (hinge pivots), dotted guide lines + arrows (animated), pop-up tower/wall/shield structures, valley panels, launch flap, ridge
 - [x] C6 Standee atlas (knight, brute, archer, catapult crew, hero, tiny cheering people) — vector drawings + `/images/fold/*` overrides; instanced standee field
@@ -191,7 +191,7 @@ aethel_state = {
 ### G. Docs
 - [x] G1 `description.md` (short ≤150, long ≤500, how to play, controls)
 - [x] G2 `roadmap.md` (≥15 retention/playtime/conversion features with implementation notes)
-- [x] G3 `CLAUDE.md` / README updated for Castle Fold
+- [x] G3 `CLAUDE.md` / README updated for Aethel Fold
 
 ---
 
@@ -206,6 +206,50 @@ aethel_state = {
   Also in this session:
   * Playwright e2e is 21/21 green: gameplay, persistence, fake-SDK cloud hydration and 6-viewport HUD overlap.
   * Blank `.env.*.example` templates for every platform mode.
-  * Splash, title, manifest and package renamed to Castle Fold.
+  * Splash, title, manifest and package renamed to Aethel Fold.
   * Wrote `description.md` and `roadmap.md` (20 items); rewrote the README and CLAUDE.md.
   * `pnpm type-check` is clean, `pnpm test` gives 1976/1976, and `pnpm build` passes. The hot path is about 275 kB gzipped; the world, lab and character chunks are lazy.
+* **Session 4** — player feedback pass.
+  * **Fixes**
+    * The pause ribbon was clipped at every viewport. It now uses a shared `PaperRibbon` (outlined with drop-shadows so the notched ends keep their ink) that sits outside the card's scroller.
+    * The victory ribbon no longer covers the HUD.
+    * The landscape pause menu uses two columns.
+  * **Look**
+    * Ink width went from 2.1 to 1.4 CSS px. The Sobel thresholds now sit above low-poly facet angles, and the ink is tinted by the colour it outlines.
+    * Flat fold flaps borrow the page's outline id, so they no longer draw boxes. Standee strokes went from 4.2 to 3.2.
+    * Boulder and breath telegraphs are no-ink (id 127).
+  * **Tutorial:** new `crush` lesson (fold a wall back down onto the knights bashing it).
+  * **Book 2 "The Homefront"** (GDD §11)
+    * Books are modelled as `BookId` × `PageId`; `pageDef(book, page)` replaces the old page-5/page-6 special cases, which now key off `page.exit`.
+    * Runner and leaper enemies, the keep's sling (logic in `game.ts`, `SlingView`, gesture mode `sling`), rearming launch flaps, and catapults on book 1 pages 2 and 4.
+    * Four new page themes, the keep, the windmill, tents and apple trees, a crane finale, and printed story captions (`CaptionLabel`, `fold.story.*`).
+    * The bookshelf in the pause menu, and the book choice on the victory card.
+  * **Save:** book 2 progress lives in `aethel_state` (`fold_book`, `fold_cleared2`, `fold_best2`, `fold_wins2`) and counts in the merge score.
+  * **Baseline repairs**
+    * `checkpoint()` flushes again.
+    * A cancelled gesture no longer snaps a fold.
+    * The lesson hand appears on the frame the lesson starts.
+    * `__fold.fastForward` exists again.
+    * The cloud-hydration e2e reads raw storage correctly.
+  * **Verification:** `pnpm type-check` is clean, `pnpm test` passes 2000/2000 (a bot clears every page of both books), and Playwright passes 25/25 (including 4 new book-2 specs).
+* **Session 5** — credibility and castle pass.
+  * **Spawning:** enemies spawn in front of structures (`PageDef.spawnZ`; dragon stomps land in front of the castle core).
+  * **Page turns:** pop-ups rise with the page turn and peel (`PageView.riser`, `hold`/`setRise`/`release`, driven by `GameView`).
+  * **Props:** kept clear of launch-flap swing.
+  * **Player castle:** on every page (`playerCastleGeometry`, `CASTLE` in config), with the hero on the keep.
+  * **Ballistas:** a new `FoldKind` with bolts (`fireBallista`, `boltStep`, `KILL_BOLT`), a `ballista` lesson and idle hints.
+  * **Sling**
+    * Attention cues.
+    * It now appears on book 1 page 4, with its lesson on wave 3.
+    * Sling body hits on the dragon (`Boss.slingHits`, the `bossHit` event).
+  * **Logo:** a new logo from `logoArt.ts`, rasterised by `scripts/render-logo.mjs`.
+  * **Loading screen**
+    * It now covers the real load: the static splash's bar is live from the first paint (`public/boot.js`).
+    * Boot milestones go through `useBoot.ts`, and `FLogoProgress` waits for the first game frame and cycles gameplay tips.
+  * **Name:** the game is named **Aethel Fold** everywhere.
+* **Session 6**
+  * **HUD:** the page badge is clamped to its HUD column. Book 2's label is shortened to "Book 2", with the full label kept in the aria-label. It no longer overlaps a five-digit score in German portrait; a new e2e check covers 320–412 px.
+  * **Mute button:** one volume mute on every device. The pre-mute volumes are kept in `aethel_state` (`user_muted_volumes`) and restored on the next tap, also after a reload. The old mobile hard-suspend mode is retired, and a stored flag from it is released at load.
+  * **Castle bailey:** the decorative bailey unfolds past the page edge (`castleBaileyGeometry`), and the desk props below the book were moved aside for it.
+  * **Save key:** the save was already `aethel_state`; only two stale comments still said `tower_state`, and they are fixed.
+

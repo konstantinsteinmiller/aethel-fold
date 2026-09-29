@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { ALL_LESSONS, collectErrors, ff, screenOf, seedState, state, swipe, waitForGame } from './helpers'
 
-test.describe('Castle Fold — gameplay', () => {
+test.describe('Aethel Fold — gameplay', () => {
   test('boots straight into page 1 (no main menu) with a clean console', async ({ page }) => {
     const errors = collectErrors(page)
     await page.goto('/')
@@ -96,5 +96,23 @@ test.describe('Castle Fold — gameplay', () => {
     await page.getByRole('button', { name: /play again/i }).click()
     await ff(page, 0.5)
     expect((await state(page)).page).toBe(1)
+  })
+})
+
+test.describe('Aethel Fold — loading screen', () => {
+  test('shows the logo and a progress bar from the first paint, and clears once the game is on screen', async ({ page }) => {
+    // Hold the game chunk back so the loading screen has something to cover.
+    await page.route('**/src/views/FoldScene.vue*', async (r) => {
+      await new Promise((ok) => setTimeout(ok, 2500))
+      await r.continue()
+    })
+    await page.goto('/')
+    await expect(page.locator('#static-splash .splash-bar__fill')).toBeAttached()
+    await expect(page.locator('.splash-progress, #static-splash .splash-bar').first()).toBeVisible()
+    // Still loading (the chunk is held): the splash must not have given up.
+    await page.waitForTimeout(1500)
+    await expect(page.locator('.splash-progress')).toBeVisible()
+    await waitForGame(page)
+    await expect(page.locator('.splash-progress')).toHaveCount(0, { timeout: 15_000 })
   })
 })

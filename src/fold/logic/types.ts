@@ -1,5 +1,5 @@
 /**
- * Castle Fold — shared logic types.
+ * Aethel Fold — shared logic types.
  *
  * Everything under `src/fold/logic/` is plain TypeScript with no three.js, no
  * Vue and no DOM, so the whole game can be simulated headlessly in a unit
@@ -10,7 +10,15 @@
  * sheet and only matters for things in the air (launched knights, arrows).
  */
 
+/** A page's position within its book (every book has six). */
 export type PageId = 1 | 2 | 3 | 4 | 5 | 6
+
+/**
+ * Book 1 — "The Paper Dragon": the hero marches on the enemy castle.
+ * Book 2 — "The Homefront": the perspective flips; the enemy besieges the
+ * hero's own keep, which stands at the bottom of every page.
+ */
+export type BookId = 1 | 2
 
 // ─── Folds ─────────────────────────────────────────────────────────────────
 
@@ -25,11 +33,14 @@ export type PageId = 1 | 2 | 3 | 4 | 5 | 6
  * ridge   — the ground itself folds into a ∧ mountain that permanently closes
  *           a lane, so the march has to re-route (the "shape terrain" fold).
  * frog    — the finale: the flattened dragon sheet folds into a paper frog.
+ * ballista — a ballista folded flat on one of the player's castle towers;
+ *           swiping it up flips it open for BALLISTA_SHOTS tap-aimed bolts,
+ *           then it folds itself away and re-arms after a cooldown.
  */
-export type FoldKind = 'wall' | 'valley' | 'launch' | 'ridge' | 'frog'
+export type FoldKind = 'wall' | 'valley' | 'launch' | 'ridge' | 'frog' | 'ballista'
 
 /** The pop-up that rises with a wall fold. Purely art + blocking strength. */
-export type FoldStructure = 'tower' | 'wall' | 'shield' | 'none'
+export type FoldStructure = 'tower' | 'wall' | 'shield' | 'ballista' | 'none'
 
 export interface FoldDef {
   id: string
@@ -101,6 +112,11 @@ export interface FoldState {
   flash: number
   /** Monotonic counter bumped on every snap/stamp so views can react once. */
   rev: number
+  /** Ballistas: bolts left while open. */
+  ammo: number
+  /** Ballistas: where the last bolt was aimed (the view turns toward it). */
+  aimX: number
+  aimZ: number
 }
 
 // ─── Tear targets (spread / pinch) ─────────────────────────────────────────
@@ -144,7 +160,13 @@ export interface TearState {
 
 // ─── Enemies ───────────────────────────────────────────────────────────────
 
-export type EnemyType = 'knight' | 'brute' | 'archer' | 'catapult'
+/**
+ * runner — a light scout, twice as fast as a knight; one hit of anything kills it.
+ * leaper — a grasshopper-knight on paper springs: zig-zags between lanes in
+ *          hops and vaults clean over raised walls, so walls can't stop it —
+ *          the sling, a valley or a launch flap can.
+ */
+export type EnemyType = 'knight' | 'brute' | 'archer' | 'catapult' | 'runner' | 'leaper'
 
 export type EnemyState =
   | 'dead'       // slot free
@@ -157,6 +179,7 @@ export type EnemyState =
   | 'breached'   // reached the player's line
   | 'stand'      // stationary shooters (archers, catapults)
   | 'swept'      // lost footing (ridge rising under it), tumbling aside
+  | 'leap'       // a leaper mid-hop (lane change or vaulting a wall)
 
 export interface Enemy {
   id: number
@@ -196,7 +219,8 @@ export interface Enemy {
 
 // ─── Projectiles ───────────────────────────────────────────────────────────
 
-export type ProjectileType = 'arrow' | 'boulder' | 'catapultFling' | 'fire'
+/** `shot` is the player's own sling stone (a wadded paper ball). */
+export type ProjectileType = 'arrow' | 'boulder' | 'catapultFling' | 'fire' | 'shot' | 'bolt'
 
 export interface Projectile {
   id: number
@@ -217,6 +241,8 @@ export interface Projectile {
   owner: number
   stuck: boolean
   serial: number
+  /** Bolts: enemies pierced so far. */
+  hits: number
 }
 
 // ─── Hero ──────────────────────────────────────────────────────────────────
@@ -238,7 +264,10 @@ export type HeroMood = 'idle' | 'cheer' | 'cower' | 'hit' | 'down' | 'walk'
 
 // ─── Lessons (wordless onboarding) ─────────────────────────────────────────
 
-export type LessonId = 'swipe' | 'stamp' | 'shield' | 'launch' | 'ridge' | 'spread' | 'peel' | 'crease' | 'core' | 'frog'
+export type LessonId =
+  | 'swipe' | 'stamp' | 'shield' | 'launch' | 'ridge' | 'spread' | 'peel' | 'crease' | 'core' | 'frog'
+  // Added with book 2 (appended so the persisted lesson codes stay stable).
+  | 'crush' | 'sling' | 'leaper' | 'ballista'
 
 // ─── Waves ─────────────────────────────────────────────────────────────────
 
@@ -267,8 +296,33 @@ export interface LaneDef {
   points: number[] // x0,z0,x1,z1,...
 }
 
+// ─── Sling (the player's trebuchet, book 2) ────────────────────────────────
+
+export interface SlingDef {
+  /** Where the sling's cup rests, page space (near the hero's keep). */
+  x: number
+  z: number
+}
+
+export interface SlingState {
+  def: SlingDef
+  /** Seconds until it can be drawn again (reloading). */
+  cool: number
+  /** Being pulled back by the finger. */
+  aiming: boolean
+  /** Pull vector (finger − grab point), page units; the shot flies the other way. */
+  pullX: number
+  pullZ: number
+  /** Where the shot will land. */
+  tx: number
+  tz: number
+  shots: number
+  rev: number
+}
+
 export interface PageDef {
   id: PageId
+  book: BookId
   /** i18n key suffix for the page name, e.g. 'border' → fold.page.border. */
   nameKey: string
   lanes: LaneDef[]
@@ -283,7 +337,21 @@ export interface PageDef {
    */
   sally?: { untilTorn: string; every: number; count: number; x: number; z: number; after: number }
   /** Decorative theme used by the renderer's page painter. */
-  theme: 'border' | 'ravine' | 'siege' | 'gates' | 'core' | 'finale'
+  theme: 'border' | 'ravine' | 'siege' | 'gates' | 'core' | 'finale' | 'home' | 'orchard' | 'mill' | 'camp'
+  /** The player's sling, if this page has one. */
+  sling?: SlingDef
+  /**
+   * Where lane walkers appear. Pages with a wall or a castle across the top
+   * spawn them in front of it (they pop up out of the page like every
+   * standee) instead of walking through the paper structure.
+   */
+  spawnZ?: number
+  /** What the finale folds the dragon into. */
+  finale?: 'frog' | 'crane'
+  /** Who spills out when the dragon stomps (defaults to knights, then a brute). */
+  stomp?: EnemyType[]
+  /** Boss attack pace multiplier (< 1 = faster). */
+  bossPace?: number
   /** Seconds before the first wave. */
   introDelay: number
 }
@@ -334,6 +402,8 @@ export interface Boss {
   aimZ: number
   /** How many attacks since the last exposure. */
   attacks: number
+  /** Sling stones that hit its body since the last exposure (3 → it flinches open). */
+  slingHits: number
   /** 0…1 fold-down progress in collapse; frog progress in the finale. */
   collapse: number
   rev: number

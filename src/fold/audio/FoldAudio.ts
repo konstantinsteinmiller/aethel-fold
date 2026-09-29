@@ -1,5 +1,5 @@
 /**
- * Castle Fold sound (aethel-fold-GDD §3): an ASMR-first, fully procedural
+ * Aethel Fold sound (aethel-fold-GDD §3): an ASMR-first, fully procedural
  * paper soundscape.
  *
  *   Swiping      — crisp, heavy paper creasing that follows the finger (shhhhkkk)
@@ -453,7 +453,8 @@ export class FoldAudio {
         break
       case 'impact':
         if (e.b === 2) this.stomp()
-        else if (e.b === 4) this.thunk()
+        else if (e.b === 4 || e.b === 5) this.thunk()
+        if (e.b === 5 && e.c > 0) this.pop()
         break
       case 'shoot':
         if (e.c === 1) this.twang()
@@ -534,6 +535,34 @@ export class FoldAudio {
         break
       case 'tap':
         this.tap()
+        break
+      case 'bossHit':
+        this.thunk()
+        if (e.c) this.roar()
+        break
+      case 'ballistaFire':
+        this.twang()
+        this.whoosh(0.3, 3000)
+        break
+      case 'slingGrab':
+        this.creak()
+        break
+      case 'slingFire':
+        this.twang()
+        this.whoosh(0.45, 1600)
+        break
+      case 'slingCancel':
+        this.springBack()
+        break
+      case 'slingReady':
+        this.tap()
+        break
+      case 'leap':
+        if (t - this.lastSpawnSfx > 0.12) {
+          this.lastSpawnSfx = t
+          // A paper spring: a quick rising boing.
+          this.whoosh(e.c ? 0.3 : 0.14, e.c ? 3400 : 2600)
+        }
         break
       case 'pageIntro':
         this.music.play(e.a >= 5 ? (e.a === 6 ? 'finale' : 'drop') : e.a >= 3 ? 'siege' : 'toy')

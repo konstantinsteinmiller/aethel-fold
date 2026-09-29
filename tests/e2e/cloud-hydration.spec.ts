@@ -28,6 +28,12 @@ const cloudFor = (state: Record<string, unknown> | null): Cloud => {
 }
 
 const installFakeSdk = async (page: Page, cloud: Cloud): Promise<void> => {
+  // Keep a handle on the real Storage before the SaveManager swaps
+  // `window.localStorage` for its proxy (Chromium defines the accessor on the
+  // window itself, so it can't be recovered from Window.prototype later).
+  await page.addInitScript(() => {
+    ;(window as unknown as { __rawStorage?: Storage }).__rawStorage = window.localStorage
+  })
   await page.exposeBinding('__cloudSet', (_src, key: string, value: string | null) => {
     if (value === null) delete cloud.store[key]
     else cloud.store[key] = value
@@ -66,7 +72,7 @@ const rawGameKeys = (page: Page) =>
   page.evaluate(() => {
     const out: string[] = []
     // Read *raw* storage (the SaveManager proxies window.localStorage).
-    const raw = Object.getOwnPropertyDescriptor(Window.prototype, 'localStorage')?.get?.call(window) as Storage
+    const raw = (window as unknown as { __rawStorage: Storage }).__rawStorage
     for (let i = 0; i < raw.length; i++) {
       const k = raw.key(i)!
       if (k === 'aethel_state' || k.startsWith('__save_')) out.push(k)

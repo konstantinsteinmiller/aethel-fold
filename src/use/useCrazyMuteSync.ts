@@ -6,41 +6,49 @@ import {
   setCrazyMuted
 } from '@/use/useCrazyGames'
 import { isDbInitialized } from '@/use/useMatch'
+import { getState, setState } from '@/use/useAethelState'
+import { MUTED_VOLUMES_KEY } from '@/keys'
 
 const { userSoundVolume, userMusicVolume, setSettingValue } = useUser()
 
 const isMuted = computed(() => userMusicVolume.value === 0 && userSoundVolume.value === 0)
 
-// Snapshot of the volumes at the moment WE muted in response to a
-// platform-mute event. `null` means "no platform-mute in this session"
-// — `applyMute(false)` must NOT restore from snapshot in that case.
-//
-// Previous version started with literal defaults (0.5 / 0.7). On a
-// cold load where the SDK reported `muted=false` but the cloud-hydrated
-// in-game volumes were 0/0 (user deliberately muted on a different
-// device), the `else if` branch fired and overwrote the cloud's
-// intentional 0/0 with the stale defaults. CG QA caught it 2026-05-05.
-let muteSnapshot: { music: number; sound: number } | null = null
+// The volumes from before we muted (the button, or a platform-mute event),
+// persisted in `aethel_state` so the next unmute restores exactly them — also
+// after a reload. `null` means "not muted by us": `applyMute(false)` must NOT
+// restore anything then (a cloud-saved deliberate 0/0 stays 0/0 on a passive
+// platform sync — CG QA caught that on 2026-05-05).
+interface VolumeSnapshot { music: number; sound: number }
+
+const readSnapshot = (): VolumeSnapshot | null => {
+  const v = getState<unknown>(MUTED_VOLUMES_KEY, null)
+  if (!v || typeof v !== 'object') return null
+  const s = v as Partial<VolumeSnapshot>
+  const music = Number(s.music)
+  const sound = Number(s.sound)
+  if (!Number.isFinite(music) || !Number.isFinite(sound)) return null
+  return { music: Math.max(0, Math.min(1, music)), sound: Math.max(0, Math.min(1, sound)) }
+}
+
+const writeSnapshot = (s: VolumeSnapshot | null): void => {
+  setState(MUTED_VOLUMES_KEY, s)
+}
 
 export const applyMute = (muted: boolean) => {
   if (muted && !isMuted.value) {
-    // Platform muted, in-game wasn't — snapshot current volumes so we
-    // can restore them when the platform unmutes.
-    muteSnapshot = {
-      music: userMusicVolume.value,
-      sound: userSoundVolume.value
-    }
+    // Muting while audible — remember the current volumes, then zero them.
+    writeSnapshot({ music: userMusicVolume.value, sound: userSoundVolume.value })
     setSettingValue('music', 0)
     setSettingValue('sound', 0)
-  } else if (!muted && isMuted.value && muteSnapshot) {
-    // Platform unmuted AND we have a snapshot from an earlier platform
-    // mute → restore. Without the snapshot guard this branch would also
-    // fire on cold load when the user's cloud value happens to be 0/0
-    // (deliberate manual mute) and the SDK reports "not muted" — we'd
-    // overwrite the cloud with the snapshot's stale defaults.
-    setSettingValue('music', muteSnapshot.music)
-    setSettingValue('sound', muteSnapshot.sound)
-    muteSnapshot = null
+  } else if (!muted && isMuted.value) {
+    // Unmuting — restore the remembered volumes if we muted. Without a
+    // snapshot this is a no-op: a cold load whose cloud value is a deliberate
+    // 0/0 must not be overwritten by a passive "not muted" platform sync.
+    const snap = readSnapshot()
+    if (!snap) return
+    setSettingValue('music', snap.music)
+    setSettingValue('sound', snap.sound)
+    writeSnapshot(null)
   }
 }
 
@@ -54,11 +62,12 @@ export const applyPlatformMute = (muted: boolean) => {
 
 export const toggleMute = () => {
   const next = !isMuted.value
+  const snap = readSnapshot()
   if (next) {
     // Muting: snapshot the current (audible) volumes, then zero them.
     applyMute(true)
-  } else if (muteSnapshot) {
-    // Unmuting with a snapshot from an earlier mute → restore it.
+  } else if (snap && (snap.music > 0 || snap.sound > 0)) {
+    // Unmuting with a snapshot from an earlier mute → restore exactly it.
     applyMute(false)
   } else {
     // Unmuting with NO snapshot. `applyMute(false)` is a deliberate no-op in
@@ -70,6 +79,7 @@ export const toggleMute = () => {
     // This is the "FMuteButton can't unmute on CG" fix.
     setSettingValue('music', DEFAULT_MUSIC_VOLUME)
     setSettingValue('sound', DEFAULT_SOUND_VOLUME)
+    writeSnapshot(null)
   }
   setCrazyMuted(next)
 }

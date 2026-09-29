@@ -9,9 +9,9 @@
 // the player's actual keys. The blob lets the next hydrate score local vs.
 // remote and pick a winner deterministically without prompting.
 //
-// Score formula (Castle Fold):
-//   pagesCleared  × 1000
-// + wins          × 5000
+// Score formula (Aethel Fold):
+//   pagesCleared  × 1000   (book 1 + book 2)
+// + wins          × 5000   (book 1 + book 2)
 // + lessons       ×   50
 // + resumePage    ×  100
 // + runs          ×   10
@@ -24,9 +24,9 @@
 //   - higher score wins
 //   - tie on score → newer savedAt wins
 //   - same time too → keep local (no needless writes)
-//   - Castle Fold has no currency, so a remote win never pays a bonus.
+//   - Aethel Fold has no currency, so a remote win never pays a bonus.
 
-import { CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUNS_KEY, WINS_KEY } from '@/keys'
+import { CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUNS_KEY, WINS2_KEY, WINS_KEY } from '@/keys'
 import { STATE_KEY } from '@/use/useAethelState'
 
 /** Where the meta blob is stored in localStorage / on the remote backend.
@@ -144,6 +144,10 @@ export const computeMeta = (
   // A brand-new local snapshot scores 0 and can never beat a real cloud save.
   const cleared = Math.max(0, Math.min(6, safeInt(readField(read, CLEARED_KEY), 0)))
   const wins = Math.max(0, safeInt(readField(read, WINS_KEY), 0))
+  // Book 2 progress counts the same as book 1's: a save deep into the second
+  // book must never lose to a stale one that only finished the first.
+  const cleared2 = Math.max(0, Math.min(6, safeInt(readField(read, CLEARED2_KEY), 0)))
+  const wins2 = Math.max(0, safeInt(readField(read, WINS2_KEY), 0))
   const runs = Math.max(0, safeInt(readField(read, RUNS_KEY), 0))
   const page = Math.max(1, Math.min(6, safeInt(readField(read, PAGE_KEY), 1)))
   const lessons = safeJson<Record<string, unknown>>(readField(read, LESSONS_KEY), {})
@@ -153,13 +157,13 @@ export const computeMeta = (
   }
 
   const progressScore =
-    cleared * 1000
-    + wins * 5000
+    (cleared + cleared2) * 1000
+    + (wins + wins2) * 5000
     + learned * 50
     + (page - 1) * 100
     + runs * 10
 
-  return { savedAt, progressScore, schemaVersion: SCHEMA_VERSION, maxStage: cleared }
+  return { savedAt, progressScore, schemaVersion: SCHEMA_VERSION, maxStage: cleared + cleared2 }
 }
 
 /**

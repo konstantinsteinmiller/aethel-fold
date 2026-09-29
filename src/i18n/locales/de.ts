@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Castle Fold',
+  'gameName': 'Aethel Fold',
   'cancel': 'Abbrechen',
   'close': 'Schließen',
   'ok': 'Ok',
@@ -26,7 +26,13 @@ export default {
     'dismiss': 'ausblenden'
   },
   'loading': {
-    'tooLong': 'Laden dauert zu lange? Deaktiviere deinen Adblocker und lade neu.'
+    'tooLong': 'Laden dauert zu lange? Deaktiviere deinen Adblocker und lade neu.',
+    'tip1': 'Wische an einem gepunkteten Pfeil entlang, um eine Mauer aufzufalten.',
+    'tip2': 'Tippe auf eine hochgeklappte Mauer, um sie auf die Ritter davor zu schlagen.',
+    'tip3': 'Falte die Schlucht zu und tippe darauf, um alle darin zu zerquetschen.',
+    'tip4': 'Klappe eine Lasche unter einem Katapult um, um es auf seine Bogenschützen zu schleudern.',
+    'tip5': 'Wische einen Burgturm hoch, um seine Balliste zu öffnen, und tippe zum Schießen.',
+    'tip6': 'Springer hüpfen über Mauern. Die Schleuder holt sie herunter.'
   },
   'license': {
     'denied': 'Zugriff verweigert: Bitte erwerbe eine Lizenz.'
@@ -253,6 +259,8 @@ export default {
   'fold': {
     'hud': {
       'page': 'Seite {n}/{total}',
+      'book': 'Buch {b}',
+      'bookPage': 'Buch {b} · Seite {n}/{total}',
       'score': 'Punkte',
       'best': 'Rekord',
       'settings': 'Pause und Einstellungen',
@@ -266,7 +274,36 @@ export default {
       'siege': 'Die Belagerung',
       'gates': 'Die Burgtore',
       'core': 'Das Burgherz',
-      'finale': 'Die letzte Faltung'
+      'finale': 'Die letzte Faltung',
+      'home': 'Die Heimatburg',
+      'orchard': 'Der Obstgarten',
+      'mill': 'Der Mühlenhügel',
+      'camp': 'Das Belagerungslager',
+      'return': 'Der Drache kehrt zurück',
+      'homecoming': 'Endlich Frieden'
+    },
+    'story': {
+      'b1p1': 'Die Ritter des Papierkönigs marschieren auf die Grenze zu …',
+      'b1p2': 'Hinter der Schlucht: schwere Ritter – und ein Katapult!',
+      'b1p3': 'Bogenschützen auf den Mauern. Schilde hoch und zurückschleudern!',
+      'b1p4': 'Die Burgtore. Reiß sie auf!',
+      'b1p5': 'Tief in der Burg entfaltet sich etwas …',
+      'b1p6': 'Der Drache ist nur noch Papier. Eine letzte Faltung.',
+      'b2p1': 'Der Frosch hüpfte heim … jetzt zieht der König gegen DEINE Burg!',
+      'b2p2': 'Springer auf Papierfedern hüpfen über jede Mauer. Nimm die Schleuder!',
+      'b2p3': 'Katapulte auf dem Mühlenhügel. Schleudere sie zurück, immer wieder!',
+      'b2p4': 'Das ganze Belagerungslager stürmt aufs Tor zu.',
+      'b2p5': 'Der Drache kehrt zurück!',
+      'b2p6': 'Falte ihn zum Kranich – und lass ihn in Frieden davonfliegen.'
+    },
+    'books': {
+      'title': 'Bücher',
+      'hint': 'Wähle ein Buch. Es beginnt auf Seite 1.',
+      'name1': 'Buch 1: Der Papierdrache',
+      'name2': 'Buch 2: Die Heimatburg',
+      'blurb1': 'Marschiere gegen die feindliche Burg.',
+      'blurb2': 'Verteidige deine eigene Burg.',
+      'locked': 'Gewinne Buch 1, um es freizuschalten.'
     },
     'fx': {
       'snap': 'SCHNAPP!',
@@ -280,7 +317,11 @@ export default {
       'crash': 'KRACH!',
       'blocked': 'ABGEWEHRT!',
       'perfect': 'PERFEKTE SEITE!',
-      'combo': 'KOMBO ×{n}'
+      'combo': 'KOMBO ×{n}',
+      'thwack': 'ZACK!',
+      'boing': 'BOING!',
+      'twang': 'SCHWIRR!',
+      'flap': 'FLATTER!'
     },
     'hint': {
       'swipe': 'Wische entlang des gepunkteten Pfeils, um das Papier zu falten',
@@ -292,14 +333,18 @@ export default {
       'spreadMouse': 'Ziehe quer über den leuchtenden Knick (oder scrolle darauf)',
       'peel': 'Ziehe an der Ecke, um die Seite abzuziehen',
       'crease': 'Wische entlang des leuchtenden Knicks',
-      'frog': 'Eine letzte Faltung …'
+      'frog': 'Eine letzte Faltung …',
+      'ballista': 'Wische den Turm hoch, um die Balliste zu öffnen, dann tippe zum Schießen',
+      'crush': 'Tippe auf die Mauer, um sie auf sie herunterzuklappen',
+      'sling': 'Zieh die Schleuder zurück, ziele und lass los',
+      'leaper': 'Springer hüpfen über Mauern – triff sie mit der Schleuder!'
     },
     'pause': {
       'title': 'Pause',
       'resume': 'Weiter',
       'restartPage': 'Seite neu starten',
-      'newGame': 'Neues Buch',
-      'confirmNew': 'Ein neues Buch ab Seite 1 beginnen? Dieser Durchgang geht verloren.',
+      'newGame': 'Buch neu beginnen',
+      'confirmNew': 'Dieses Buch ab Seite 1 neu beginnen? Dieser Durchgang geht verloren.',
       'confirmYes': 'Ja, neu beginnen',
       'confirmNo': 'Weiterspielen',
       'settings': 'Einstellungen',
@@ -325,10 +370,15 @@ export default {
       'time': 'Zeit',
       'hits': 'Verlorene Herzen',
       'newBest': 'Neuer Rekord!',
-      'playAgain': 'Nochmal spielen'
+      'playAgain': 'Nochmal spielen',
+      'subtitle2': 'Der Drache ist jetzt ein Papierkranich!',
+      'story1': '… doch der Frosch hüpfte davon, um den Papierkönig zu warnen. Er zieht gegen deine Burg!',
+      'story2': 'Deine Burg steht. Der Kranich fliegt in Frieden heim.',
+      'nextBook': 'Buch 2: Die Heimatburg',
+      'backToBook1': 'Buch 1 nochmal lesen'
     },
     'a11y': {
-      'board': 'Castle Fold – ein Pop-up-Buch auf einem Schreibtisch'
+      'board': 'Aethel Fold – ein Pop-up-Buch auf einem Schreibtisch'
     }
   }
 }

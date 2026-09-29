@@ -41,7 +41,8 @@ export interface LessonState {
 }
 
 export const LESSON_IDS: readonly LessonId[] = [
-  'swipe', 'stamp', 'shield', 'launch', 'ridge', 'spread', 'peel', 'crease', 'core', 'frog'
+  'swipe', 'stamp', 'shield', 'launch', 'ridge', 'spread', 'peel', 'crease', 'core', 'frog',
+  'crush', 'sling', 'leaper', 'ballista'
 ]
 
 export const lessonCode = (id: LessonId): number => LESSON_IDS.indexOf(id)

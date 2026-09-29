@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test'
 
 export interface FoldState {
+  book: number
   page: number
   phase: string
   score: number
@@ -10,13 +11,14 @@ export interface FoldState {
   folds: { id: string; kind: string; phase: string; t: number }[]
   enemies: number
   boss: string
+  sling: { x: number; z: number; cool: number; shots: number } | null
 }
 
 declare global {
   interface Window {
     __fold?: {
       state(): FoldState
-      jumpTo(p: number): void
+      jumpTo(p: number, book?: number): void
       clearPage(): void
       fastForward(s: number): void
       screenOf(x: number, z: number, y?: number): { x: number; y: number }
@@ -26,7 +28,10 @@ declare global {
   }
 }
 
-export const ALL_LESSONS = { swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true, crease: true, core: true, frog: true }
+export const ALL_LESSONS = {
+  swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true, crease: true, core: true, frog: true,
+  crush: true, sling: true, leaper: true, ballista: true
+}
 
 /** Seed `aethel_state` before the app boots (plain web build). */
 export const seedState = async (page: Page, state: Record<string, unknown>): Promise<void> => {
@@ -39,6 +44,9 @@ export const seedState = async (page: Page, state: Record<string, unknown>): Pro
 
 export const waitForGame = async (page: Page): Promise<void> => {
   await page.waitForFunction(() => !!window.__fold && window.__fold.state().phase !== 'boot', null, { timeout: 60_000 })
+  // The loading screen stays up until the first frame is on screen (and at
+  // least ~1.4 s); a player can't touch the game before it has cleared.
+  await page.waitForFunction(() => !document.querySelector('.splash-backdrop, .splash-progress'), null, { timeout: 30_000 })
 }
 
 export const state = (page: Page): Promise<FoldState> => page.evaluate(() => window.__fold!.state())

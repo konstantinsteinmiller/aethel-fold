@@ -502,25 +502,165 @@ const paintFinale = (ctx: CanvasRenderingContext2D, _page: PageDef, rng: Rng): v
   ctx.restore()
 }
 
+// ─── Book 2 themes ─────────────────────────────────────────────────────────
+
+/** Village cottages printed around the keep: little roofs seen from above. */
+const cottages = (ctx: CanvasRenderingContext2D, rng: Rng, spots: number[]): void => {
+  for (let i = 0; i < spots.length; i += 2) {
+    ctx.save()
+    ctx.translate(px(spots[i]!), py(spots[i + 1]!))
+    ctx.rotate((rng.next() - 0.5) * 0.4)
+    const w = 46 + rng.next() * 20
+    const h = 34 + rng.next() * 12
+    ctx.fillStyle = HEX.roofRed
+    ctx.fillRect(-w / 2, -h / 2, w, h / 2)
+    ctx.fillStyle = HEX.roofRedDark
+    ctx.fillRect(-w / 2, 0, w, h / 2)
+    ctx.strokeStyle = css('ink', 0.6)
+    ctx.lineWidth = 1.6
+    ctx.strokeRect(-w / 2, -h / 2, w, h)
+    ctx.beginPath()
+    ctx.moveTo(-w / 2, 0)
+    ctx.lineTo(w / 2, 0)
+    ctx.stroke()
+    ctx.restore()
+  }
+}
+
+const paintHome = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
+  meadows(ctx, rng, 12)
+  for (const l of page.lanes) road(ctx, l.points, 44)
+  // The village the keep protects.
+  cottages(ctx, rng, [-4.2, 3.4, -3.6, 4.4, 4.3, 3.2, 3.9, 4.3, -4.3, -0.4, 4.2, 0.2])
+  flowers(ctx, rng, 60)
+  // The frontier the enemy crossed: a torn dotted line at the top.
+  ctx.save()
+  ctx.strokeStyle = css('enemyRedDark', 0.65)
+  ctx.lineWidth = 2.4
+  ctx.setLineDash([2, 10])
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(30, py(-5.4))
+  for (let x = -5; x <= 5; x += 0.5) ctx.lineTo(px(x), py(-5.4 + Math.sin(x * 1.1 + 1) * 0.2))
+  ctx.stroke()
+  ctx.restore()
+}
+
+const paintOrchard = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
+  meadows(ctx, rng, 8)
+  // Rows of printed saplings between the roads.
+  ctx.save()
+  for (let z = -6.2; z < 4.5; z += 0.9) {
+    for (let x = -4.6; x < 4.8; x += 0.9) {
+      let onRoad = false
+      for (const l of page.lanes) {
+        const p = l.points
+        const t = (z - p[1]!) / (p[p.length - 1]! - p[1]!)
+        const lx = p[0]! + (p[p.length - 2]! - p[0]!) * Math.max(0, Math.min(1, t))
+        if (Math.abs(lx - x) < 0.8) onRoad = true
+      }
+      if (onRoad || rng.next() < 0.35) continue
+      ctx.fillStyle = css('meadowDark', 0.8)
+      ctx.beginPath()
+      ctx.arc(px(x + (rng.next() - 0.5) * 0.2), py(z), 9, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = css('c1', 0.85)
+      ctx.beginPath()
+      ctx.arc(px(x) + 3, py(z) - 2, 2.4, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+  for (const l of page.lanes) road(ctx, l.points, 42)
+  flowers(ctx, rng, 40)
+}
+
+const paintMill = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
+  // Wheat fields in golden strips.
+  const cols = [HEX.flagYellow, HEX.meadowLight, HEX.road, HEX.meadow]
+  for (let i = 0; i < 14; i++) {
+    const x = rng.next() * PAGE_TEX_W
+    const y = rng.next() * PAGE_TEX_H
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate((rng.next() - 0.5) * 0.4)
+    const w = 120 + rng.next() * 150
+    const h = 90 + rng.next() * 90
+    ctx.fillStyle = css(i % 2 ? 'meadowLight' : 'road', 0.9)
+    if (i % 4 === 0) ctx.fillStyle = cols[0]!
+    ctx.fillRect(-w / 2, -h / 2, w, h)
+    ctx.strokeStyle = css('goldDark', 0.35)
+    ctx.lineWidth = 1.2
+    for (let s = -h / 2 + 7; s < h / 2; s += 9) {
+      ctx.beginPath()
+      ctx.moveTo(-w / 2, s)
+      ctx.lineTo(w / 2, s)
+      ctx.stroke()
+    }
+    ctx.restore()
+  }
+  for (const l of page.lanes) road(ctx, l.points, 42)
+  flowers(ctx, rng, 20)
+}
+
+const paintCamp = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
+  meadows(ctx, rng, 7)
+  // Trampled ground at the enemy camp along the top.
+  ctx.save()
+  blob(ctx, px(0), py(-6), 470, 120, rng, 14, 0.1)
+  ctx.fillStyle = css('roadDark', 0.55)
+  ctx.fill()
+  ctx.restore()
+  // Campfire rings.
+  for (const [x, z] of [[-1.2, -6.2], [1.4, -6.0]] as const) {
+    ctx.save()
+    ctx.translate(px(x), py(z))
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2
+      ctx.fillStyle = HEX.rockDark
+      ctx.beginPath()
+      ctx.arc(Math.cos(a) * 16, Math.sin(a) * 12, 4.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.fillStyle = HEX.c6
+    ctx.beginPath()
+    ctx.arc(0, 0, 8, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
+  for (const l of page.lanes) road(ctx, l.points, 44)
+  flowers(ctx, rng, 30)
+}
+
 const PAINTERS: Record<PageDef['theme'], (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng) => void> = {
   border: paintBorder,
   ravine: paintRavine,
   siege: paintSiege,
   gates: paintGates,
   core: paintCore,
-  finale: paintFinale
+  finale: paintFinale,
+  home: paintHome,
+  orchard: paintOrchard,
+  mill: paintMill,
+  camp: paintCamp
 }
 
-/** The hero's camp at the bottom — the thing you're defending. */
-const heroCamp = (ctx: CanvasRenderingContext2D, rng: Rng): void => {
+/** The player's castle grounds: a cobbled bailey along the bottom edge. */
+const keepGrounds = (ctx: CanvasRenderingContext2D): void => {
   ctx.save()
-  blob(ctx, px(0), py(5.95), 150, 60, rng, 10, 0.12)
-  ctx.fillStyle = css('meadowLight', 0.9)
-  ctx.fill()
-  ctx.strokeStyle = css('heroBlueDark', 0.6)
-  ctx.lineWidth = 3
-  ctx.setLineDash([10, 7])
-  ctx.stroke()
+  const y0 = py(5.95)
+  ctx.fillStyle = HEX.stoneLight
+  ctx.fillRect(34, y0, PAGE_TEX_W - 68, PAGE_TEX_H - 34 - y0)
+  ctx.strokeStyle = css('stoneDark', 0.55)
+  ctx.lineWidth = 1.1
+  for (let y = y0 + 8; y < PAGE_TEX_H - 34; y += 14) {
+    const off = (Math.floor(y / 14) % 2) * 10
+    for (let x = 40 + off; x < PAGE_TEX_W - 40; x += 20) {
+      ctx.beginPath()
+      ctx.ellipse(x, y, 8, 5, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+  }
   ctx.restore()
 }
 
@@ -549,15 +689,16 @@ const underlayerPattern = (ctx: CanvasRenderingContext2D, rng: Rng, dark = false
 // ─── Entry point ───────────────────────────────────────────────────────────
 
 export const paintPage = (page: PageDef): PageTextures => {
-  const rng = seeded(page.id * 7919 + 17)
+  const rng = seeded(page.book * 104729 + page.id * 7919 + 17)
   const [artC, art] = makeCanvas(PAGE_TEX_W, PAGE_TEX_H)
   parchmentBase(art, rng)
   paperGrain(art, PAGE_TEX_W, PAGE_TEX_H, rng)
   PAINTERS[page.theme](art, page, rng)
-  if (page.theme !== 'core' && page.theme !== 'finale') heroCamp(art, rng)
+  keepGrounds(art)
   stains(art, PAGE_TEX_W, PAGE_TEX_H, rng, 5)
   mapFrame(art)
-  for (const f of page.folds) if (f.kind !== 'frog') cutLine(art, f)
+  // (Ballistas fold on the towers, not out of the page: no cut.)
+  for (const f of page.folds) if (f.kind !== 'frog' && f.kind !== 'ballista') cutLine(art, f)
   edgeBurn(art, PAGE_TEX_W, PAGE_TEX_H)
 
   // The page itself: the same print, with holes where flaps are cut out.
@@ -568,7 +709,7 @@ export const paintPage = (page: PageDef): PageTextures => {
   const [ravineC, rav] = makeCanvas(PAGE_TEX_W, PAGE_TEX_H)
   underlayerPattern(rav, rng, true)
   for (const f of page.folds) {
-    if (f.kind === 'frog') continue
+    if (f.kind === 'frog' || f.kind === 'ballista') continue
     pg.save()
     polyPath(pg, footprint(f))
     pg.clip()
@@ -603,6 +744,46 @@ export const paintPlainSheet = (seed: number, w = 512, h = Math.round((512 * PAG
   stains(ctx, w, h, rng, 2)
   edgeBurn(ctx, w, h)
   return toTexture(c)
+}
+
+export const CAPTION_TEX_W = 1024
+export const CAPTION_TEX_H = 88
+
+/**
+ * The storybook line: a printed paper label pasted into the page margin.
+ * Pop-up books carry their text on the page itself, so the story needs no
+ * overlay. Painted separately from the page so it can be repainted when the
+ * font arrives or the language changes.
+ */
+export const paintCaption = (text: string, ctx?: CanvasRenderingContext2D): CanvasTexture | null => {
+  let tex: CanvasTexture | null = null
+  if (!ctx) {
+    const [c, g] = makeCanvas(CAPTION_TEX_W, CAPTION_TEX_H)
+    ctx = g
+    tex = toTexture(c)
+  }
+  const w = CAPTION_TEX_W
+  const h = CAPTION_TEX_H
+  ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = HEX.parchmentLight
+  ctx.fillRect(0, 0, w, h)
+  const rng = seeded(text.length * 31 + 7)
+  paperGrain(ctx, w, h, rng, 0.4)
+  ctx.strokeStyle = css('inkSoft', 0.45)
+  ctx.lineWidth = 2
+  ctx.strokeRect(8, 8, w - 16, h - 16)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  let size = 46
+  const maxW = w - 70
+  ctx.font = `${size}px Angry, sans-serif`
+  while (size > 24 && ctx.measureText(text).width > maxW) {
+    size -= 1
+    ctx.font = `${size}px Angry, sans-serif`
+  }
+  ctx.fillStyle = HEX.inkSoft
+  ctx.fillText(text, w / 2, h / 2 + 2, maxW)
+  return tex
 }
 
 export const pageUV = (x: number, z: number): [number, number] => [

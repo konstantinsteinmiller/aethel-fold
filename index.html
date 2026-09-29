@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-title" content="aethel-fold">
   <meta name="description" content="Fold the pages of a pop-up book to crush a paper army, topple its castle and fold its dragon into a frog.">
   <link rel="manifest" href="/manifest.json">
-  <title>Castle Fold</title>
+  <title>Aethel Fold</title>
   <style>
       /* The splash paints before any JS runs, so its colours are inlined here
          rather than pulled from the app's stylesheet. They match the scene's
@@ -42,33 +42,66 @@
           pointer-events: none;
       }
 
-      /* The paper crane, inline. Zero bytes over the wire and it paints
-         before any JS runs. The facets are a copy of
-         `src/components/atoms/GameLogo.vue` (without the wordmark: the
-         'Angry' font is not loaded yet) — index.html cannot import a Vue
-         component, and copying keeps the handover static splash -> Vue
-         splash showing the same crane at the same size. If the mark is ever
-         redrawn, both files change.
-
-         40vmin matches `FLogoProgress`'s `min(vw, vh) * 0.4` box exactly, so
-         the two logos are the same size in the same place and the handover is
-         invisible. */
-      .splash-arms {
+      .splash-stack {
+          position: relative;
           width: 40vmin;
           height: 40vmin;
+      }
+
+      .splash-logo {
+          width: 100%;
+          height: 100%;
+          display: block;
           animation: splash-breathe 2.4s ease-in-out infinite;
       }
 
+      /* The paper strip progress bar (same metrics as FLogoProgress.vue). */
+      .splash-bar {
+          position: absolute;
+          top: calc(100% + clamp(0.5rem, 2.5vmin, 1.25rem));
+          left: 50%;
+          width: clamp(10rem, 44vmin, 22rem);
+          transform: translateX(-50%);
+          display: flex;
+      }
+
+      .splash-bar__track {
+          position: relative;
+          flex: 1 1 auto;
+          height: clamp(0.9rem, 3vmin, 1.4rem);
+          border: 3px solid #1c1724;
+          border-radius: 0.15rem;
+          overflow: hidden;
+          background: linear-gradient(to bottom, #fff6e3 0 50%, #f4e7c9 50% 100%);
+          box-shadow: 0 4px 0 rgba(76, 64, 120, 0.45);
+      }
+
+      .splash-bar__fill {
+          width: 0;
+          height: 100%;
+          border-right: 2px solid #1c1724;
+          background: linear-gradient(to bottom, #ff6a5c 0 52%, #d8433b 52% 100%);
+      }
+
       @keyframes splash-breathe {
-          0%, 100% { opacity: 0.82; transform: scale(0.985); }
-          50%      { opacity: 1;    transform: scale(1); }
+          0%, 100% { transform: translateY(0) scale(0.985); }
+          50%      { transform: translateY(-2%) scale(1); }
       }
   </style>
 </head>
 <body>
 <div id="static-splash">
-  <svg class="splash-arms" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Castle Fold" focusable="false"><g fill="#1c1724" stroke="#1c1724" stroke-width="10" stroke-linejoin="round"><polygon points="60,30 112,122 90,128"/><polygon points="60,30 128,122 112,122"/><polygon points="196,30 144,122 166,128"/><polygon points="196,30 128,122 144,122"/><polygon points="90,130 106,134 40,64"/><polygon points="36,60 52,66 28,94"/><polygon points="166,130 150,134 226,70"/><polygon points="84,128 128,118 128,178"/><polygon points="128,118 172,128 128,178"/></g><g stroke="#1c1724" stroke-width="2.5" stroke-linejoin="round"><polygon points="60,30 112,122 90,128" fill="#3464d6"/><polygon points="60,30 128,122 112,122" fill="#5f95ff"/><polygon points="196,30 144,122 166,128" fill="#5f95ff"/><polygon points="196,30 128,122 144,122" fill="#3464d6"/><polygon points="90,130 106,134 40,64" fill="#ff6a5c"/><polygon points="36,60 52,66 28,94" fill="#ffe066"/><polygon points="166,130 150,134 226,70" fill="#d8433b"/><polygon points="84,128 128,118 128,178" fill="#fff6e3"/><polygon points="128,118 172,128 128,178" fill="#e7d3a8"/></g></svg>
+  <!-- Same layout as FLogoProgress.vue (logo box 40vmin, paper bar under it)
+       so the handover to the Vue splash is invisible. The logo is the
+       rasterised logoArt.ts (scripts/render-logo.mjs). -->
+  <div class="splash-stack">
+    <img class="splash-logo" src="images/logo/logo_512x512.png" alt="Aethel Fold" width="512" height="512" decoding="async" fetchpriority="high">
+    <div class="splash-bar"><div class="splash-bar__track"><div class="splash-bar__fill" id="splash-fill"></div></div></div>
+  </div>
 </div>
+<!-- Boot progress before any module runs (a file, not inline: the CSP has
+     no 'unsafe-inline' for scripts). See public/boot.js. -->
+<script src="boot.js"></script>
 <!-- Load the SDK before your game code -->
 <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
 <!-- Load the SDK before your game code -->

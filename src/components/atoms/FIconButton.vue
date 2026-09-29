@@ -11,7 +11,7 @@ import OrigamiIcon, { type OrigamiName } from '@/components/icons/OrigamiIcon.vu
  * now a real fluid square with an explicit `min-height` floor of 2.5rem (40 px)
  * so it stays tappable and can never be collapsed to zero.
  *
- * Castle Fold look: a square of folded paper (crease + dog-ear, ink border,
+ * Aethel Fold look: a square of folded paper (crease + dog-ear, ink border,
  * periwinkle desk shadow) carrying an `OrigamiIcon` glyph.
  */
 

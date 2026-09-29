@@ -65,7 +65,7 @@ const foldHandle = (): FoldDebugHandle | null =>
 const useCheats = () => {
   if (!isCheat.value) return {}
 
-  // Dev shortcuts for Castle Fold. The running engine publishes `window.__fold`
+  // Dev shortcuts for Aethel Fold. The running engine publishes `window.__fold`
   // (dev builds, or when the `cheat` flag is set), so nothing here imports the
   // game — `useCheats` runs on the eager boot path and must stay tiny.
   const cheatsMap: Record<string, () => void> = {

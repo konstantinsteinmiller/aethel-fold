@@ -110,3 +110,64 @@ The entire game takes place over 6 "Pages" (Levels).
 3.  **Input System:** Implement a gesture recognizer (Swipe vector detection, Pinch-to-zoom logic mapped to specific object colliders).
 4.  **Game State:** Build a simple state machine: `Level Intro -> Wait for Input -> Check Win State -> Page Turn Animation -> Next Level`.
 5.  **Boss Logic:** For the Dragon, use a sequence of predefined animations. Expose hitboxes on specific bones (limbs) that, when swiped, trigger a "fold damage" animation state.
+---
+
+## 11. Book 2 — "The Homefront" (post-launch addendum)
+*Unlocked by winning book 1. Chosen from the victory card or the pause menu's bookshelf.*
+
+**Perspective flip:** the frog hops home and warns the Paper King, whose army now marches on the hero's *own* keep. The keep stands along the bottom edge of every page, with a village printed around it.
+
+**New interaction: the keep's sling.**
+* It sits bottom-right, under the thumb.
+* Pull the stone back, aim with the dotted arc and landing ring, and let go. The stone sails over your own walls and tears up everyone where it lands.
+* It reloads in about 1.3 s. The fork glows (the actionable highlight) whenever something is on the board to shoot.
+* On the boss page, a stone that lands on an exposed weak point breaks it.
+
+**New enemies.**
+* **Runner:** a light scout at twice a knight's pace. The wall must already be up when it arrives.
+* **Leaper:** a grasshopper-knight on paper springs.
+  * It zig-zags between lanes in hops, and it vaults clean over raised walls.
+  * Walls don't stop it. The sling, a valley trap or a launch flap do.
+
+**Catapult sniping is now a recurring mechanic.**
+* Book 1: pages 2 and 4 now field catapults on launch flaps, as well as page 3.
+* Book 2: Windmill Hill and the Siege Camp run whole catapult barrages. Their launch flaps fold back and re-arm after each fling.
+
+**Pages.**
+1. The Home Keep: sling lesson, runners.
+2. The Orchard: leaper lesson.
+3. Windmill Hill: catapult barrage, ridge.
+4. The Siege Camp: everything at once.
+5. The Dragon Returns: faster, and its stomps spill runners and leapers.
+6. Peace at Last: the final fold makes a paper **crane** that flies away.
+
+**Story on the page.** Every page carries one printed storybook line on a pasted paper label in its margin. It stays diegetic: no overlay, it turns with the page, and it is localised.
+
+**New wordless lessons.**
+* `crush` (book 1): the first time two knights bash a raised wall, time freezes and the ghost hand taps the wall. This teaches that folding it back down crushes them.
+* `sling`: the ghost hand pulls the cup back.
+* `leaper`: the ghost hand aims the sling at the first leaper.
+
+---
+
+## 12. The player's castle and its ballistas (post-launch addendum)
+*The jam theme is "castle", so the thing you defend is one.*
+
+* **Your castle** stands along the bottom edge of every page: a squat keep in the middle, two ballista towers and low curtain walls.
+  * The hero stands on the keep's roof, with the hearts floating above.
+  * The castle shudders and flashes when it is hit.
+  * It is deliberately low (under ~1 unit). From the steep desk camera, anything taller would hide the enemies and folds just above it.
+* **The rest of the castle unfolds past the page's bottom edge.** This part is only decorative: a fold-out card level with the page, with side walls, a courtyard with two houses, a big keep with corner turrets, and a back wall with a gatehouse. The screen may cut it off. It is kept below the page's bottom edge on screen, so it never covers the page.
+* **Ballistas** (book 1 from page 3, every fighting page of book 2):
+  * Swipe up the strip in front of a tower to flip its ballista open.
+  * Then tap anywhere up the page. The nearest open ballista looses a flat, fast bolt at that point, piercing up to four enemies on its line and flying on to the page's edge.
+  * After **2 shots** it folds itself away and needs **3 s** before it can be flipped open again.
+  * It has a wordless lesson: swipe it open, then tap the enemy.
+* **The sling:** its first appearance is on book 1 page 4, as a taste of book 2. A drag at the peel corner is still the peel.
+  * When it is loaded and something is on the board, it asks to be used: a pulsing blue ring, a bobbing marker, and the stone tugging back on its own.
+  * On book 2's dragon page, stones that hit the dragon's **body** make it flinch. A hit during the fire-breath charge chokes it, and every third hit bares its next weak point.
+* **Credibility rules.**
+  * Enemies are spawned in front of paper structures (the page-3 battlement, the page-4 castle), never walking through them.
+  * A page built under a turning or peeling sheet holds every pop-up flat and unfolds it as the sheet clears it.
+  * Props keep clear of the landing strip a launch flap flips onto.
+

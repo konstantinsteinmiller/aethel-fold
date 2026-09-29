@@ -207,20 +207,21 @@ export class BookView {
     pencil.rotation.y = 1.1
     pencil.castShadow = true
     this.group.add(pencil)
-    // Below the book (the portrait view's lower desk).
+    // Below the book (the portrait view's lower desk) — out to the sides, so
+    // the player's castle can unfold over the middle (see castleBaileyGeometry).
     const crane3 = new Mesh(craneGeometry('c2'), propMat)
-    crane3.position.set(3.4, DESK_Y, PAGE_HALF_D + 2.6)
+    crane3.position.set(7.4, DESK_Y, PAGE_HALF_D + 2.6)
     crane3.rotation.y = 2.4
     crane3.scale.setScalar(1.1)
     crane3.castShadow = true
     this.group.add(crane3)
     const boat2 = new Mesh(boatGeometry(), propMat)
-    boat2.position.set(-3.6, DESK_Y, PAGE_HALF_D + 3.1)
+    boat2.position.set(-7.6, DESK_Y, PAGE_HALF_D + 3.1)
     boat2.rotation.y = -0.5
     boat2.castShadow = true
     this.group.add(boat2)
     const pencil2 = new Mesh(pencilGeometry(), propMat)
-    pencil2.position.set(1.6, DESK_Y + 0.09, PAGE_HALF_D + 1.5)
+    pencil2.position.set(6.8, DESK_Y + 0.09, PAGE_HALF_D + 1.2)
     pencil2.rotation.y = 0.12
     pencil2.castShadow = true
     this.group.add(pencil2)

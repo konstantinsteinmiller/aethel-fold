@@ -13,7 +13,7 @@ const step = (g: FoldGame, seconds: number, collect?: FoldEventType[]): void => 
   }
 }
 
-const ALL_LEARNED = { swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true, crease: true, core: true, frog: true }
+const ALL_LEARNED = { swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true, crease: true, core: true, frog: true, crush: true, sling: true, leaper: true, ballista: true }
 
 describe('page data', () => {
   it('has six pages with valid exits and at least one fold each', () => {

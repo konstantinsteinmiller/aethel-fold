@@ -1,7 +1,7 @@
 /**
  * A tiny synthesis toolkit on top of WebAudio: noise buffers, envelopes and
  * a handful of instruments (pizzicato, glockenspiel, brass, snare, kick,
- * formant voice). Everything is procedural — Castle Fold ships no music files.
+ * formant voice). Everything is procedural — Aethel Fold ships no music files.
  */
 
 export interface Bus {

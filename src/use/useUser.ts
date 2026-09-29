@@ -44,7 +44,7 @@ export const version: string = APP_VERSION
 
 // ─── Persisted settings ────────────────────────────────────────────────────
 //
-// Castle Fold persists THREE user settings — sound volume, music volume and
+// Aethel Fold persists THREE user settings — sound volume, music volume and
 // locale — as fields inside the single `aethel_state` blob (keys catalogued in
 // `src/keys.ts`), never as their own localStorage entries. On a platform build
 // the blob goes through the patched `SaveManager.setItem` and is mirrored to

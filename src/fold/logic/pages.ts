@@ -1,5 +1,6 @@
 /**
- * The six pages of Castle Fold (GDD §8), authored with small builders so the
+ * The two books of Aethel Fold, six pages each (GDD §8 for book 1), authored
+ * with small builders so the
  * geometry reads as intent ("a tower line across the centre lane") instead of
  * as hinge maths.
  *
@@ -9,11 +10,11 @@
  */
 
 import {
-  BREACH_Z, PAGE_HALF_D, SHIELD_COOLDOWN, SHIELD_HOLD, SHIELD_HP, SPAWN_Z,
+  BALLISTA_COOLDOWN, BREACH_Z, CASTLE, PAGE_HALF_D, SHIELD_COOLDOWN, SHIELD_HOLD, SHIELD_HP, SPAWN_Z,
   VALLEY_HOLD, WALL_COOLDOWN, WALL_HOLD, WALL_HP, SCORE
 } from './config'
 import type {
-  EnemyType, FoldDef, FoldStructure, LaneDef, LessonId, PageDef, PageId, SpawnDef, TearDef, WaveDef
+  BookId, EnemyType, FoldDef, FoldStructure, LaneDef, LessonId, PageDef, PageId, SlingDef, SpawnDef, TearDef, WaveDef
 } from './types'
 
 // ─── Builders ──────────────────────────────────────────────────────────────
@@ -25,6 +26,8 @@ interface FoldOpts {
   hp?: number
   fromWave?: number
   lesson?: LessonId
+  /** Launch flaps only: seconds after a fling before the flap is back, re-armed. */
+  rearm?: number
 }
 
 /**
@@ -74,8 +77,10 @@ export const launchFlap = (id: string, x0: number, x1: number, z: number, depth:
   depth,
   side: 1,
   structure: 'none',
-  hold: 0,
-  cooldown: 0,
+  // hold > 0: the flipped flap folds back after a beat and re-arms (book 2's
+  // catapult barrages); 0 = single use.
+  hold: o.rearm ? 0.9 : 0,
+  cooldown: o.rearm ?? 0,
   hp: 99,
   sx: 0, sz: -1,
   fromWave: o.fromWave ?? 0,
@@ -113,6 +118,31 @@ export const frogLine = (id: string, x0: number, x1: number, z: number, depth: n
   fromWave: 0,
   lesson: 'frog'
 })
+
+/**
+ * A ballista folded flat on one of the castle towers. The "flap" is the strip
+ * of page in front of the tower: swipe up it to flip the ballista open.
+ */
+export const ballistaLine = (id: string, x: number): FoldDef => ({
+  id,
+  kind: 'ballista',
+  ax: x - 0.5, az: CASTLE.towerZ - 0.4, bx: x + 0.5, bz: CASTLE.towerZ - 0.4,
+  depth: 0.8,
+  side: -1,
+  structure: 'ballista',
+  hold: Infinity,
+  cooldown: BALLISTA_COOLDOWN,
+  hp: 99,
+  sx: 0, sz: -1,
+  fromWave: 0,
+  lesson: 'ballista'
+})
+
+/** The castle's sling sits bottom-right, under the thumb. */
+const SLING: SlingDef = { x: 3.95, z: 5.75 }
+
+/** Both tower ballistas (book 1 from page 3 on, every fighting page of book 2). */
+const ballistas = (): FoldDef[] => [ballistaLine('ballista-l', -CASTLE.towerX), ballistaLine('ballista-r', CASTLE.towerX)]
 
 export const tear = (
   id: string, kind: TearDef['kind'], x: number, z: number, o: Partial<Omit<TearDef, 'id' | 'kind' | 'x' | 'z'>> = {}
@@ -157,6 +187,7 @@ const wave = (spawns: SpawnDef[], delay = 1.2, lesson?: LessonId): WaveDef => ({
 
 const page1: PageDef = {
   id: 1,
+  book: 1,
   nameKey: 'border',
   theme: 'border',
   exit: 'turn',
@@ -184,6 +215,7 @@ const page1: PageDef = {
 
 const page2: PageDef = {
   id: 2,
+  book: 1,
   nameKey: 'ravine',
   theme: 'ravine',
   exit: 'turn',
@@ -192,13 +224,19 @@ const page2: PageDef = {
   folds: [
     valleyLine('p2-ravine', -4.6, 4.6, -1.3, 0.95, { lesson: 'stamp' }),
     wallLine('p2-left', -4.35, -1.4, 2.3, 1.6, { structure: 'wall', fromWave: 1 }),
-    wallLine('p2-right', 1.4, 4.35, 2.3, 1.6, { structure: 'wall', fromWave: 1 })
+    wallLine('p2-right', 1.4, 4.35, 2.3, 1.6, { structure: 'wall', fromWave: 1 }),
+    // A catapult sets up on the far bank: flip it back onto its own crew.
+    launchFlap('p2-launch', 1.3, 3.9, -4.5, 1.6, { fromWave: 1, lesson: 'launch', rearm: 5 })
   ],
   tears: [],
   waves: [
     wave([...column('knight', 0, 0, 3, 0.5), s('brute', 0, 1.9)], 0, 'stamp'),
-    wave([s('brute', 1, 0), ...column('knight', 1, 1.2, 2, 0.6), s('brute', 2, 1.6), ...column('knight', 2, 2.6, 2, 0.6)], 1.4),
     wave([
+      post('catapult', 2.6, -3.7),
+      s('brute', 1, 0), ...column('knight', 1, 1.2, 2, 0.6), s('brute', 2, 1.6), ...column('knight', 2, 2.6, 2, 0.6)
+    ], 1.4),
+    wave([
+      post('catapult', 2.6, -3.7, 1.5),
       ...column('knight', 0, 0, 4, 0.45),
       s('brute', 1, 0.8), s('brute', 2, 1.8), s('brute', 0, 3.2),
       ...column('knight', 1, 2.4, 3, 0.5), ...column('knight', 2, 3.6, 3, 0.5)
@@ -210,10 +248,13 @@ const page2: PageDef = {
 
 const page3: PageDef = {
   id: 3,
+  book: 1,
   nameKey: 'siege',
   theme: 'siege',
   exit: 'turn',
   introDelay: 0.6,
+  // In front of the battlement, not through it.
+  spawnZ: -5.4,
   lanes: [lane(0, 0.2, 0.3), lane(-3.3, 0.25, 1.5), lane(3.3, 0.25, 2.8)],
   folds: [
     wallLine('p3-shield', -2.3, 2.3, 4.25, 0.8, { structure: 'shield', lesson: 'shield' }),
@@ -221,7 +262,8 @@ const page3: PageDef = {
     launchFlap('p3-launch-r', 1.3, 3.9, -3.25, 1.7, { lesson: 'launch' }),
     ridgeLine('p3-ridge', -1.25, 1.25, 0.55, 0.85, { fromWave: 1, lesson: 'ridge' }),
     wallLine('p3-left', -4.4, -1.6, 2.4, 1.5, { structure: 'wall', fromWave: 1 }),
-    wallLine('p3-right', 1.6, 4.4, 2.4, 1.5, { structure: 'wall', fromWave: 1 })
+    wallLine('p3-right', 1.6, 4.4, 2.4, 1.5, { structure: 'wall', fromWave: 1 }),
+    ...ballistas()
   ],
   tears: [],
   waves: [
@@ -242,16 +284,24 @@ const page3: PageDef = {
 
 const page4: PageDef = {
   id: 4,
+  book: 1,
   nameKey: 'gates',
   theme: 'gates',
   exit: 'peel',
   introDelay: 0.8,
+  // In front of the castle's outer wall and moat.
+  spawnZ: -2.15,
+  sling: SLING,
   lanes: [lane(0, 0.15, 0.6), lane(-2.7, 0.3, 1.9), lane(2.7, 0.3, 0.1)],
   folds: [
     wallLine('p4-shield', -2.3, 2.3, 4.25, 0.8, { structure: 'shield' }),
     wallLine('p4-centre', -1.4, 1.4, 0.2, 1.7, { structure: 'tower' }),
     wallLine('p4-left', -4.4, -1.5, 1.7, 1.5, { structure: 'wall' }),
-    wallLine('p4-right', 1.5, 4.4, 1.7, 1.5, { structure: 'wall' })
+    wallLine('p4-right', 1.5, 4.4, 1.7, 1.5, { structure: 'wall' }),
+    // Siege engines in front of the walls: fling them back onto the archer towers.
+    launchFlap('p4-launch-l', -4.4, -2.2, -2.1, 1.5, { fromWave: 1 }),
+    launchFlap('p4-launch-r', 2.2, 4.4, -2.1, 1.5, { fromWave: 1 }),
+    ...ballistas()
   ],
   tears: [
     tear('p4-tower-l', 'tower', -3.45, -4.55, { lesson: 'spread' }),
@@ -262,8 +312,13 @@ const page4: PageDef = {
   sally: { untilTorn: 'p4-gate', every: 7, count: 2, x: 0, z: -3.6, after: 6 },
   waves: [
     wave([post('archer', -3.45, -4.95), post('archer', 3.45, -4.95), ...column('knight', 0, 1.8, 3, 0.55)], 0, 'spread'),
-    wave([...column('knight', 1, 0, 3, 0.5), ...column('knight', 2, 1, 3, 0.5)], 1.5),
-    wave([s('brute', 0, 0), ...column('knight', 1, 0.8, 3, 0.5), s('brute', 2, 1.6), ...column('knight', 0, 2.4, 3, 0.45)], 1.2)
+    wave([
+      post('catapult', -3.3, -1.35), post('catapult', 3.3, -1.35),
+      ...column('knight', 1, 0, 3, 0.5), ...column('knight', 2, 1, 3, 0.5)
+    ], 1.5),
+    // The sling's first appearance (a taste of book 2): brutes shrug off a
+    // wall's launch, a stone doesn't.
+    wave([s('brute', 0, 0), ...column('knight', 1, 0.8, 3, 0.5), s('brute', 2, 1.6), ...column('knight', 0, 2.4, 3, 0.45)], 1.2, 'sling')
   ]
 }
 
@@ -271,6 +326,7 @@ const page4: PageDef = {
 
 const page5: PageDef = {
   id: 5,
+  book: 1,
   nameKey: 'core',
   theme: 'core',
   exit: 'boss',
@@ -280,7 +336,8 @@ const page5: PageDef = {
     wallLine('p5-shield', -2.5, 2.5, 4.2, 0.85, { structure: 'shield', hold: 2.8 }),
     wallLine('p5-centre', -1.2, 1.2, 0.9, 1.5, { structure: 'tower' }),
     wallLine('p5-left', -4.4, -1.3, 2.0, 1.6, { structure: 'wall' }),
-    wallLine('p5-right', 1.3, 4.4, 2.0, 1.6, { structure: 'wall' })
+    wallLine('p5-right', 1.3, 4.4, 2.0, 1.6, { structure: 'wall' }),
+    ...ballistas()
   ],
   tears: [],
   waves: []
@@ -290,6 +347,7 @@ const page5: PageDef = {
 
 const page6: PageDef = {
   id: 6,
+  book: 1,
   nameKey: 'finale',
   theme: 'finale',
   exit: 'finale',
@@ -297,14 +355,200 @@ const page6: PageDef = {
   lanes: [],
   folds: [frogLine('p6-frog', -3.2, 3.2, 0.6, 2.4)],
   tears: [],
+  waves: [],
+  finale: 'frog'
+}
+
+// ═══ Book 2 — The Homefront ════════════════════════════════════════════════
+//
+// The frog hopped home and told the Paper King everything. Now his army comes
+// for the hero's own keep, drawn along the bottom edge of every page. New:
+// the keep's sling (pull back, let go), runners (fast) and leapers (vault
+// walls, zig-zag between lanes).
+
+
+const home1: PageDef = {
+  id: 1,
+  book: 2,
+  nameKey: 'home',
+  theme: 'home',
+  exit: 'turn',
+  introDelay: 0.6,
+  sling: SLING,
+  lanes: [lane(0, 0.25, 0.9), lane(-2.9, 0.3, 1.7), lane(2.7, 0.3, 0.4)],
+  folds: [
+    wallLine('h1-centre', -1.5, 1.5, -0.3, 2.0, { structure: 'tower' }),
+    wallLine('h1-left', -4.35, -1.6, 1.6, 1.7, { structure: 'wall', fromWave: 1 }),
+    wallLine('h1-right', 1.6, 4.35, 1.6, 1.7, { structure: 'wall', fromWave: 1 }),
+    ...ballistas()
+  ],
+  tears: [],
+  waves: [
+    wave(column('knight', 0, 0, 4, 0.75), 0, 'sling'),
+    // Runners: twice as fast — the wall has to be up before they arrive.
+    wave([...column('runner', 1, 0, 3, 0.45), ...column('runner', 2, 1.8, 3, 0.45)], 1.4),
+    wave([
+      ...column('knight', 0, 0, 3, 0.6), ...column('runner', 1, 1, 4, 0.4),
+      s('brute', 2, 1.6), ...column('runner', 2, 3.2, 3, 0.4), ...column('knight', 1, 4, 2, 0.6)
+    ], 1.2)
+  ]
+}
+
+const home2: PageDef = {
+  id: 2,
+  book: 2,
+  nameKey: 'orchard',
+  theme: 'orchard',
+  exit: 'turn',
+  introDelay: 0.7,
+  sling: SLING,
+  lanes: [lane(0, 0.2, 0.2), lane(-3, 0.25, 1.1), lane(2.8, 0.25, 2.6)],
+  folds: [
+    valleyLine('o2-ditch', -4.6, 4.6, -2.5, 0.9, { fromWave: 1 }),
+    wallLine('o2-centre', -1.45, 1.45, 1.0, 1.8, { structure: 'tower' }),
+    wallLine('o2-left', -4.35, -1.55, 2.6, 1.5, { structure: 'wall' }),
+    wallLine('o2-right', 1.55, 4.35, 2.6, 1.5, { structure: 'wall' }),
+    ...ballistas()
+  ],
+  tears: [],
+  waves: [
+    // Leapers: they vault the tower. The sling brings them down.
+    wave([...column('knight', 0, 0, 2, 0.7), s('leaper', 0, 2.2), s('leaper', 1, 3.6)], 0, 'leaper'),
+    wave([
+      ...column('leaper', 1, 0, 2, 1.2), ...column('runner', 2, 0.8, 3, 0.45),
+      ...column('knight', 0, 2, 3, 0.55), s('leaper', 2, 3.4)
+    ], 1.4),
+    wave([
+      s('brute', 0, 0), ...column('leaper', 1, 0.6, 2, 1), ...column('knight', 2, 1, 3, 0.55),
+      s('brute', 2, 2.4), ...column('runner', 0, 3, 3, 0.4), s('leaper', 0, 4.2)
+    ], 1.2)
+  ]
+}
+
+const home3: PageDef = {
+  id: 3,
+  book: 2,
+  nameKey: 'mill',
+  theme: 'mill',
+  exit: 'turn',
+  introDelay: 0.6,
+  sling: SLING,
+  lanes: [lane(0, 0.2, 0.3), lane(-3.2, 0.25, 1.5), lane(3.1, 0.25, 2.8)],
+  folds: [
+    wallLine('m3-shield', -2.3, 2.3, 4.25, 0.8, { structure: 'shield' }),
+    // Catapult nests on both flanks. The flaps fold back and re-arm, because
+    // the Paper King keeps sending more.
+    launchFlap('m3-launch-l', -4.4, -1.8, -4.3, 1.6, { rearm: 4.5 }),
+    launchFlap('m3-launch-r', 1.8, 4.4, -4.3, 1.6, { rearm: 4.5 }),
+    ridgeLine('m3-ridge', -1.25, 1.25, -0.4, 0.85, { fromWave: 1 }),
+    wallLine('m3-left', -4.4, -1.6, 2.2, 1.5, { structure: 'wall' }),
+    wallLine('m3-right', 1.6, 4.4, 2.2, 1.5, { structure: 'wall' }),
+    ...ballistas()
+  ],
+  tears: [],
+  waves: [
+    wave([post('catapult', -3.1, -3.5), post('catapult', 3.1, -3.5), ...column('knight', 0, 2, 3, 0.7)], 0),
+    wave([
+      post('catapult', -3.1, -3.5, 1), ...column('runner', 0, 0, 4, 0.4),
+      post('catapult', 3.1, -3.5, 5), ...column('knight', 1, 2.4, 3, 0.55), ...column('knight', 2, 4.2, 2, 0.55)
+    ], 1.4),
+    wave([
+      post('catapult', -3.1, -3.5, 0.5), post('catapult', 3.1, -3.5, 0.5),
+      post('archer', -1.6, -6.1), post('archer', 1.6, -6.1),
+      s('leaper', 0, 1), ...column('runner', 1, 1.6, 3, 0.4), s('brute', 2, 2.2), ...column('knight', 0, 3.4, 3, 0.5),
+      post('catapult', -3.1, -3.5, 8), post('catapult', 3.1, -3.5, 9)
+    ], 1.2)
+  ]
+}
+
+const home4: PageDef = {
+  id: 4,
+  book: 2,
+  nameKey: 'camp',
+  theme: 'camp',
+  exit: 'turn',
+  introDelay: 0.8,
+  sling: SLING,
+  lanes: [lane(0, 0.3, 0.6), lane(-2.9, 0.3, 1.9), lane(2.9, 0.3, 0.1)],
+  folds: [
+    wallLine('c4-shield', -2.3, 2.3, 4.25, 0.8, { structure: 'shield' }),
+    launchFlap('c4-launch-l', -4.4, -2.0, -4.9, 1.5, { rearm: 5 }),
+    launchFlap('c4-launch-r', 2.0, 4.4, -4.9, 1.5, { rearm: 5 }),
+    valleyLine('c4-ditch', -4.6, 4.6, -1.6, 0.85),
+    wallLine('c4-centre', -1.4, 1.4, 1.2, 1.7, { structure: 'tower' }),
+    wallLine('c4-left', -4.4, -1.5, 2.7, 1.4, { structure: 'wall' }),
+    wallLine('c4-right', 1.5, 4.4, 2.7, 1.4, { structure: 'wall' }),
+    ...ballistas()
+  ],
+  tears: [],
+  waves: [
+    wave([
+      post('catapult', -3.2, -4.15), post('catapult', 3.2, -4.15),
+      ...column('knight', 0, 1, 3, 0.55), ...column('leaper', 1, 2.6, 2, 1)
+    ], 0),
+    wave([
+      ...column('runner', 2, 0, 4, 0.38), s('brute', 0, 1), ...column('leaper', 0, 2, 2, 0.9),
+      post('catapult', -3.2, -4.15, 3), ...column('knight', 1, 3, 3, 0.5)
+    ], 1.4),
+    wave([
+      post('catapult', -3.2, -4.15, 0), post('catapult', 3.2, -4.15, 0.5),
+      s('brute', 1, 0), s('brute', 2, 1.2), ...column('leaper', 0, 0.6, 3, 0.9),
+      ...column('runner', 1, 2.2, 4, 0.36), ...column('knight', 2, 3, 3, 0.5),
+      post('catapult', 3.2, -4.15, 9)
+    ], 1.2)
+  ]
+}
+
+const home5: PageDef = {
+  id: 5,
+  book: 2,
+  nameKey: 'return',
+  theme: 'core',
+  exit: 'boss',
+  introDelay: 0.5,
+  sling: SLING,
+  bossPace: 0.85,
+  stomp: ['runner', 'leaper', 'knight', 'runner', 'brute'],
+  lanes: [lane(0, 0.2, 0.5), lane(-2.8, 0.25, 1.4), lane(2.8, 0.25, 2.4)],
+  folds: [
+    wallLine('r5-shield', -2.5, 2.5, 4.2, 0.85, { structure: 'shield', hold: 2.8 }),
+    wallLine('r5-centre', -1.2, 1.2, 0.9, 1.5, { structure: 'tower' }),
+    wallLine('r5-left', -4.4, -1.3, 2.0, 1.6, { structure: 'wall' }),
+    wallLine('r5-right', 1.3, 4.4, 2.0, 1.6, { structure: 'wall' }),
+    ...ballistas()
+  ],
+  tears: [],
   waves: []
 }
 
-export const PAGES: Readonly<Record<PageId, PageDef>> = {
-  1: page1, 2: page2, 3: page3, 4: page4, 5: page5, 6: page6
+const home6: PageDef = {
+  id: 6,
+  book: 2,
+  nameKey: 'homecoming',
+  theme: 'finale',
+  exit: 'finale',
+  introDelay: 0.4,
+  lanes: [],
+  folds: [frogLine('h6-crane', -3.2, 3.2, 0.6, 2.4)],
+  tears: [],
+  waves: [],
+  finale: 'crane'
 }
 
+export const BOOKS: Readonly<Record<BookId, Readonly<Record<PageId, PageDef>>>> = {
+  1: { 1: page1, 2: page2, 3: page3, 4: page4, 5: page5, 6: page6 },
+  2: { 1: home1, 2: home2, 3: home3, 4: home4, 5: home5, 6: home6 }
+}
+
+/** Book 1's pages (the original six). */
+export const PAGES: Readonly<Record<PageId, PageDef>> = BOOKS[1]
+
 export const PAGE_COUNT = 6
+export const BOOK_COUNT = 2
+
+export const pageDef = (book: BookId, id: PageId): PageDef => BOOKS[book][id]
+
+export const isBookId = (n: unknown): n is BookId => n === 1 || n === 2
 
 export const isPageId = (n: unknown): n is PageId =>
   typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= PAGE_COUNT

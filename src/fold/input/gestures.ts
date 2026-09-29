@@ -7,6 +7,7 @@
  *   one finger dragged off a crease ............... Tear drag (the mouse's spread)
  *   one finger along a glowing boss crease ........ Crease (fold a limb back)
  *   one finger from the dog-eared corner .......... Peel the layer
+ *   one finger on the keep's sling, pulled back ... Sling (aim the other way, let go to shoot)
  *   mouse wheel over a crease ..................... Spread (desktop)
  *
  * Pure logic: it never touches the DOM. The host feeds it pointer events with
@@ -35,7 +36,7 @@ export interface GestureHost {
   feedback?(kind: GestureFeedback, value: number): void
 }
 
-type Mode = 'idle' | 'pending' | 'fold' | 'tear' | 'spread' | 'crease' | 'peel' | 'none'
+type Mode = 'idle' | 'pending' | 'fold' | 'tear' | 'spread' | 'crease' | 'peel' | 'sling' | 'none'
 
 interface Ptr {
   id: number
@@ -94,6 +95,11 @@ export class GestureRecognizer {
       this.target = -1
       this.progress = 0
       this.speed = 0
+      if (g.pickSling(this.a.x, this.a.z) && g.grabSling()) {
+        this.mode = 'sling'
+        this.host.feedback?.('grab', 0)
+        return
+      }
       this.tearCandidate = g.pickTear(this.a.x, this.a.z)
       this.creaseCandidate = g.pickCrease(this.a.x, this.a.z)
       g.foldsNear(this.a.x, this.a.z, this.near)
@@ -101,6 +107,8 @@ export class GestureRecognizer {
       return
     }
     if (this.b.active) return
+    // Aiming the sling is a one-finger job; a second finger changes nothing.
+    if (this.mode === 'sling') return
     if (!this.fill(this.b, id, sx, sy, now)) return
     // Second finger: this is a spread. Let go of whatever the first was doing.
     if (this.mode === 'fold' && this.target >= 0) g.release(this.target, 0)
@@ -181,6 +189,14 @@ export class GestureRecognizer {
         this.tick(this.progress, 'dragTick')
         break
       }
+      case 'sling': {
+        if (p !== this.a) return
+        g.aimSling(p.x - p.startX, p.z - p.startZ)
+        const pull = Math.min(1, Math.hypot(p.x - p.startX, p.z - p.startZ) / 2.5)
+        this.progress = pull
+        this.tick(pull, 'dragTick')
+        break
+      }
       case 'peel': {
         // Drag the corner up and to the left (toward the page centre).
         const dx = p.startSx - sx
@@ -225,6 +241,9 @@ export class GestureRecognizer {
       case 'peel':
         g.peelRelease()
         break
+      case 'sling':
+        g.releaseSling()
+        break
     }
     this.a.active = false
     if (this.b.active) {
@@ -239,10 +258,12 @@ export class GestureRecognizer {
 
   cancel(): void {
     const g = this.game
-    if (this.mode === 'fold' && this.target >= 0) g.release(this.target, 0)
+    // A cancelled gesture (pause, lost capture) never counts as a fold.
+    if (this.mode === 'fold' && this.target >= 0) g.abandon(this.target)
     if ((this.mode === 'tear' || this.mode === 'spread') && this.target !== -1) g.releaseTear(this.target)
     if (this.mode === 'crease') g.releaseWeak()
     if (this.mode === 'peel') g.peelRelease()
+    if (this.mode === 'sling') g.cancelSling()
     this.a.active = false
     this.b.active = false
     this.mode = 'idle'

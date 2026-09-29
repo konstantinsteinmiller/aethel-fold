@@ -1,7 +1,8 @@
 # aethel-fold — project instructions
 
-**Castle Fold** (`src/fold/`, `src/views/FoldScene.vue`, route `/`) is the
-product: a 3D origami pop-up-book castle siege on raw three.js. The spec is
+**Aethel Fold** (`src/fold/`, `src/views/FoldScene.vue`, route `/`) is the
+product: a 3D origami pop-up-book castle siege on raw three.js, in two books of
+six pages (`BOOKS` in `src/fold/logic/pages.ts`; book 2 unlocks after book 1). The spec is
 [`aethel-fold-GDD.md`](./aethel-fold-GDD.md); the architecture decisions, task
 list and status log are in
 [`game-implementation-plan.md`](./game-implementation-plan.md). Read both before
@@ -19,11 +20,11 @@ Also in the repo:
 
 The shared platform layer (`src/platforms/`, `src/utils/save/`, `src/i18n/`,
 `src/components/atoms/F*`, `src/components/molecules/F*`) is used by both
-Castle Fold and the benches. Changes there must not break either.
+Aethel Fold and the benches. Changes there must not break either.
 
 ---
 
-## Non-negotiables for Castle Fold
+## Non-negotiables for Aethel Fold
 
 * **Logic is pure TS.** `src/fold/logic` imports neither three.js nor Vue, so
   every rule is unit-testable in `tests/fold`. The view layer reads logic state
@@ -58,6 +59,10 @@ Castle Fold and the benches. Changes there must not break either.
 * **No ads in the jury build** — no interstitials, no rewarded, no reward
   buttons.
 * **Only the `Angry` font.** Monospace is allowed in debug overlays only.
+* **Nothing walks through paper.** Lane walkers spawn at `PageDef.spawnZ` in
+  front of any structure across the top, and a page built under a turning or
+  peeling sheet keeps its pop-ups flat (`PageView.hold`) until the transition
+  lets them rise. Keep the player's castle low (`CASTLE` in `config.ts`).
 * **UI never overlaps UI or the page.** The HUD is a grid (left: page and
   hearts; centre: score and boss meter; right: mute and pause). Size everything
   with `clamp()`/`vw`/`vh` and safe-area insets, and check 320×658 portrait and
@@ -160,7 +165,7 @@ timing and hydration races only show up at runtime.
   `E2E_PLAIN_ONLY=1` for everything but `cloud-hydration`.
 * For eyeballing, boot `pnpm dev` (port 2050) and use the DEV handle
   `window.__fold`:
-  * `jumpTo(page)`
+  * `jumpTo(page, book?)` (book 2 = "The Homefront", GDD §11)
   * `clearPage()`
   * `fastForward(s)`
   * `state()`

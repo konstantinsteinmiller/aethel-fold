@@ -1,9 +1,9 @@
 /**
  * The single full-screen pass that turns the flat toon render into the
- * Castle Fold look (aethel-fold-GDD §2, §9, §10.1):
+ * Aethel Fold look (aethel-fold-GDD §2, §9, §10.1):
  *
  * 1. Sobel edge detection over view normals, linear depth and object ids →
- *    bold, near-black ink outlines of constant screen width;
+ *    fine ink outlines of constant screen width, tinted by what they outline;
  * 2. the "actionable" id bit → a pulsing yellow glow along those outlines;
  * 3. tilt-shift: the top and bottom 15 % of the frame blur like a macro lens;
  * 4. warm lamp vignette, a whisper of screen grain, hit flashes and the
@@ -131,12 +131,15 @@ export const createCompositeMaterial = (): ShaderMaterial =>
 
         float hl = max(max(hlOf(n4.a), hlOf(n[1].a)), max(max(hlOf(n[3].a), hlOf(n[4].a)), hlOf(n[6].a)));
 
-        float edge = max(smoothstep(0.55, 1.1, ne), smoothstep(0.018, 0.05, de));
-        edge = max(edge, ie * 0.92);
+        // Silhouettes and real creases only: the thresholds sit above the
+        // angle between two facets of a low-poly tree, so props read as paper
+        // shapes with a clean outline instead of a web of black lines.
+        float edge = max(smoothstep(0.8, 1.5, ne), smoothstep(0.025, 0.07, de));
+        edge = max(edge, ie * 0.85);
         edgeOut = edge;
         hlOut = hl * edge;
         // Ink keeps a trace of the colour it outlines, so lines read as ink on paper, not as holes.
-        return mix(uInk, base * uInk * 2.2, 0.12);
+        return mix(uInk, base * 0.45, 0.3);
       }
 
       void main() {

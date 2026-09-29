@@ -15,7 +15,7 @@ const host = {
   minDim: () => 400
 }
 
-const ALL = { swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true, crease: true, core: true, frog: true }
+const ALL = { swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true, crease: true, core: true, frog: true, crush: true, sling: true, leaper: true, ballista: true }
 
 const setup = (page: 1 | 2 | 3 | 4 | 5 = 1) => {
   const g = new FoldGame({ learned: ALL })

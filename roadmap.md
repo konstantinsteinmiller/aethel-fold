@@ -1,4 +1,4 @@
-# Castle Fold — roadmap
+# Aethel Fold — roadmap
 
 Features that would raise **Day-1 retention**, **average playtime**, how easy the game is to **pick up** and how hard it is to **put down**, and the **conversion** of first-time players. They are ordered by expected impact per unit of effort. Each item names the metric it targets, the change to make, and where it goes in this codebase.
 
@@ -24,15 +24,18 @@ Conventions every item must keep:
 ### 2. Chapter select as a physical bookshelf
 **Targets:** Day-1 retention, conversion (a visible goal).
 **Change:**
-- After the first victory, the desk shows a shelf of books. Book 1 is the current one and shows its stars; books 2 and 3 are locked, with silhouettes.
-- There is still no main menu: the shelf is part of the desk scene, reached by folding the finished book shut.
+- After the first victory, the desk shows a shelf of books (on desktop right of the book, on mobile there is a zoom out button that shows the bookshelf in the top right, taping on the current book zooms in on the book again and continues the game). 
+- Book 1 is the current one and shows its stars; books 2 and 3 are locked, with silhouettes.
+- There is still no main menu: the shelf is part of the desk scene, reached by folding the finished book shut or using the zoom out button.
+- After finishing a book, the game automatically zooms out to show the bookshelf and highlights the books in the physical bookshelf, which the player should be able to inspect. 
+- Help the player with wordless gestures to find the bookshelves easily.
 
 **Where:**
 - A `ShelfView` in `render/views`.
 - `FoldEngine.jumpTo` already supports starting on any page.
 - Unlock data comes from `pagesCleared` and `wins`.
 
-### 3. Book 2 — "The Sea of Paper" (new fold types)
+### 3. Book 3 — "The Sea of Paper" (new fold types)
 **Targets:** playtime, retention (content depth).
 **Change:**
 - Six new pages built from the existing builders plus two new fold kinds:
@@ -47,28 +50,11 @@ Conventions every item must keep:
 - The boat model already exists in `models.ts`.
 - Lessons: add `boat` and `pleat` to `LESSON_IDS`, so onboarding stays wordless.
 
-### 4. Endless "Scrapbook" mode
-**Targets:** hard-to-put-down, average session length.
+### 4. Improved Wordless tutorials
+**Targets:** faster onboarding, average session length.
 **Change:**
-- After victory, unlock a single page that re-randomises its fold layout every wave. Enemy mix and speed ramp with the wave count.
-- Best wave is tracked, and a run ends on the third heart.
-
-**Where:**
-- A `generatePage(seed, wave)` in `logic/pages.ts` built from the same builders.
-- `rng.ts` is already seeded.
-- Store `fold_endless_best`.
-
-### 5. Daily Fold (one seeded page per day)
-**Targets:** D1/D7 retention (a reason to return tomorrow).
-**Change:**
-- One seeded page per UTC day, the same for every player, with one attempt for a score and one practice retry.
-- Show a streak counter in the HUD corner.
-- Keep this separate from the removed daily-login rewards: there are no currencies, only a streak and the day's best.
-
-**Where:**
-- The seed is `yyyymmdd`, fed into item 4's generator.
-- Store `fold_daily: { day, best, streak }`.
-- On CrazyGames and GamePix, submit to their leaderboard APIs through the existing plugin layer.
+- We have wordless tutorials at the start of the game, but the player needs to see the fold in action 
+- before they can copy it. Add a "ghost hand" that demonstrates the fold on first encounter and the close shut click/tap too, then fades out to let the player try.
 
 ### 6. Unlockable paper patterns (cosmetics earned by play)
 **Targets:** long-term retention, collection drive.
@@ -81,26 +67,19 @@ Conventions every item must keep:
 - Standee frames come from `standeeArt.ts`, with overrides already loaded from `/images/fold/units/manifest.json`.
 - Store `fold_cosmetics: { owned[], equipped }`.
 
-### 7. First-session funnel instrumentation
-**Targets:** conversion (you cannot improve what you do not measure).
+### 7. Clean up the games routes and README.md and unused code from the previous 3d project like the water scene, the character editor scene
+**Targets:** cleanup
 **Change:**
-- Log these events:
-  - `boot_ms`, `first_input_ms`
-  - `lesson_start` / `lesson_done` per lesson, with time-to-complete
-  - `page_start`, `page_clear`, `page_fail` with hearts and score
-  - `victory`, `quit_page`
-- Send them to the platform SDK's analytics where one exists, or buffer them in-session.
-
-**Where:**
-- A `useFunnel` singleton composable fed from `FoldScene.vue`'s existing `onEvent` hook (`pageIntro`, `pageCleared` and `lesson` start/done are already routed there).
-- Exempt from i18n.
+- routes and README.md and unused code from the previous 3d project like the water scene, the character editor scene
 
 ### 8. Adaptive difficulty ("the book is kind")
 **Targets:** Day-1 retention for weaker players, frustration churn.
 **Change:**
-- After two crumples on the same page, quietly slow the march by 10% and add half a second of lesson slow-mo when the next column enters a fold.
+- After the first crumple on the same page, quietly slow the march by 10% and add half a second of lesson slow-mo when the next column enters a fold.
 - After three perfect pages, add one enemy per wave.
 - Never show this to the player.
+- if the player has lost multiple times before the boss page on page 5, then make the boss fight easier by 
+- reducing the speed of incoming enemies or whatever is the mass unit by 20% upfront, reset on first try win.
 
 **Where:**
 - A `difficulty` scalar on `FoldGame` that multiplies `ENEMY[].speed` and the wave spawn intervals in `game.ts`.
@@ -109,43 +88,24 @@ Conventions every item must keep:
 ### 9. "Almost!" moment on failure
 **Targets:** hard-to-put-down (turns a fail into an instant retry).
 **Change:**
-- When the page crumples, show for 1.2 s how close the player was: enemies remaining, and "2 soldiers from a clear!". Then offer a big *Try again* that re-drops the page with no delay.
+- When the page crumples, show for 2 s how close the player was: enemies remaining, and "2 soldiers from a clear!". 
+- Then offer a big *MovieIcon Try again* rewarded ad(normal button without rewarded ad and MovieIcon for the first 3 minutes of the first-time players game, only for AdProvider builds, not adding the rewarded ad for Itch.io for example) 
+- that re-drops the page with no delay and continues with 3 hearts, but this reduces the points gathered for this page.
 
 **Where:**
 - `FxLayer` word variant plus i18n `fold.fx.almost`.
 - `pageEnemyCount` and the live enemy count already exist, so this needs no new logic.
 
-### 10. Combo ladder with escalating juice
-**Targets:** playtime, "feel", shareability.
-**Change:**
-- Combos ×3/×5/×8 step up the music (add a counter-melody layer), spawn a bigger confetti burst and briefly boost the tilt-shift.
-- A ×8 triggers a one-shot "PAPER STORM!" slow-mo.
 
-**Where:**
-- `music.ts` layer gates.
-- `Effects.ts` burst scale.
-- `compositeShader` `uFocus`.
-- Thresholds in `config.ts`.
+### 12. Intro cutscene (15 s, skippable)
+**Targets:** hookness factor
+**Change:** 
+- Intro cutscene with a short ~15 second skippable introduction to the gameplay showing of folding the folds to kill enemy paper units and 
+- using ballistas and slingshots to kill units and the origami dragon flying over the battlefield spitting fire, then flying off.
+- The cutscene also shows off the new Kraken boss from Book 3 as a short peak from the sea in the background, but he does nothing yet, disappears after 3 seconds.
 
-### 11. Ghost replay of your best page
-**Targets:** replay rate, mastery.
-**Change:**
-- Record fold inputs (fold id, time, progress curve) on a best-score run. On replay, show a translucent paper hand performing them.
-- A run is under 2 KB, so it fits in the save.
 
-**Where:**
-- `GestureRecognizer` already produces discrete intents.
-- Record them in `FoldEngine`, store them in `fold_ghosts[pageId]`, and replay them through the existing `GhostHand` component.
-
-### 12. Share card on victory
-**Targets:** conversion through virality (jury and social).
-**Change:**
-- "Share" renders the final frog, score, stars and time to a 1080×1350 image with the book frame, then uses the Web Share API or a download fallback.
-
-**Where:**
-- `FoldRenderer.renderTo` already produces snapshots for transitions; composite that snapshot with a 2D canvas overlay in `art/canvas.ts`.
-
-### 13. Instant-start optimisation pass (under 1.5 s to first fold)
+### 13. Instant-start optimisation pass (under 1.5 s to first fold ideally)
 **Targets:** conversion, especially on platform portals where the first 5 s decide the bounce.
 **Change:**
 - Compress the standee atlas to KTX2/Basis.
@@ -160,10 +120,8 @@ Conventions every item must keep:
 ### 14. Accessibility options
 **Targets:** reach, retention for players who would otherwise bounce.
 **Change:**
-- A colour-blind-safe highlight (swap the pulsing yellow for a cyan/white dashed outline).
 - A "hold to fold" alternative to swiping.
 - A slow-mode toggle at 0.75× time.
-- Larger HUD text.
 - Already done: reduced motion (camera shake off), and haptics are toggleable.
 
 **Where:**
@@ -202,15 +160,12 @@ Conventions every item must keep:
 - `paintPage` theme variants.
 - `/public/images/fold/units/manifest.json` overrides, a pipeline that already exists.
 
-### 18. Save-slot reassurance and cross-device continuity
-**Targets:** retention (players who switch device must not look like a "fresh user").
-**Change:**
-- Show a small "Saved ✓" paper tag after each checkpoint.
-- On cloud builds, show a one-time "Welcome back — page 4" ribbon when hydration restores a later page than local storage had.
+### 17. Interstitial ads for AdProvider builds
+- **Targets:** monetization
+- **Change:** 
+- Interstitial ads on page clear, boss clear, and crumple. Only for AdProvider builds, 
+- 121s between interstitial ads, no interstitials before 3 min, not for Itch.io or other non-ad builds.
 
-**Where:**
-- `useSaveStatus` already exposes save state.
-- `progressRevision` in `useFoldProgress` already fires on late hydration: hook the ribbon to it.
 
 ### 19. Rewarded "second chance" (post-jury monetisation)
 **Targets:** conversion to revenue once the game leaves the jury build.
@@ -218,12 +173,13 @@ Conventions every item must keep:
 - On the third heart lost, offer a rewarded ad that restores one heart once per page.
 - Cap it with the existing rewarded throttle (`useRewardedThrottle`).
 - Keep it off for the jury build.
+- might be doubled with the existing "almost!" moment on failure, but the rewarded ad is only offered once per page, only for AdProvider builds, otherwise free.
 
 **Where:**
 - `useAds`, the platform plugins, and a new `FoldScene` crumple interstitial state.
 - The flag is a new `VITE_APP_REWARDED` env var in the `.env.*.example` templates.
 
-### 20. Level editor for community pages
+### 20. Level editor for community pages (don't need yet, don't implement)
 **Targets:** long tail, content velocity.
 **Change:**
 - A DEV route that lays out folds and lanes on the page grid with drag handles, then exports a `PageDef` JSON.

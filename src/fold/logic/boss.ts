@@ -33,6 +33,7 @@ export const createBoss = (): Boss => ({
   aimX: 0,
   aimZ: 5.4,
   attacks: 0,
+  slingHits: 0,
   collapse: 0,
   rev: 0
 })
@@ -44,6 +45,7 @@ export const resetBoss = (b: Boss): void => {
   b.phaseTime = 0
   b.exposed = -1
   b.attacks = 0
+  b.slingHits = 0
   b.collapse = 0
   b.rev++
   for (let i = 0; i < b.weakPoints.length; i++) {

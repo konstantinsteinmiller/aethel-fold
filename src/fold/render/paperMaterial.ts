@@ -1,5 +1,5 @@
 /**
- * PaperMaterial — the one surface shader of Castle Fold.
+ * PaperMaterial — the one surface shader of Aethel Fold.
  *
  * aethel-fold-GDD §2: "flat, unlit cel-shaded … with bold thick black
  * outlines … unbleached parchment with subtle paper grain … a warm, localized

@@ -1,5 +1,5 @@
 /**
- * Castle Fold — tuning constants.
+ * Aethel Fold — tuning constants.
  *
  * Every number the simulation uses lives here so balancing is one file. Where a
  * number was chosen against a measurement, the measurement is in the comment.
@@ -16,6 +16,19 @@ export const PAGE_HALF_D = PAGE_D / 2
 export const HERO_X = 0
 export const HERO_Z = 5.6
 export const BREACH_Z = 5.0
+/**
+ * The player's castle along the bottom edge: a keep in the middle (the hero
+ * stands on its roof) and two low towers carrying the ballistas. Kept low so
+ * it never hides the enemies and traps behind it.
+ */
+export const CASTLE = {
+  keepZ: 6.4,
+  keepTop: 0.95,
+  towerX: 2.2,
+  towerZ: 6.45,
+  towerTop: 0.9
+} as const
+
 /** Enemies enter just above the top edge so they walk *onto* the page. */
 export const SPAWN_Z = -PAGE_HALF_D - 0.4
 
@@ -65,12 +78,25 @@ export interface EnemyTuning {
   radius: number
 }
 
-export const ENEMY: Record<'knight' | 'brute' | 'archer' | 'catapult', EnemyTuning> = {
+export const ENEMY: Record<'knight' | 'brute' | 'archer' | 'catapult' | 'runner' | 'leaper', EnemyTuning> = {
   knight: { speed: 0.95, hp: 1, size: 1, score: 100, launchable: true, bash: 1, bashRate: 1.1, hitStop: false, radius: 0.34 },
   brute: { speed: 0.6, hp: 3, size: 1.55, score: 250, launchable: false, bash: 2, bashRate: 1.4, hitStop: true, radius: 0.55 },
   archer: { speed: 0, hp: 1, size: 1, score: 150, launchable: true, bash: 0, bashRate: 0, hitStop: false, radius: 0.34 },
-  catapult: { speed: 0, hp: 1, size: 1.3, score: 300, launchable: true, bash: 0, bashRate: 0, hitStop: true, radius: 0.6 }
+  catapult: { speed: 0, hp: 1, size: 1.3, score: 300, launchable: true, bash: 0, bashRate: 0, hitStop: true, radius: 0.6 },
+  // Twice a knight's pace: the wall has to be up *before* it arrives.
+  runner: { speed: 1.95, hp: 1, size: 0.86, score: 120, launchable: true, bash: 1, bashRate: 0.8, hitStop: false, radius: 0.3 },
+  // Walls don't hold it (it vaults them) — the sling, a valley or a launch flap do.
+  leaper: { speed: 0.8, hp: 1, size: 1, score: 200, launchable: true, bash: 0, bashRate: 0, hitStop: false, radius: 0.34 }
 }
+
+/** Leapers: seconds between zig-zag hops, hop and vault flight times. */
+export const LEAPER_HOP_EVERY = 1.9
+export const LEAPER_HOP_TIME = 0.55
+export const LEAPER_VAULT_TIME = 1.05
+/** How far past a wall's hinge a vaulting leaper lands. */
+export const LEAPER_VAULT_LAND = 1.0
+/** A leaper this high in the air is out of a sling stone's reach. */
+export const LEAPER_SHOT_CEILING = 1.7
 
 /** Archers: first volley delay and cadence. */
 export const ARCHER_FIRST_SHOT = 3.2
@@ -95,6 +121,37 @@ export const FLING_RADIUS = 1.9
 /** Crushed/torn enemies linger this long for the flatten animation. */
 export const CRUSH_LINGER = 0.5
 export const TORN_LINGER = 0.45
+
+// ─── Sling (book 2) ───────────────────────────────────────────────────────
+
+/** Seconds to reload after a shot. */
+export const SLING_COOL = 1.35
+/** Page units of pull before a release counts as a shot. */
+export const SLING_MIN_PULL = 0.3
+/** Range per unit of pull (pull back 1, the stone flies ~5.5 up the page). */
+export const SLING_GAIN = 5.5
+/** Longest shot, page units from the cup. */
+export const SLING_RANGE = 14.5
+/** Splash radius where the stone lands. */
+export const SLING_RADIUS = 1.2
+/** Grab radius around the cup. */
+export const SLING_GRAB = 1.0
+/** Flight time = base + per unit of distance. */
+export const SLING_FLIGHT_BASE = 0.35
+export const SLING_FLIGHT_PER = 0.045
+
+// ─── Ballistas (the castle towers) ────────────────────────────────────────
+
+/** Bolts per opening; then it folds itself away. */
+export const BALLISTA_SHOTS = 2
+/** Seconds folded away before it can be flipped open again. */
+export const BALLISTA_COOLDOWN = 3
+/** Bolt speed (page units / s); bolts fly flat and pierce. */
+export const BOLT_SPEED = 24
+/** How close to the bolt's path an enemy must be to be hit. */
+export const BOLT_RADIUS = 0.42
+/** Enemies one bolt can pierce. */
+export const BOLT_PIERCE = 4
 
 // ─── Hero ──────────────────────────────────────────────────────────────────
 
@@ -132,7 +189,11 @@ export const SCORE = {
   /** Clearing a page without losing a heart. */
   perfectPage: 1000,
   /** Arrows/boulders/fire caught on a shield. */
-  block: 50
+  block: 50,
+  /** A sling stone landing on the dragon's exposed weak point. */
+  slingWeak: 500,
+  /** …or anywhere on its body. */
+  slingBody: 150
 }
 
 // ─── Boss ──────────────────────────────────────────────────────────────────
@@ -153,7 +214,13 @@ export const BOSS = {
   /** Breath/stomp attacks between weak points. */
   attacksPerExposure: 2,
   /** Breath aim: page-space target (the hero). */
-  breathZ: 5.4
+  breathZ: 5.4,
+  /** Where the dragon's body is on the page, and how big (sling hits). */
+  bodyX: 0,
+  bodyZ: -3,
+  bodyRadius: 2.6,
+  /** Sling hits on the body that make it flinch and expose its next weak point. */
+  slingHitsToExpose: 3
 }
 
 // ─── Waves / pacing ────────────────────────────────────────────────────────

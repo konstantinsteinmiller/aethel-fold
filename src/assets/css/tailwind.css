@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Castle Fold paper palette. `static` so every token is emitted on :root even
+ * Aethel Fold paper palette. `static` so every token is emitted on :root even
  * when no utility uses it — scoped component styles read them as plain
  * `var(--color-*)` custom properties. The same values live as Sass variables
  * in `src/assets/css/_paper.sass` for the F-components.

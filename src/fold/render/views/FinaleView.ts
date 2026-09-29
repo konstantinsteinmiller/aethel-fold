@@ -3,6 +3,9 @@
  * of paper. A dotted line appears. The player swipes one last time, folding
  * the fearsome dragon into a tiny, harmless paper frog."
  *
+ * Book 2 ends the same way but folds a paper crane that flutters above the
+ * keep instead of a hopping frog.
+ *
  * The sheet is printed with the flattened dragon (its colours in facets).
  * After the swipe: fold top-over-bottom, fold right-over-left, the packet
  * spins up in a puff of confetti and lands as a hopping origami frog.
@@ -13,6 +16,7 @@ import type { FoldGame } from '../../logic/game'
 import { FINALE_TIME } from '../../logic/game'
 import { clamp01, easeInOutCubic, easeOutBack } from '../../logic/math'
 import { PaperBuilder, shade, type Col } from '../paperGeometry'
+import { craneGeometry } from '../models'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
 
 const HINGE_Z = 0.6
@@ -107,7 +111,7 @@ export class FinaleView {
   hops = 0
   private lastHop = -1
 
-  constructor() {
+  constructor(private readonly variant: 'frog' | 'crane' = 'frog') {
     this.mat = createPaperMaterial({ vertexColors: true, grain: 0.05, doubleSided: true, backTint: '#efe4c8' })
     this.frogMat = createPaperMaterial({ vertexColors: true, grain: 0.04 })
     // The packet holds everything that folds; its origin is the page centre of the sheet.
@@ -133,7 +137,8 @@ export class FinaleView {
     this.packet.add(botL, this.top, this.rightHalf)
     this.rightHalf.userData.topPivot = topRPivot
 
-    this.frog = new Mesh(frogGeometry(), this.frogMat)
+    // The crane geometry is a shared cached one; the finale owns (and disposes) a copy.
+    this.frog = new Mesh(variant === 'crane' ? craneGeometry('dragonRed').clone() : frogGeometry(), this.frogMat)
     this.frog.castShadow = true
     this.frog.visible = false
     this.frog.position.set(0, 0, 0.6)
@@ -201,6 +206,16 @@ export class FinaleView {
     if (hopIdx !== this.lastHop && hopIdx >= 0) {
       this.lastHop = hopIdx
       this.hops++
+    }
+    if (this.variant === 'crane') {
+      // The crane rises and hovers, wings beating (a squash on y).
+      const rise = clamp01((t - 1.5) / 1.4)
+      const beat = Math.sin(time * 7)
+      this.frog.position.set(Math.sin(time * 0.9) * 0.4 * rise, 0.1 + rise * 1.6 + Math.sin(time * 1.7) * 0.12 * rise, 0.6)
+      this.frog.scale.set(base * 1.4, base * 1.4 * (1 + beat * 0.1 * rise), base * 1.4)
+      // Tipped back toward the lens so its wings read from the steep camera.
+      this.frog.rotation.set(0.9, Math.sin(time * 0.6) * 0.35, Math.sin(time * 0.9) * 0.1 * rise)
+      return
     }
     this.frog.position.set(0, hopY, 0.6)
     this.frog.scale.set(base * (1 + (hopY > 0 ? -0.08 : 0.06)), base * (1 + (hopY > 0 ? 0.12 : -0.08)), base)

@@ -2,10 +2,10 @@
   Transition(name="splash-fade")
     div.splash-backdrop.no-os-ui(v-if="!backdropHidden")
 
-  //- Logo only renders during the loading sequence. Once `done` flips
-  //- true (progress = 100% OR the 4s fallback fires), the logo fades out
-  //- and unmounts — it deliberately does NOT shrink to the top-left
-  //- corner like the previous splash flow.
+  //- The loading screen. It takes over from index.html's static splash
+  //- (same logo, same bar, same place) and stays until the game has drawn its
+  //- first frame (`gameReady`), so it covers the real loading — the renderer
+  //- chunk and building page 1 — and entertains with tips meanwhile.
   Transition(name="logo-fade")
     div.no-os-ui(
       v-if="!done"
@@ -14,12 +14,9 @@
     )
       div(class="relative flex flex-col items-center")
         div(:style="sizeStyle")
-          //- Inline SVG, not an `<img>`: this box is `min(vw, vh) * 0.4`, so it
-          //- is 128 px on a phone and 430 px on a desktop and the old 256²
-          //- bitmap was visibly soft above a 640 px viewport. `w-full h-full`
-          //- overrides the component's own `size` attribute — CSS beats
-          //- presentation attributes — so the mark tracks the box exactly.
-          GameLogo(class="w-full h-full")
+          //- Inline SVG, sized to the box (`min(vw, vh) * 0.4`, the same box as
+          //- index.html's static splash) so it stays crisp from 128 px to 430 px.
+          GameLogo(:size="centeredSize")
 
         //- Paper-strip progress bar: parchment track, creased red paper fill,
         //- ink border — with the percentage beside it.
@@ -30,8 +27,13 @@
             aria-valuemax="100"
             :aria-valuenow="Math.round(progress)"
           )
-            div.splash-progress__fill(:style="{ width: `${Math.min(100, Math.max(0, progress))}%` }")
-          span.percentage-text {{ Math.round(progress) }}%
+            div.splash-progress__fill(:style="{ width: `${Math.min(100, Math.max(0, shown))}%` }")
+          span.percentage-text {{ Math.round(shown) }}%
+
+        //- A tip every few seconds while it loads (a small paper slip).
+        div.splash-tip-slot
+          Transition(name="tip-swap" mode="out-in")
+            div.splash-tip(v-if="tipKey" :key="tipKey") {{ t(tipKey) }}
 
         Transition(name="hint-fade")
           div.stuck-hint.mt-4(v-if="showStuckHint") {{ t('loading.tooLong') }}
@@ -42,13 +44,40 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import useAssets from '@/use/useAssets'
 import GameLogo from '@/components/atoms/GameLogo.vue'
+import { BOOT, bootProgress, bootStage, gameReady, staticBootValue } from '@/use/useBoot'
 import { stopLoading } from '@/use/useCrazyGames'
 import { armFirstLoadInterstitial, notifySplashGone } from '@/use/useFirstLoadInterstitial'
 
 const { t } = useI18n()
 
 const { loadingProgress, preloadAssets } = useAssets()
-const progress = computed(() => loadingProgress.value)
+/**
+ * The game route waits for the game's first frame; the benches (`/world` …)
+ * have no such signal and use the asset preload as before.
+ */
+const waitsForGame = typeof window !== 'undefined' && (!window.location.hash || window.location.hash === '#/' || window.location.hash === '#')
+const progress = computed(() => (waitsForGame ? bootProgress.value : loadingProgress.value))
+/** The bar as drawn: eases toward `progress` and creeps on so it never stalls. */
+const shown = ref(staticBootValue())
+let barRaf = 0
+const barTick = (): void => {
+  const target = progress.value
+  const cap = Math.min(99, target + 14)
+  shown.value = Math.min(100, shown.value + Math.max(0, (target - shown.value) * 0.08) + (shown.value < cap ? 0.06 : 0))
+  if (target >= 100) shown.value = Math.max(shown.value, Math.min(100, shown.value + 4))
+  if (!done.value) barRaf = requestAnimationFrame(barTick)
+}
+
+/** Gameplay tips (i18n) shown one after another while loading. */
+const TIPS = ['loading.tip1', 'loading.tip2', 'loading.tip3', 'loading.tip4', 'loading.tip5', 'loading.tip6']
+const tipKey = ref('')
+let tipTimer: number | null = null
+const nextTip = (): void => {
+  const i = Math.max(0, TIPS.indexOf(tipKey.value))
+  tipKey.value = TIPS[(tipKey.value ? i + 1 : Math.floor(Math.random() * TIPS.length)) % TIPS.length]!
+}
+/** Keep the logo up at least this long (ms since navigation) so it registers. */
+const MIN_SHOW_MS = 1400
 
 void preloadAssets()
 
@@ -88,11 +117,19 @@ onMounted(() => {
     setTimeout(() => staticSplash.remove(), 500)
   }
 
-  // Hard fallback so the splash always clears, even if the asset loader
-  // never reports 100% (offline / blocked images / dropped requests).
+  bootStage(BOOT.app)
+  barRaf = requestAnimationFrame(barTick)
+  // First tip once the logo has been seen, then one every few seconds.
+  tipTimer = window.setTimeout(function cycle() {
+    nextTip()
+    tipTimer = window.setTimeout(cycle, 3200)
+  }, 700)
+
+  // Hard fallback so the splash always clears, even if the game never
+  // reports its first frame (offline / blocked chunk / WebGL trouble).
   settleFallbackId = window.setTimeout(() => {
     if (!done.value) done.value = true
-  }, 4000)
+  }, waitsForGame ? 20000 : 4000)
   stuckHintId = window.setTimeout(() => {
     if (!done.value) showStuckHint.value = true
   }, 10000)
@@ -101,6 +138,8 @@ onUnmounted(() => {
   window.removeEventListener('resize', onResize)
   if (settleFallbackId !== null) clearTimeout(settleFallbackId)
   if (stuckHintId !== null) clearTimeout(stuckHintId)
+  if (tipTimer !== null) clearTimeout(tipTimer)
+  cancelAnimationFrame(barRaf)
 })
 
 const centeredSize = computed(() => Math.floor(viewportSize.value * 0.4))
@@ -113,10 +152,18 @@ const sizeStyle = computed(() => ({
 // the watcher is set up. Without it, an asset loader that already reports
 // 100% (instant boots, especially on localhost) never trips the watcher
 // and the splash sits around for the full 4s `settleFallbackId` window.
-watch(progress, (val) => {
-  if (val >= 100 && !done.value) {
-    setTimeout(() => { done.value = true }, 100)
-  }
+const finish = (): void => {
+  if (done.value) return
+  // Let the bar visibly reach 100 %, and never flash the logo for a blink.
+  const wait = Math.max(250, MIN_SHOW_MS - performance.now())
+  setTimeout(() => {
+    shown.value = 100
+    done.value = true
+    if (tipTimer !== null) clearTimeout(tipTimer)
+  }, wait)
+}
+watch([progress, gameReady], ([val, ready]) => {
+  if (waitsForGame ? ready : val >= 100) finish()
 }, { immediate: true })
 
 let cgLoadSignaled = false
@@ -275,9 +322,40 @@ watch(done, (isDone) => {
   opacity: 0
   transform: translate(-50%, -50%) scale(0.85)
 
+.splash-tip-slot
+  position: absolute
+  top: calc(100% + clamp(2.6rem, 9vmin, 4rem))
+  left: 50%
+  transform: translateX(-50%)
+  width: min(86vw, 26rem)
+  display: flex
+  justify-content: center
+
+// A tip printed on a small slip of paper, tilted a touch.
+.splash-tip
+  padding: clamp(0.35rem, 1.2vmin, 0.55rem) clamp(0.7rem, 2.6vmin, 1rem)
+  background: linear-gradient(135deg, #fff6e3 0 60%, #f3e3bf 60% 100%)
+  border: 2px solid #1c1724
+  border-radius: 0.4rem
+  box-shadow: 0 4px 0 rgba(76, 64, 120, 0.45)
+  color: #1c1724
+  font-size: clamp(0.78rem, 2.8vmin, 1rem)
+  text-align: center
+  line-height: 1.3
+  transform: rotate(-1.2deg)
+
+.tip-swap-enter-active, .tip-swap-leave-active
+  transition: opacity 0.25s ease, transform 0.25s ease
+.tip-swap-enter-from
+  opacity: 0
+  transform: translateY(8px) rotate(-4deg)
+.tip-swap-leave-to
+  opacity: 0
+  transform: translateY(-8px) rotate(2deg)
+
 .stuck-hint
   // Clears the progress strip hanging below the logo box.
-  margin-top: clamp(3rem, 10vmin, 4.5rem)
+  margin-top: clamp(6rem, 18vmin, 8rem)
   color: #fff6e3
   font-size: clamp(0.8rem, 3vmin, 0.95rem)
   text-align: center

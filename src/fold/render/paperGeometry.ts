@@ -1,7 +1,7 @@
 /**
  * Paper-craft geometry kit.
  *
- * Everything in Castle Fold is folded paper, so every model is built from
+ * Everything in Aethel Fold is folded paper, so every model is built from
  * flat facets with per-face colour (vertex colours, flat normals). A tiny
  * builder with a transform stack keeps the model code declarative:
  *

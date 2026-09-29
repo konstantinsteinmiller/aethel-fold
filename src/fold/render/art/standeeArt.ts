@@ -23,6 +23,8 @@ export type FrameName =
   | 'knight0' | 'knight1' | 'knightFlail'
   | 'brute0' | 'brute1' | 'bruteFlail'
   | 'archer0' | 'archerDraw'
+  | 'runner0' | 'runner1' | 'runnerFlail'
+  | 'leaper0' | 'leaper1' | 'leaperJump' | 'leaperFlail'
   | 'hero0' | 'heroCheer' | 'heroCower' | 'heroHit' | 'heroWalk'
   | 'personRed0' | 'personRed1' | 'personBlue0' | 'personBlue1'
   | 'personGreen0' | 'personGreen1' | 'personYellow0' | 'personYellow1'
@@ -31,7 +33,8 @@ export type FrameName =
 const ORDER: FrameName[] = [
   'knight0', 'knight1', 'knightFlail', 'brute0', 'brute1', 'bruteFlail', 'archer0', 'archerDraw',
   'hero0', 'heroCheer', 'heroCower', 'heroHit', 'heroWalk', 'crushed', 'scrap',
-  'personRed0', 'personRed1', 'personBlue0', 'personBlue1', 'personGreen0', 'personGreen1', 'personYellow0', 'personYellow1'
+  'personRed0', 'personRed1', 'personBlue0', 'personBlue1', 'personGreen0', 'personGreen1', 'personYellow0', 'personYellow1',
+  'runner0', 'runner1', 'runnerFlail', 'leaper0', 'leaper1', 'leaperJump', 'leaperFlail'
 ]
 
 /** UV rectangle (u0, v0, u1, v1) of a frame, ready for the `aFrame` attribute. */
@@ -53,7 +56,8 @@ export interface StandeeAtlas {
 type Painter = (ctx: CanvasRenderingContext2D) => void
 
 const INK = HEX.ink
-const LW = 4.2
+/** Outline weight: bold enough to read at thumbnail size, not so bold it clogs. */
+const LW = 3.2
 
 const stroke = (ctx: CanvasRenderingContext2D, w = LW): void => {
   ctx.lineWidth = w
@@ -102,12 +106,48 @@ interface KnightStyle {
   weapon: 'sword' | 'club' | 'bow'
   shield: string
   emblem: 'chevron' | 'star' | 'skull' | 'none'
+  /** A cloth hood instead of a great helm (archers, runners). */
+  hood?: boolean
+  /** No shield arm (runners travel light). */
+  noShield?: boolean
+  /** Paper coil springs instead of boots (leapers); 0 = coiled, 1 = sprung. */
+  springs?: number
+  /** Grasshopper feelers on the helm (leapers). */
+  feelers?: boolean
+}
+
+const spring = (ctx: CanvasRenderingContext2D, x: number, y0: number, y1: number): void => {
+  // A zig-zag paper coil from y0 (knee) down to y1 (foot).
+  const n = 5
+  ctx.beginPath()
+  ctx.moveTo(x, y0)
+  for (let i = 1; i <= n; i++) ctx.lineTo(x + (i % 2 ? 9 : -9), y0 + ((y1 - y0) * i) / n)
+  ctx.lineTo(x, y1)
+  stroke(ctx, 5.5)
+  ctx.beginPath()
+  ctx.moveTo(x, y0)
+  for (let i = 1; i <= n; i++) ctx.lineTo(x + (i % 2 ? 9 : -9), y0 + ((y1 - y0) * i) / n)
+  ctx.lineTo(x, y1)
+  ctx.strokeStyle = HEX.gold
+  ctx.lineWidth = 2.6
+  ctx.stroke()
 }
 
 const legs = (ctx: CanvasRenderingContext2D, pose: number, s: KnightStyle): void => {
   // pose: 0 = together, 1 = stride, 2 = flail (kicking)
   const spread = pose === 1 ? 10 : pose === 2 ? 16 : 3
   const lift = pose === 2 ? -10 : 0
+  if (s.springs !== undefined) {
+    // Short thighs on coil springs; the springs stretch when it jumps.
+    const foot = 164 + s.springs * 16
+    rrect(ctx, 64 - 16 - spread, 140, 13, 16, 5, s.steel)
+    rrect(ctx, 64 + 3 + spread, 140 + lift, 13, 16, 5, s.steel)
+    spring(ctx, 64 - 10 - spread, 155, foot)
+    spring(ctx, 64 + 10 + spread, 155 + lift, foot + lift)
+    ellipse(ctx, 64 - 10 - spread, foot + 2, 11, 4.5, HEX.woodDark)
+    ellipse(ctx, 64 + 10 + spread, foot + 2 + lift, 11, 4.5, HEX.woodDark)
+    return
+  }
   rrect(ctx, 64 - 16 - spread, 142, 13, 36, 5, s.steel)
   rrect(ctx, 64 + 3 + spread, 142 + lift, 13, 36, 5, s.steel)
   // Boots.
@@ -189,14 +229,16 @@ const knightFigure = (ctx: CanvasRenderingContext2D, pose: number, s: KnightStyl
   }
   ctx.restore()
   // Shield arm (left, viewer's right).
-  if (s.weapon !== 'bow') shieldShape(ctx, 92, 118 - armUp * 10, 34, 42, s)
+  if (s.noShield) {
+    rrect(ctx, 84, 100 - armUp * 14, 13, 30, 6, s.steel, 3)
+  } else if (s.weapon !== 'bow') shieldShape(ctx, 92, 118 - armUp * 10, 34, 42, s)
   else {
     // Quiver.
     rrect(ctx, 80, 92, 14, 38, 4, HEX.woodDark, 3)
     for (let i = 0; i < 3; i++) poly(ctx, [82 + i * 4, 92, 85 + i * 4, 80, 88 + i * 4, 92], HEX.paperWhite, 2)
   }
   // Head.
-  if (s.weapon === 'bow') {
+  if (s.hood || s.weapon === 'bow') {
     // Hood.
     ctx.beginPath()
     ctx.moveTo(38, 94)
@@ -229,6 +271,15 @@ const knightFigure = (ctx: CanvasRenderingContext2D, pose: number, s: KnightStyl
     ctx.moveTo(64, 38)
     ctx.lineTo(64, 62)
     stroke(ctx, 3)
+    if (s.feelers) {
+      for (const side of [-1, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(64 + side * 10, 40)
+        ctx.quadraticCurveTo(64 + side * 22, 10, 64 + side * 40, 12)
+        stroke(ctx, 3)
+        ellipse(ctx, 64 + side * 40, 12, 4, 4, HEX.gold, 2)
+      }
+    }
     if (s.horns) {
       poly(ctx, [40, 54, 18, 36, 26, 30, 44, 46], HEX.paperWhite)
       poly(ctx, [88, 54, 110, 36, 102, 30, 84, 46], HEX.paperWhite)
@@ -257,6 +308,14 @@ const ARCHER: KnightStyle = {
   tabard: HEX.enemyRed, tabardDark: HEX.enemyRedDark, steel: HEX.enemySteel, trim: HEX.gold,
   scale: 0.9, weapon: 'bow', shield: HEX.enemyRed, emblem: 'none'
 }
+const RUNNER: KnightStyle = {
+  tabard: HEX.c6, tabardDark: HEX.enemyRedDark, steel: HEX.enemySteel, trim: HEX.gold,
+  scale: 0.8, weapon: 'sword', shield: HEX.enemyRed, emblem: 'none', hood: true, noShield: true
+}
+const leaperStyle = (springs: number): KnightStyle => ({
+  tabard: HEX.forest, tabardDark: HEX.forestDark, steel: HEX.enemySteel, trim: HEX.gold, plume: HEX.enemyRed,
+  scale: 0.9, weapon: 'sword', shield: HEX.meadowDark, emblem: 'chevron', springs, feelers: true
+})
 const HERO: KnightStyle = {
   tabard: HEX.heroBlue, tabardDark: HEX.heroBlueDark, steel: HEX.heroSteel, trim: HEX.gold, plume: HEX.flagYellow,
   scale: 0.95, weapon: 'sword', shield: HEX.heroBlue, emblem: 'star'
@@ -325,6 +384,13 @@ const PAINTERS: Record<FrameName, Painter> = {
   bruteFlail: (c) => knightFigure(c, 2, BRUTE, 0.5, true),
   archer0: (c) => knightFigure(c, 0, ARCHER),
   archerDraw: (c) => knightFigure(c, 0, ARCHER, 0.5),
+  runner0: (c) => knightFigure(c, 1, RUNNER, 0.2),
+  runner1: (c) => knightFigure(c, 2, RUNNER, -0.1),
+  runnerFlail: (c) => knightFigure(c, 2, RUNNER, 0.7, true),
+  leaper0: (c) => knightFigure(c, 0, leaperStyle(0)),
+  leaper1: (c) => knightFigure(c, 1, leaperStyle(0.3)),
+  leaperJump: (c) => knightFigure(c, 0, leaperStyle(1), 0.9, true),
+  leaperFlail: (c) => knightFigure(c, 2, leaperStyle(0.6), 0.6, true),
   hero0: (c) => knightFigure(c, 0, HERO),
   heroCheer: (c) => knightFigure(c, 0, HERO, 1, true),
   heroCower: (c) => knightFigure(c, 2, HERO, -0.2),

@@ -1,5 +1,5 @@
 /**
- * FoldGame — the whole of Castle Fold's rules, headless.
+ * FoldGame — the whole of Aethel Fold's rules, headless.
  *
  * Owns: the current page, its folds and tears, the enemy and projectile
  * pools, the hero, the dragon, the wordless lessons, waves, scoring and the
@@ -20,13 +20,15 @@ import {
   CATAPULT_FIRST_SHOT, CATAPULT_RATE, CATAPULT_WINDUP, CRUMPLE_TIME, CRUSH_LINGER, ENEMY,
   FLING_RADIUS, FLING_TIME, HERO_HP, HERO_INVULN, HERO_X, HERO_Z, HIT_STOP, LAUNCH_LIFE,
   LAUNCH_SPEED_Y, LAUNCH_SPEED_Z, LESSON_TIME_SCALE, PAGE_CLEAR_DELAY, PAGE_DROP_TIME,
-  PAGE_HALF_W, PAGE_TURN_TIME, PEEL_COMPLETE, SCORE, SPAWN_Z, TIME_SCALE_RATE, TORN_LINGER,
-  FOLD_SNAP_THRESHOLD
+  PAGE_HALF_D, PAGE_HALF_W, PAGE_TURN_TIME, PEEL_COMPLETE, SCORE, SPAWN_Z, TIME_SCALE_RATE, TORN_LINGER,
+  FOLD_SNAP_THRESHOLD, LEAPER_HOP_EVERY, LEAPER_HOP_TIME, LEAPER_SHOT_CEILING, LEAPER_VAULT_LAND,
+  LEAPER_VAULT_TIME, SLING_COOL, SLING_FLIGHT_BASE, SLING_FLIGHT_PER, SLING_GAIN, SLING_GRAB, SLING_MIN_PULL,
+  SLING_RADIUS, SLING_RANGE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED
 } from './config'
-import { EventQueue, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_TEAR } from './events'
+import { EventQueue, KILL_BOLT, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from './events'
 import {
   FOLD_LOWERED, FOLD_READY, FOLD_SNAPPED, FOLD_SPRUNG, FOLD_STAMPED,
-  acrossHinge, alongHinge, createFold, dragFold, grabFold, isBarrier, isGrabbable, isStampable,
+  abandonFold, acrossHinge, alongHinge, createFold, dragFold, grabFold, isBarrier, isGrabbable, isStampable,
   isTrap, onFootprint, releaseFold, revealFold, snapFold, stampFold, updateFold, damageFold
 } from './folds'
 import {
@@ -35,15 +37,15 @@ import {
 } from './entities'
 import { bossAwake, bossPhaseCode, brokenCount, createBoss, nextWeakPoint, resetBoss } from './boss'
 import { LESSON_IDS, clearLesson, createLessonState, lessonCode, setHand } from './lessons'
-import { PAGES } from './pages'
+import { PAGE_COUNT, pageDef } from './pages'
 import { createRng, type Rng } from './rng'
-import { clamp, clamp01, damp, segmentsCross } from './math'
+import { G_PAPER, clamp, clamp01, damp, segmentDistance, segmentsCross, v2 } from './math'
 import type {
-  BossPhase, Enemy, EnemyType, FoldState, GamePhase, LessonId, PageDef, PageId, SpawnDef, TearState
+  BookId, BossPhase, Enemy, EnemyType, FoldState, GamePhase, LessonId, PageDef, PageId, SlingState, SpawnDef,
+  TearState
 } from './types'
 
-/** Gravity for everything thrown (page units / s²) — floaty on purpose: it's paper. */
-const G = 14
+const G = G_PAPER
 /** Seconds of play the finale fold animation takes before the ribbon drops. */
 export const FINALE_TIME = 2.9
 /** Idle seconds before a learned mechanic gets a silent ghost-hand reminder. */
@@ -62,17 +64,28 @@ export interface GameStats {
   catapults: number
   flung: number
   ridged: number
+  runners: number
+  leapers: number
+  /** Ballista bolts fired, and enemies they pierced. */
+  bolts: number
+  boltKills: number
+  /** Sling stones fired, and enemies they took down. */
+  shots: number
+  shotKills: number
 }
 
 export const emptyStats = (): GameStats => ({
   launched: 0, crushed: 0, torn: 0, folds: 0, stamps: 0, blocks: 0,
-  knights: 0, brutes: 0, archers: 0, catapults: 0, flung: 0, ridged: 0
+  knights: 0, brutes: 0, archers: 0, catapults: 0, flung: 0, ridged: 0,
+  runners: 0, leapers: 0, shots: 0, shotKills: 0, bolts: 0, boltKills: 0
 })
 
 export interface GameOptions {
   seed?: number
   /** Lessons the player already learned (persisted); those never slow time. */
   learned?: Partial<Record<LessonId, boolean>>
+  /** Which book to open (defaults to book 1). */
+  book?: BookId
 }
 
 const createTear = (def: PageDef['tears'][number]): TearState => ({
@@ -90,10 +103,13 @@ export class FoldGame {
   readonly learned: Record<LessonId, boolean>
   stats: GameStats = emptyStats()
 
+  book: BookId = 1
   pageId: PageId = 1
-  page: PageDef = PAGES[1]
+  page: PageDef = pageDef(1, 1)
   folds: FoldState[] = []
   tears: TearState[] = []
+  /** The keep's sling (book 2 pages), or null. */
+  sling: SlingState | null = null
 
   phase: GamePhase = 'boot'
   /** Seconds in the current phase (real time). */
@@ -141,12 +157,14 @@ export class FoldGame {
     const learned = {} as Record<LessonId, boolean>
     for (const id of LESSON_IDS) learned[id] = !!opts.learned?.[id]
     this.learned = learned
+    if (opts.book) this.book = opts.book
   }
 
   // ─── Run / page lifecycle ────────────────────────────────────────────────
 
   /** Start a run at `page` (a returning player resumes their saved page). */
-  startRun(page: PageId = 1, score = 0): void {
+  startRun(page: PageId = 1, score = 0, book: BookId = this.book): void {
+    this.book = book
     this.score = score
     this.runHits = 0
     this.runTime = 0
@@ -158,7 +176,7 @@ export class FoldGame {
 
   loadPage(id: PageId): void {
     this.pageId = id
-    this.page = PAGES[id]
+    this.page = pageDef(this.book, id)
     this.folds = this.page.folds.map(createFold)
     this.tears = this.page.tears.map(createTear)
     this.waveOrder = this.page.waves.map((w) => [...w.spawns].sort((a, b) => a.at - b.at))
@@ -187,15 +205,20 @@ export class FoldGame {
     this.peelDone = false
     this.finaleTime = 0
     this.pageClearedEmitted = false
+    const sd = this.page.sling
+    this.sling = sd
+      ? { def: sd, cool: 0, aiming: false, pullX: 0, pullZ: 0, tx: sd.x, tz: sd.z, shots: 0, rev: (this.sling?.rev ?? 0) + 1 }
+      : null
     clearLesson(this.lesson)
     for (const f of this.folds) if (f.def.fromWave === 0) revealFold(f)
-    if (id === 5) resetBoss(this.boss)
-    if (id === 6) {
+    const exit = this.page.exit
+    if (exit === 'boss') resetBoss(this.boss)
+    if (exit === 'finale') {
       this.boss.phase = 'flat'
       this.boss.collapse = 1
       this.boss.exposed = -1
     }
-    this.setPhase(id === 5 ? 'boss' : 'intro')
+    this.setPhase(exit === 'boss' ? 'boss' : 'intro')
     this.events.emit('pageIntro', id)
   }
 
@@ -247,6 +270,7 @@ export class FoldGame {
 
     this.updateFolds(realDt, simDt)
     this.updateTears(realDt)
+    this.updateSling(realDt)
 
     switch (this.phase) {
       case 'intro':
@@ -272,7 +296,7 @@ export class FoldGame {
         break
       case 'turn':
         this.phaseTimer -= realDt
-        if (this.phaseTimer <= 0) this.loadPage(Math.min(6, this.turnFrom + 1) as PageId)
+        if (this.phaseTimer <= 0) this.loadPage(Math.min(PAGE_COUNT, this.turnFrom + 1) as PageId)
         break
       case 'peel':
         this.updateHero(simDt)
@@ -280,7 +304,7 @@ export class FoldGame {
           this.peel = Math.min(1, this.peel + realDt * 2.2)
           if (this.peel >= 1) {
             this.events.emit('peelDone')
-            this.loadPage(5)
+            this.loadPage(Math.min(PAGE_COUNT, this.pageId + 1) as PageId)
           }
         } else if (!this.peeling && this.peel > 0) {
           this.peel = damp(this.peel, 0, 9, realDt)
@@ -297,7 +321,7 @@ export class FoldGame {
         break
       case 'drop':
         this.phaseTimer -= realDt
-        if (this.phaseTimer <= 0) this.setPhase(this.pageId === 5 ? 'boss' : 'intro')
+        if (this.phaseTimer <= 0) this.setPhase(this.page.exit === 'boss' ? 'boss' : 'intro')
         break
       case 'finale':
         this.finaleTime += realDt
@@ -386,6 +410,11 @@ export class FoldGame {
         this.kill(j, KILL_RIDGE, launched++)
         this.stats.ridged++
       }
+    } else if (k === 'ballista') {
+      // Flipped open: loaded with bolts, aimed straight up the page.
+      f.ammo = BALLISTA_SHOTS
+      f.aimX = f.cx
+      f.aimZ = -PAGE_HALF_D
     } else if (k === 'frog') {
       this.finaleTime = 0
       this.setPhase('finale')
@@ -488,6 +517,14 @@ export class FoldGame {
     this.events.emit('foldDrag', i, f.drag)
   }
 
+  /** Drop a drag without judging it (the gesture was cancelled). */
+  abandon(i: number): void {
+    const f = this.folds[i]
+    if (!f || f.phase !== 'dragging') return
+    abandonFold(f)
+    this.events.emit('foldRelease', i, f.drag)
+  }
+
   release(i: number, speed = 0): boolean {
     const f = this.folds[i]
     if (!f) return false
@@ -526,8 +563,58 @@ export class FoldGame {
       }
     }
     if (best >= 0) return this.stamp(best)
+    // Nothing to stamp: an open ballista shoots where the finger tapped.
+    if (this.fireBallista(x, z)) return true
     this.events.emit('tap', 0, 0, 0, x, z)
     return false
+  }
+
+  /** Open ballista with bolts left, nearest to `x` (the tapped side), or -1. */
+  armedBallista(x: number): number {
+    let best = -1
+    let bd = Infinity
+    for (let i = 0; i < this.folds.length; i++) {
+      const f = this.folds[i]!
+      if (f.def.kind !== 'ballista' || f.phase !== 'up' || f.ammo <= 0) continue
+      const d = Math.abs(f.cx - x)
+      if (d < bd) {
+        bd = d
+        best = i
+      }
+    }
+    return best
+  }
+
+  /** Loose a bolt from an open ballista toward (x, z). Returns true if one flew. */
+  fireBallista(x: number, z: number): boolean {
+    if (!this.acceptsInput()) return false
+    const i = this.armedBallista(x)
+    if (i < 0) return false
+    const f = this.folds[i]!
+    // Only up the page: a tap behind the tower means nothing.
+    const x0 = f.cx
+    const z0 = f.cz - 0.2
+    if (z > z0 - 0.6) return false
+    this.touched()
+    let dx = x - x0
+    let dz = z - z0
+    const d = Math.hypot(dx, dz)
+    dx /= d
+    dz /= d
+    // Fly on past the tap to the page's edge: bolts pierce.
+    const slot = spawnProjectile(
+      this.projectiles, 'bolt', x0, 1.25, z0, dx * BOLT_SPEED, 0, dz * BOLT_SPEED, x, z, 16 / BOLT_SPEED, i
+    )
+    f.ammo--
+    f.aimX = x
+    f.aimZ = z
+    f.flash = 1
+    // The last bolt is away: fold back down after a beat, then cool down.
+    if (f.ammo <= 0) f.timer = 0.35
+    this.stats.bolts++
+    this.events.emit('ballistaFire', i, slot, 0, x, z)
+    this.lessonEvent('bolt', i)
+    return true
   }
 
   stamp(i: number): boolean {
@@ -642,6 +729,145 @@ export class FoldGame {
     this.lessonEvent('peel', 0)
   }
 
+  // ─── Sling (book 2) ──────────────────────────────────────────────────────
+
+  /** Is a finger at (x, z) on the loaded sling's cup? */
+  pickSling(x: number, z: number): boolean {
+    const s = this.sling
+    // (While the corner is to be peeled, a drag down there is the peel.)
+    if (!s || s.cool > 0 || !this.acceptsInput() || this.phase === 'peel') return false
+    return Math.hypot(x - s.def.x, z - s.def.z) <= SLING_GRAB
+  }
+
+  grabSling(): boolean {
+    const s = this.sling
+    if (!s || s.cool > 0 || !this.acceptsInput()) return false
+    this.touched()
+    s.aiming = true
+    s.pullX = 0
+    s.pullZ = 0
+    s.tx = s.def.x
+    s.tz = s.def.z
+    this.events.emit('slingGrab', 0, 0, 0, s.def.x, s.def.z)
+    return true
+  }
+
+  /** The finger has pulled the cup back by (px, pz) page units; aim the other way. */
+  aimSling(px: number, pz: number): void {
+    const s = this.sling
+    if (!s || !s.aiming) return
+    this.idle = 0
+    s.pullX = px
+    s.pullZ = pz
+    let dx = -px * SLING_GAIN
+    let dz = -pz * SLING_GAIN
+    const d = Math.hypot(dx, dz)
+    if (d > SLING_RANGE) {
+      dx *= SLING_RANGE / d
+      dz *= SLING_RANGE / d
+    }
+    s.tx = clamp(s.def.x + dx, -PAGE_HALF_W + 0.25, PAGE_HALF_W - 0.25)
+    s.tz = clamp(s.def.z + dz, -PAGE_HALF_D + 0.25, BREACH_Z - 0.2)
+  }
+
+  /** Is the current pull enough to shoot? (The view dims the aim when not.) */
+  slingArmed(): boolean {
+    const s = this.sling
+    return !!s && s.aiming && Math.hypot(s.pullX, s.pullZ) >= SLING_MIN_PULL
+  }
+
+  /** Let go: fire if pulled far enough. Returns true if a stone flew. */
+  releaseSling(): boolean {
+    const s = this.sling
+    if (!s || !s.aiming) return false
+    const armed = this.slingArmed()
+    s.aiming = false
+    if (!armed || !this.acceptsInput()) {
+      s.pullX = s.pullZ = 0
+      this.events.emit('slingCancel')
+      return false
+    }
+    const x0 = s.def.x
+    const z0 = s.def.z
+    const y0 = 0.9
+    const T = SLING_FLIGHT_BASE + Math.hypot(s.tx - x0, s.tz - z0) * SLING_FLIGHT_PER
+    const slot = spawnProjectile(
+      this.projectiles, 'shot', x0, y0, z0,
+      (s.tx - x0) / T, (0.12 - y0) / T + 0.5 * G * T, (s.tz - z0) / T, s.tx, s.tz, T, -1
+    )
+    s.cool = SLING_COOL
+    s.shots++
+    s.rev++
+    s.pullX = s.pullZ = 0
+    this.stats.shots++
+    this.events.emit('slingFire', slot, 0, 0, s.tx, s.tz)
+    this.lessonEvent('shot', slot)
+    return true
+  }
+
+  cancelSling(): void {
+    const s = this.sling
+    if (!s || !s.aiming) return
+    s.aiming = false
+    s.pullX = s.pullZ = 0
+    this.events.emit('slingCancel')
+  }
+
+  private updateSling(realDt: number): void {
+    const s = this.sling
+    if (!s || s.cool <= 0) return
+    // Reloading is the player's own machine: real time, like a fold.
+    s.cool -= realDt
+    if (s.cool <= 0) {
+      s.cool = 0
+      s.rev++
+      this.events.emit('slingReady', 0, 0, 0, s.def.x, s.def.z)
+    }
+  }
+
+  /** A sling stone lands: everyone on the ground under it is torn to confetti. */
+  private slingImpact(x: number, z: number): void {
+    let n = 0
+    for (let j = 0; j < MAX_ENEMIES; j++) {
+      const e = this.enemies[j]!
+      if (!isAlive(e)) continue
+      if (e.state === 'leap' && e.y > LEAPER_SHOT_CEILING) continue
+      if (Math.hypot(e.x - x, e.z - z) > SLING_RADIUS + ENEMY[e.type].radius * 0.5) continue
+      e.state = 'torn'
+      e.age = 0
+      e.y = 0
+      this.kill(j, KILL_SHOT, n++)
+    }
+    this.stats.shotKills += n
+    this.events.emit('impact', -1, 5, n, x, z)
+    // The dragon can be pelted too.
+    const b = this.boss
+    if (b.exposed >= 0 && b.phase === 'exposed') {
+      // A stone on the exposed weak point breaks it.
+      const w = b.weakPoints[b.exposed]!
+      if (Math.hypot(w.x - x, w.z - z) < SLING_RADIUS + 0.55) {
+        this.award(SCORE.slingWeak, w.x, w.z, 1)
+        this.breakWeak()
+        return
+      }
+    }
+    if (this.page.exit === 'boss' && bossAwake(b) && b.phase !== 'exposed' && b.phase !== 'hurt' &&
+      Math.hypot(x - BOSS.bodyX, z - BOSS.bodyZ) < BOSS.bodyRadius) {
+      // A body hit: it flinches. Mid fire-breath charge, it chokes on it;
+      // every few hits it rears up and bares its next weak point.
+      b.slingHits++
+      this.award(SCORE.slingBody, x, z, 1)
+      const choked = b.phase === 'breathCharge'
+      this.events.emit('bossHit', 0, b.slingHits, choked ? 1 : 0, x, z)
+      if (b.slingHits >= BOSS.slingHitsToExpose) {
+        b.slingHits = 0
+        this.exposeWeakPoint()
+      } else if (choked) {
+        this.setBossPhase('idle', this.rng.range(BOSS.idleMin, BOSS.idleMax) * this.bossPace())
+      }
+    }
+  }
+
   acceptsInput(): boolean {
     if (this.paused) return false
     const p = this.phase
@@ -673,12 +899,17 @@ export class FoldGame {
       this.waveCursor++
     }
     this.updateSally(dt)
-    if (this.waveCursor >= order.length && this.mobileAlive() === 0) {
+    if (this.waveCursor >= order.length && this.mobileAlive() === 0 && !this.shotInFlight()) {
       // Next wave after a breath.
       this.waveIndex++
       this.waveStarted = false
       if (this.waveIndex < waves.length) this.waveGap = waves[this.waveIndex]!.delay
     }
+  }
+
+  private shotInFlight(): boolean {
+    for (const p of this.projectiles) if (p.alive && p.type === 'shot') return true
+    return false
   }
 
   private startWave(index: number): void {
@@ -708,8 +939,8 @@ export class FoldGame {
     let x: number
     let z: number
     if (sd.lane >= 0 && this.page.lanes[sd.lane]) {
-      x = this.laneX(sd.lane, SPAWN_Z)
-      z = SPAWN_Z
+      z = this.page.spawnZ ?? SPAWN_Z
+      x = this.laneX(sd.lane, z)
     } else {
       x = sd.x ?? 0
       z = sd.z ?? SPAWN_Z
@@ -717,6 +948,8 @@ export class FoldGame {
     // A shooter posted on a structure that is already torn has nowhere to stand.
     if (sd.lane < 0) {
       for (const t of this.tears) if (t.torn && Math.hypot(t.def.x - x, t.def.z - z) < t.def.radius + 0.75) return
+      // …and a post that's still manned isn't re-manned (catapult barrages).
+      for (const o of this.enemies) if (o.state === 'stand' && o.type === sd.type && Math.hypot(o.x - x, o.z - z) < 0.8) return
     }
     const jitter = sd.lane >= 0 ? this.rng.range(-0.32, 0.32) : 0
     const slot = spawnEnemy(this.enemies, sd.type, x + jitter, z, sd.lane, jitter)
@@ -726,13 +959,20 @@ export class FoldGame {
       const first = e.type === 'archer' ? ARCHER_FIRST_SHOT : CATAPULT_FIRST_SHOT
       e.cool = first + this.rng.range(0, 1.6)
     }
+    this.primeSpawn(slot)
     this.events.emit('spawn', slot)
+  }
+
+  /** Per-type setup after a spawn (leapers wait a moment before their first hop). */
+  private primeSpawn(slot: number): void {
+    const e = this.enemies[slot]!
+    if (e.type === 'leaper') e.cool = LEAPER_HOP_EVERY * this.rng.range(0.7, 1.2)
   }
 
   /** Marching enemies alive (stationary shooters don't hold a wave back). */
   mobileAlive(): number {
     let n = 0
-    for (const e of this.enemies) if (e.state === 'march' || e.state === 'blocked' || e.state === 'trapped') n++
+    for (const e of this.enemies) if (e.state === 'march' || e.state === 'blocked' || e.state === 'trapped' || e.state === 'leap') n++
     return n
   }
 
@@ -792,7 +1032,7 @@ export class FoldGame {
     }
     this.turnFrom = this.pageId
     this.setPhase('turn', PAGE_TURN_TIME)
-    this.events.emit('pageTurn', this.pageId, Math.min(6, this.pageId + 1))
+    this.events.emit('pageTurn', this.pageId, Math.min(PAGE_COUNT, this.pageId + 1))
   }
 
   // ─── Enemies ─────────────────────────────────────────────────────────────
@@ -815,6 +1055,9 @@ export class FoldGame {
           break
         case 'launched':
           this.flying(e, i, dt)
+          break
+        case 'leap':
+          this.leaping(e, i, dt)
           break
         case 'swept':
           e.vy -= G * dt
@@ -844,6 +1087,15 @@ export class FoldGame {
   private march(e: Enemy, i: number, dt: number): void {
     const tune = ENEMY[e.type]
     this.rerouteAroundRidges(e)
+    const leaper = e.type === 'leaper'
+    if (leaper) {
+      // Zig-zag: every so often, hop across to a neighbouring lane.
+      e.cool -= dt
+      if (e.cool <= 0 && e.z > SPAWN_Z + 1.4 && e.z < BREACH_Z - 1.6) {
+        this.hopLane(e, i)
+        return
+      }
+    }
     const targetX = clamp(this.laneX(e.lane, e.z) + e.tx, -PAGE_HALF_W + 0.4, PAGE_HALF_W - 0.4)
     const nz = e.z + e.speed * dt
     const nx = damp(e.x, targetX, 2.4, dt)
@@ -856,6 +1108,11 @@ export class FoldGame {
       const dNow = acrossHinge(f, e.x, e.z)
       const dNext = acrossHinge(f, nx, nz)
       if (dNow >= -0.05 && dNext < tune.radius) {
+        if (leaper) {
+          // Springs coil… and it vaults clean over the wall.
+          this.vault(e, i, f, dNow)
+          return
+        }
         e.state = 'blocked'
         e.fold = k
         e.cool = tune.bashRate * 0.6
@@ -872,6 +1129,65 @@ export class FoldGame {
     e.phase += (nz - e.z) * 5.2 + Math.abs(nx - e.x) * 3
     e.x = nx
     e.z = nz
+    if (e.z >= BREACH_Z) this.breach(i)
+  }
+
+  /** Ballistic hop to (x, z), landing after `T` seconds. */
+  private leapTo(e: Enemy, x: number, z: number, T: number): void {
+    e.state = 'leap'
+    e.vx = (x - e.x) / T
+    e.vz = (z - e.z) / T
+    e.vy = 0.5 * G * T
+    e.y = 0
+    e.fold = -1
+    e.windup = 0
+  }
+
+  private hopLane(e: Enemy, i: number): void {
+    const n = this.page.lanes.length
+    let lane = e.lane
+    if (n > 1) {
+      lane = e.lane + (this.rng.next() < 0.5 ? -1 : 1)
+      if (lane < 0) lane = 1
+      if (lane >= n) lane = n - 2
+    }
+    const z = e.z + 0.9
+    e.lane = lane
+    this.leapTo(e, clamp(this.laneX(lane, z) + e.tx * 0.5, -PAGE_HALF_W + 0.4, PAGE_HALF_W - 0.4), z, LEAPER_HOP_TIME)
+    this.events.emit('leap', i, 0, 0, e.x, e.z)
+  }
+
+  private vault(e: Enemy, i: number, f: FoldState, dNow: number): void {
+    const push = -LEAPER_VAULT_LAND - dNow
+    const z = e.z + f.nz * push
+    const x = clamp(e.x + f.nx * push, -PAGE_HALF_W + 0.4, PAGE_HALF_W - 0.4)
+    this.leapTo(e, x, z, LEAPER_VAULT_TIME)
+    this.events.emit('leap', i, 0, 1, e.x, e.z)
+  }
+
+  private leaping(e: Enemy, i: number, dt: number): void {
+    e.vy -= G * dt
+    e.x += e.vx * dt
+    e.y += e.vy * dt
+    e.z += e.vz * dt
+    e.phase += dt * 4
+    if (e.y > 0 || e.vy >= 0) return
+    // Landed.
+    e.y = 0
+    e.vx = e.vy = e.vz = 0
+    e.state = 'march'
+    e.age = 1
+    e.cool = LEAPER_HOP_EVERY * this.rng.range(0.8, 1.25)
+    // Straight into a raised ravine: caught.
+    for (let k = 0; k < this.folds.length; k++) {
+      const f = this.folds[k]!
+      if (isTrap(f) && onFootprint(f, e.x, e.z, 0)) {
+        e.state = 'trapped'
+        e.fold = k
+        e.age = 0
+        return
+      }
+    }
     if (e.z >= BREACH_Z) this.breach(i)
   }
 
@@ -1071,6 +1387,7 @@ export class FoldGame {
     mult *= 1 + Math.min(this.combo - 1, 10) * 0.1
     const pts = Math.round((base * mult) / 5) * 5
     this.score += pts
+    if (kind === KILL_SHOT) this.lessonEvent('shotKill', i)
     this.events.emit('kill', i, pts, kind, e.x, e.z)
     this.events.emit('score', 0, pts, Math.round(mult * 100), e.x, e.z)
     this.countType(e.type)
@@ -1085,6 +1402,8 @@ export class FoldGame {
     if (t === 'knight') this.stats.knights++
     else if (t === 'brute') this.stats.brutes++
     else if (t === 'archer') this.stats.archers++
+    else if (t === 'runner') this.stats.runners++
+    else if (t === 'leaper') this.stats.leapers++
     else this.stats.catapults++
   }
 
@@ -1107,10 +1426,22 @@ export class FoldGame {
       }
       const px = p.x
       const pz = p.z
+      if (p.type === 'bolt') {
+        this.boltStep(p, px, pz, dt)
+        continue
+      }
       p.vy -= G * dt
       p.x += p.vx * dt
       p.y += p.vy * dt
       p.z += p.vz * dt
+      if (p.type === 'shot') {
+        // The player's own stone sails over the walls.
+        if (p.age >= p.life) {
+          p.alive = false
+          this.slingImpact(p.tx, p.tz)
+        }
+        continue
+      }
       // A raised wall or shield in the way catches it.
       const blocker = this.barrierCrossing(px, pz, p.x, p.z)
       if (blocker >= 0) {
@@ -1130,6 +1461,31 @@ export class FoldGame {
         const h = this.hero
         if (Math.hypot(p.tx - h.x, p.tz - h.z) < 1.1) this.hurtHero(p.tx, p.tz)
       }
+    }
+  }
+
+  private readonly segOut = v2()
+
+  /** A ballista bolt flies flat and fast, piercing whoever is on its path. */
+  private boltStep(p: { x: number; z: number; vx: number; vz: number; age: number; life: number; alive: boolean; hits: number }, px: number, pz: number, dt: number): void {
+    p.x += p.vx * dt
+    p.z += p.vz * dt
+    for (let j = 0; j < MAX_ENEMIES && p.hits < BOLT_PIERCE; j++) {
+      const e = this.enemies[j]!
+      if (!isAlive(e)) continue
+      if (e.state === 'leap' && e.y > LEAPER_SHOT_CEILING) continue
+      segmentDistance(e.x, e.z, px, pz, p.x, p.z, this.segOut)
+      if (this.segOut.x > BOLT_RADIUS + ENEMY[e.type].radius * 0.5) continue
+      e.state = 'torn'
+      e.age = 0
+      e.y = 0
+      this.kill(j, KILL_BOLT, p.hits++)
+      this.stats.boltKills++
+    }
+    const out = p.z < -PAGE_HALF_D - 0.6 || p.x < -PAGE_HALF_W - 0.6 || p.x > PAGE_HALF_W + 0.6
+    if (p.hits >= BOLT_PIERCE || out || p.age >= p.life) {
+      p.alive = false
+      this.events.emit('impact', -1, 6, p.hits, p.x, p.z)
     }
   }
 
@@ -1291,13 +1647,19 @@ export class FoldGame {
           const side = this.rng.next() < 0.5 ? -1 : 1
           this.events.emit('bossStomp', 0, 0, 0, side * 1.6, -1.6)
           const n = 3 + Math.min(2, brokenCount(b))
+          const mix = this.page.stomp
           for (let k = 0; k < n; k++) {
             const lane = k % this.page.lanes.length
+            const type: EnemyType = mix ? mix[k % mix.length]! : k === n - 1 && brokenCount(b) >= 2 ? 'brute' : 'knight'
             const slot = spawnEnemy(
-              this.enemies, k === n - 1 && brokenCount(b) >= 2 ? 'brute' : 'knight',
-              this.laneX(lane, -1.4) + this.rng.range(-0.3, 0.3), -1.4 - k * 0.25, lane, this.rng.range(-0.3, 0.3)
+              this.enemies, type,
+              // In front of the castle core, never inside its walls.
+              this.laneX(lane, -1.4) + this.rng.range(-0.3, 0.3), -1.3 - k * 0.15, lane, this.rng.range(-0.3, 0.3)
             )
-            if (slot >= 0) this.events.emit('spawn', slot)
+            if (slot >= 0) {
+              this.primeSpawn(slot)
+              this.events.emit('spawn', slot)
+            }
           }
         }
         if (b.timer <= 0) {
@@ -1325,11 +1687,11 @@ export class FoldGame {
         if (b.timer <= 0) {
           b.collapse = 1
           this.setBossPhase('flat', 0)
-          this.pagesCleared = Math.max(this.pagesCleared, 5)
+          this.pagesCleared = Math.max(this.pagesCleared, this.pageId)
           this.award(SCORE.boss, 0, -3, 1)
           if (this.hitsThisPage === 0) this.award(SCORE.perfectPage, 0, 0, 1)
-          this.events.emit('pageCleared', 5, this.hitsThisPage === 0 ? 1 : 0)
-          this.loadPage(6)
+          this.events.emit('pageCleared', this.pageId, this.hitsThisPage === 0 ? 1 : 0)
+          this.loadPage(Math.min(PAGE_COUNT, this.pageId + 1) as PageId)
         }
         break
       case 'flat':
@@ -1339,11 +1701,11 @@ export class FoldGame {
 
   /** The dragon speeds up as it loses limbs. */
   private bossPace(): number {
-    return 1 - brokenCount(this.boss) * 0.12
+    return (1 - brokenCount(this.boss) * 0.12) * (this.page.bossPace ?? 1)
   }
 
   private breathCharge(): number {
-    return BOSS.breathCharge * (1 - brokenCount(this.boss) * 0.08)
+    return BOSS.breathCharge * (1 - brokenCount(this.boss) * 0.08) * (this.page.bossPace ?? 1)
   }
 
   private exposeWeakPoint(): void {
@@ -1351,6 +1713,7 @@ export class FoldGame {
     const i = nextWeakPoint(b)
     if (i < 0) return
     b.exposed = i
+    b.slingHits = 0
     b.weakPoints[i]!.t = 0
     this.setBossPhase('exposed', BOSS.exposed)
   }
@@ -1397,10 +1760,31 @@ export class FoldGame {
   }
 
   /** Something happened that may complete the running lesson. */
-  private lessonEvent(what: 'snap' | 'stamp' | 'tear' | 'peel' | 'crease' | 'core', index: number): void {
+  /** Drop the running lesson without marking it learned (its moment passed). */
+  private abortLesson(): void {
+    clearLesson(this.lesson)
+  }
+
+  private lessonEvent(
+    what: 'snap' | 'stamp' | 'tear' | 'peel' | 'crease' | 'core' | 'shot' | 'shotKill' | 'bolt', index: number
+  ): void {
     const l = this.lesson
     if (!l.id) return
     switch (l.id) {
+      case 'ballista':
+        if (what === 'snap' && index === l.target && l.step === 0) {
+          l.step = 1
+          l.age = 0
+          l.rev++
+        } else if (what === 'bolt') this.completeLesson()
+        break
+      case 'crush':
+        if (what === 'stamp' && (index === l.target || l.hint)) this.completeLesson()
+        break
+      case 'sling':
+      case 'leaper':
+        if (what === 'shot') this.completeLesson()
+        break
       case 'swipe':
       case 'shield':
       case 'ridge':
@@ -1449,7 +1833,11 @@ export class FoldGame {
         if (this.idle > IDLE_HINT_AFTER) this.idleHint()
         else if (hinting) clearLesson(l)
       }
-      if (l.id && !l.hint) l.age = 0
+      if (l.id && !l.hint) {
+        l.age = 0
+        // Place the ghost hand on the very frame the lesson starts.
+        this.driveLesson()
+      }
     } else if (l.id) {
       clearLesson(l)
     }
@@ -1519,7 +1907,7 @@ export class FoldGame {
         return
       }
     }
-    if (!learned.launch && learned.shield) {
+    if (!learned.launch) {
       for (let j = 0; j < MAX_ENEMIES; j++) {
         const e = this.enemies[j]!
         if (e.type !== 'catapult' || e.state !== 'stand') continue
@@ -1569,10 +1957,78 @@ export class FoldGame {
         return
       }
     }
-    if (!learned.frog && this.pageId === 6 && this.phase === 'play') {
+    if (!learned.ballista && (this.phase === 'play' || this.phase === 'boss')) {
+      // The castle's ballistas: once something is past the middle of the page.
+      const lead = this.leadEnemy()
+      if (lead >= 0 && this.enemies[lead]!.z > -1.5) {
+        for (let i = 0; i < this.folds.length; i++) {
+          const f = this.folds[i]!
+          if (f.def.kind === 'ballista' && isGrabbable(f) && this.enemies[lead]!.x * f.cx >= 0) {
+            this.startLesson('ballista', i)
+            return
+          }
+        }
+      }
+    }
+    if (!learned.crush && learned.swipe) {
+      // Folding a wall back down onto whoever is bashing it: the counter-attack.
+      for (let i = 0; i < this.folds.length; i++) {
+        const f = this.folds[i]!
+        if (f.def.kind !== 'wall' || !isStampable(f)) continue
+        let n = 0
+        for (const e of this.enemies) if (e.state === 'blocked' && e.fold === i) n++
+        if (n >= 2) {
+          this.startLesson('crush', i)
+          return
+        }
+      }
+    }
+    if (this.sling && this.sling.cool <= 0 && this.phase === 'play') {
+      if (!learned.sling && waveLesson === 'sling') {
+        const lead = this.leadEnemy()
+        if (lead >= 0 && this.enemies[lead]!.z > -3.2) {
+          this.startLesson('sling', lead)
+          return
+        }
+      }
+      if (!learned.leaper) {
+        for (let j = 0; j < MAX_ENEMIES; j++) {
+          const e = this.enemies[j]!
+          if (e.type === 'leaper' && e.state === 'march' && e.z > -3.4) {
+            this.startLesson('leaper', j)
+            return
+          }
+        }
+      }
+    }
+    if (!learned.frog && this.page.exit === 'finale' && this.phase === 'play') {
       const i = this.foldIndexWithLesson('frog')
       if (i >= 0) this.startLesson('frog', i)
     }
+  }
+
+  /** The marching enemy furthest down the page, or -1. */
+  private leadEnemy(): number {
+    let best = -1
+    let bz = -Infinity
+    for (let j = 0; j < MAX_ENEMIES; j++) {
+      const e = this.enemies[j]!
+      if (e.state !== 'march') continue
+      if (e.z > bz) {
+        bz = e.z
+        best = j
+      }
+    }
+    return best
+  }
+
+  /** Ghost hand: pull the sling back so the stone lands on (x, z). */
+  private handOnSling(x: number, z: number): void {
+    const s = this.sling
+    if (!s) return
+    const dx = (x - s.def.x) / SLING_GAIN
+    const dz = (z - s.def.z) / SLING_GAIN
+    setHand(this.lesson, 'drag', s.def.x, s.def.z, s.def.x - dx, s.def.z - dz, 0.6)
   }
 
   private maxWindup(): number {
@@ -1650,6 +2106,55 @@ export class FoldGame {
         if (l.hand.gesture !== 'drag') setHand(l, 'drag', 4.5, 6.5, 1.2, 2.2, 0)
         l.timeScale = 1
         break
+      case 'ballista': {
+        const f = this.folds[l.target]
+        if (!f) return this.abortLesson()
+        const lead = this.leadEnemy()
+        if (l.step === 0) {
+          if (f.phase === 'up') {
+            l.step = 1
+            l.age = 0
+          } else if (f.phase !== 'ready' && f.phase !== 'dragging' && f.phase !== 'snapping') return this.abortLesson()
+          else {
+            this.handOnFold(f)
+            const near = lead >= 0 && this.enemies[lead]!.z > 0.6
+            l.timeScale = f.phase === 'dragging' ? 0.35 : near ? 0 : LESSON_TIME_SCALE
+            break
+          }
+        }
+        // Step 1: tap on the enemy to shoot it.
+        if (f.phase !== 'up' || f.ammo <= 0) return this.abortLesson()
+        if (lead < 0) return this.completeLesson()
+        if (l.hand.gesture !== 'tap') {
+          const e = this.enemies[lead]!
+          setHand(l, 'tap', e.x, e.z, e.x, e.z, 0.6)
+        }
+        l.timeScale = l.age < 0.4 ? LESSON_TIME_SCALE : 0
+        break
+      }
+      case 'crush': {
+        const f = this.folds[l.target]
+        if (!f) return this.abortLesson()
+        if (f.phase !== 'up' && f.phase !== 'stamping') return this.abortLesson()
+        if (l.hand.gesture !== 'tap') setHand(l, 'tap', f.cx + f.nx * 0.5, f.cz + f.nz * 0.5, f.cx + f.nx * 0.5, f.cz + f.nz * 0.5, 0.9)
+        // Let the bashing read for a beat, then hold the world still.
+        l.timeScale = l.age < 0.6 ? LESSON_TIME_SCALE : 0
+        break
+      }
+      case 'sling':
+      case 'leaper': {
+        const s = this.sling
+        const e = this.enemies[l.target]
+        if (!s) return this.abortLesson()
+        if (!e || !isAlive(e)) return l.id === 'leaper' ? this.completeLesson() : this.abortLesson()
+        if (l.hand.gesture !== 'drag') {
+          // Lead the target: aim where it will be a moment from now.
+          this.handOnSling(e.x, Math.min(BREACH_Z - 0.6, e.z + (l.id === 'leaper' ? 1.2 : 0.9)))
+        }
+        if (s.aiming) l.timeScale = 0.35
+        else l.timeScale = e.z > (l.id === 'leaper' ? -1.6 : -1.2) || l.age > 2.4 ? 0 : LESSON_TIME_SCALE
+        break
+      }
       case 'crease':
       case 'core': {
         const b = this.boss
@@ -1726,7 +2231,7 @@ export class FoldGame {
     // A stampable structure with enemies at it?
     for (let i = 0; i < this.folds.length; i++) {
       const f = this.folds[i]!
-      if (!isStampable(f) || !learned.stamp) continue
+      if (!isStampable(f) || !(learned.stamp || learned.crush)) continue
       for (const e of this.enemies) {
         if ((e.state === 'blocked' || e.state === 'trapped') && e.fold === i) {
           l.id = 'stamp'
@@ -1746,6 +2251,45 @@ export class FoldGame {
         l.target = i
         l.hint = true
         setHand(l, 'spread', t.px, t.pz, t.px, t.pz, 0)
+        return
+      }
+    }
+    // An open ballista with bolts left, or a closed one and trouble coming.
+    if (learned.ballista) {
+      const lead = this.leadEnemy()
+      if (lead >= 0 && this.enemies[lead]!.z > -1) {
+        const e = this.enemies[lead]!
+        const armed = this.armedBallista(e.x)
+        if (armed >= 0) {
+          l.id = 'ballista'
+          l.step = 1
+          l.target = armed
+          l.hint = true
+          setHand(l, 'tap', e.x, e.z, e.x, e.z, 0.6)
+          return
+        }
+        for (let i = 0; i < this.folds.length; i++) {
+          const f = this.folds[i]!
+          if (f.def.kind !== 'ballista' || !isGrabbable(f) || e.z < 1.5) continue
+          l.id = 'ballista'
+          l.step = 0
+          l.target = i
+          l.hint = true
+          this.handOnFold(f)
+          return
+        }
+      }
+    }
+    // A loaded sling and something to shoot at.
+    const s = this.sling
+    if (s && s.cool <= 0 && learned.sling) {
+      const lead = this.leadEnemy()
+      if (lead >= 0 && this.enemies[lead]!.z > -2) {
+        const e = this.enemies[lead]!
+        l.id = 'sling'
+        l.target = lead
+        l.hint = true
+        this.handOnSling(e.x, Math.min(BREACH_Z - 0.6, e.z + 0.8))
         return
       }
     }
@@ -1778,7 +2322,7 @@ export class FoldGame {
     }
     for (let i = 0; i < this.tears.length; i++) if (!this.tears[i]!.torn) this.completeTear(i)
     this.waveIndex = this.page.waves.length
-    if (this.pageId === 5) {
+    if (this.page.exit === 'boss') {
       for (const w of this.boss.weakPoints) w.broken = true
       this.setBossPhase('collapse', 0.3)
     }
@@ -1786,6 +2330,6 @@ export class FoldGame {
 
   /** Is the dragon awake and on the board? (renderer/UI helper) */
   bossActive(): boolean {
-    return this.pageId === 5 && bossAwake(this.boss)
+    return this.page.exit === 'boss' && bossAwake(this.boss)
   }
 }
