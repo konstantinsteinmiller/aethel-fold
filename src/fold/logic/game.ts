@@ -23,7 +23,7 @@ import {
   PAGE_HALF_D, PAGE_HALF_W, PAGE_TURN_TIME, PEEL_COMPLETE, SCORE, SPAWN_Z, TIME_SCALE_RATE, TORN_LINGER,
   FOLD_SNAP_THRESHOLD, LEAPER_HOP_EVERY, LEAPER_HOP_TIME, LEAPER_SHOT_CEILING, LEAPER_VAULT_LAND,
   LEAPER_VAULT_TIME, SLING_COOL, SLING_FLIGHT_BASE, SLING_FLIGHT_PER, SLING_GAIN, SLING_GRAB, SLING_MIN_PULL,
-  SLING_RADIUS, SLING_RANGE, SLOW_MODE_SCALE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED, ALMOST, DIFFICULTY, SHELF,
+  SLING_RADIUS, SLING_RANGE, SLOW_MODE_SCALE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED, ALMOST, DIFFICULTY, SHELF, SECOND_CHANCE,
   RUSH, SECRET, DESK_LAMP
 } from './config'
 import {
@@ -226,6 +226,16 @@ export class FoldGame {
   private dropTo: GamePhase = 'intro'
   private crumpledFrom: GamePhase = 'play'
 
+  // Rewarded second chance (roadmap #19) — only ever switched on by an ad build's view.
+  /** The view can offer a second chance (an ad build with a rewarded ad ready, past the grace). */
+  secondChanceOn = false
+  /** Real seconds left on the offer; while > 0 the world holds still with the hero down. */
+  lastChance = 0
+  /** The offer was made on this page (once per page, whatever the answer). */
+  secondChanceUsed = false
+  /** Which page (`book * 100 + page`) `secondChanceUsed` is about. */
+  private secondChanceKey = -1
+
   // Adaptive difficulty, "the book is kind" (roadmap #8) — invisible to the player.
   /** The persisted memory the knobs below are derived from. */
   kind: KindMemory
@@ -273,6 +283,7 @@ export class FoldGame {
     }
     const page = pageOrOpts
     this.mode = 'story'
+    this.secondChanceKey = -1
     this.rush.active = false
     this.rush.running = false
     this.boss.timing = 1
@@ -303,6 +314,7 @@ export class FoldGame {
    */
   private startRush(book: BookId): void {
     this.mode = 'dragonRush'
+    this.secondChanceKey = -1
     this.book = book
     this.score = 0
     this.runHits = 0
@@ -373,6 +385,13 @@ export class FoldGame {
     this.defeated = false
     this.continuesLeft = ALMOST.continues
     this.continuedThisPage = false
+    this.lastChance = 0
+    // Once per page: a retry of the same page doesn't bring the offer back.
+    const chanceKey = this.book * 100 + id
+    if (this.secondChanceKey !== chanceKey) {
+      this.secondChanceKey = chanceKey
+      this.secondChanceUsed = false
+    }
     this.column = 0
     this.slowmoColumn = 0
     this.kindSlowmo = 0
@@ -441,6 +460,7 @@ export class FoldGame {
    */
   private crumple(defeat: boolean): void {
     clearLesson(this.lesson)
+    this.lastChance = 0
     this.defeated = defeat
     this.kindSlowmo = 0
     this.rush.running = false
@@ -534,6 +554,12 @@ export class FoldGame {
   update(realDtIn: number): void {
     const realDt = Math.min(Math.max(realDtIn, 0), 0.05)
     if (this.paused || this.phase === 'boot') return
+    // The second-chance offer holds everything (the phase clock too) until it is answered or runs out.
+    if (this.lastChance > 0) {
+      this.lastChance -= realDt
+      if (this.lastChance <= 0) this.crumple(true)
+      return
+    }
     this.phaseTime += realDt
     const atShelf = this.shelf.open
     if (!atShelf) this.idle += realDt
@@ -1321,7 +1347,7 @@ export class FoldGame {
   }
 
   acceptsInput(): boolean {
-    if (this.paused || this.shelf.open) return false
+    if (this.paused || this.shelf.open || this.lastChance > 0) return false
     const p = this.phase
     return p === 'intro' || p === 'play' || p === 'boss' || p === 'peel' || p === 'cleared'
   }
@@ -2044,8 +2070,57 @@ export class FoldGame {
     if (h.hp <= 0) {
       h.mood = 'down'
       this.events.emit('heroDown')
-      this.crumple(true)
+      if (this.secondChanceOn && !this.secondChanceUsed && !this.rushing) this.offerSecondChance()
+      else this.crumple(true)
     }
+  }
+
+  // ─── Rewarded second chance (roadmap #19) ────────────────────────────────
+
+  /** The view says whether a second chance can be offered (an ad build, a rewarded ad ready). */
+  setSecondChance(on: boolean): void {
+    this.secondChanceOn = on
+  }
+
+  /** The last heart went: hold the world for `SECOND_CHANCE.window` while the view offers the ad. */
+  private offerSecondChance(): void {
+    this.secondChanceUsed = true
+    this.lastChance = SECOND_CHANCE.window
+    clearLesson(this.lesson)
+    this.kindSlowmo = 0
+    this.hitStop = 0
+    this.events.emit('lastChance', SECOND_CHANCE.window)
+  }
+
+  /**
+   * The rewarded ad was watched: the hero gets `SECOND_CHANCE.hearts` back and
+   * the page carries on where it held, with the Try-again grace. Returns false
+   * when no offer is open. (Not gated on `paused`: the ad's own pause may
+   * still be lifting when the reward lands.)
+   */
+  restoreHeart(): boolean {
+    if (this.lastChance <= 0) return false
+    this.lastChance = 0
+    const h = this.hero
+    h.hp = Math.min(h.maxHp, SECOND_CHANCE.hearts)
+    h.invuln = ALMOST.grace
+    h.mood = 'walk'
+    h.moodTimer = 0.9
+    h.rev++
+    // Whatever was about to hit him is gone with the ad.
+    for (const p of this.projectiles) p.alive = false
+    this.combo = 0
+    this.comboTimer = 0
+    this.hitStop = 0
+    this.events.emit('heartRestored', 0, h.hp)
+    return true
+  }
+
+  /** No thanks (or no ad, or the offer ran out): the page crumples as it would have. */
+  declineSecondChance(): boolean {
+    if (this.lastChance <= 0) return false
+    this.crumple(true)
+    return true
   }
 
   // ─── Boss ────────────────────────────────────────────────────────────────

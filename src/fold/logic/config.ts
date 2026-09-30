@@ -257,6 +257,15 @@ export const ALMOST = {
   grace: 2
 } as const
 
+// ─── Rewarded second chance (roadmap #19, ad builds only) ─────────────────
+
+export const SECOND_CHANCE = {
+  /** Real seconds the world holds on the last heart while the offer is up; then the page crumples. */
+  window: 6,
+  /** Hearts a watched ad gives back. */
+  hearts: 1
+} as const
+
 // ─── Star rating per page (roadmap #1) ────────────────────────────────────
 
 export const STARS = {

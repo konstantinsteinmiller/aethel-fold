@@ -38,7 +38,7 @@
  * the local date unless the player turned the decorations off; a DEV build
  * can force one with `?season=halloween|winter|none` or `__fold.setSeason`.
  */
-import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, defineAsyncComponent, markRaw, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FoldEngine } from '@/fold/FoldEngine'
 import type { FoldEvent } from '@/fold/logic/events'
@@ -46,7 +46,7 @@ import type { FoldGame } from '@/fold/logic/game'
 import { PAGE_COUNT, pageDef } from '@/fold/logic/pages'
 import { LESSON_IDS } from '@/fold/logic/lessons'
 import { brokenCount } from '@/fold/logic/boss'
-import { ALMOST } from '@/fold/logic/config'
+import { ALMOST, SECOND_CHANCE } from '@/fold/logic/config'
 import type { BookId, LessonId, PageDef, PageId } from '@/fold/logic/types'
 import type { ScreenPoint } from '@/fold/render/GameView'
 import PageBadge from '@/components/fold/PageBadge.vue'
@@ -76,7 +76,16 @@ import {
   shelfProgress, startNewRun, unlockCosmetics, wins, wins2, flushSaveNow, type FoldSettings
 } from '@/use/useFoldProgress'
 import { mobileCheck } from '@/utils/function'
+import { INTERSTITIAL_ADS, REWARDED_ADS } from '@/platforms/adFlags'
+import {
+  almostVariant, cancelFoldInterstitial, foldAdsDebug, noteSecondChanceOffered, pollFoldInterstitial, requestFoldInterstitial,
+  resetDeath, rewardedInFlight, secondChanceOn, startPlaytimeClock, stopPlaytimeClock, watchRewarded
+} from '@/use/useFoldAds'
 import { BOOT, bootSnapshot, bootStage, markFirstInput, markGameReady, markInteractive, markPrecompiled } from '@/use/useBoot'
+
+// Ad UI (roadmaps #9, #19): only ad builds with `VITE_APP_REWARDED` load it; the jury build has no chunk to load.
+const RewardedRetry = REWARDED_ADS ? defineAsyncComponent(() => import('@/components/fold/RewardedRetry.vue')) : null
+const SecondChanceOffer = REWARDED_ADS ? defineAsyncComponent(() => import('@/components/fold/SecondChanceOffer.vue')) : null
 
 const { t, locale } = useI18n()
 const { userSoundVolume, userMusicVolume } = useUser()
@@ -106,6 +115,10 @@ const hud = reactive({
   newBest: false,
   /** The Almost! moment's Try-again button is up. */
   retry: false,
+  /** …as the rewarded variant (ad builds, roadmap #9). */
+  retryAd: false,
+  /** The second-chance offer holds the page (ad builds, roadmap #19). */
+  chance: false,
   /** The desk bookshelf: the zoom button is shown, the camera is out at it, the hand points at the button. */
   shelfButton: false,
   shelfOpen: false,
@@ -191,6 +204,7 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       hud.boss = g.page.exit === 'boss'
       hud.victory = false
       hud.rush = g.rushing
+      resetDeath()
       // Checkpoint: a reload resumes on this page with this score. A rush is not the story: it never moves the bookmark.
       if (!g.rushing) {
         checkpoint(e.a as PageId, { score: g.pageStartScore, hits: g.runHits, time: g.runTime }, g.pagesCleared, g.book)
@@ -209,6 +223,8 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       }
       bankStats(g)
       bankScore(g.score, g.book)
+      // An interstitial (ad builds, roadmap #17) waits for the next page to settle. (`g.page` is already the next page.)
+      if (INTERSTITIAL_ADS) requestFoldInterstitial(pageDef(g.book, e.a as PageId).exit === 'boss' ? 'bossClear' : 'pageClear')
       // The kindness memory (streak, boss ease) first: the checkpoint keeps it.
       saveKindness(g.kind)
       // Resume on the *next* page with everything banked so far.
@@ -248,11 +264,13 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       hud.rushDone = false
       hud.victory = false
       hud.retry = false
+      hud.retryAd = false
       hud.rushTenths = 0
       hud.rushPar = e.b
       hud.rushBest = rushBestOf(e.a as BookId)
       fx.value?.clearStars()
       fx.value?.clearAlmost()
+      cancelFoldInterstitial()
       // The rush's own stats are never banked; the next story run counts from zero.
       statsBase = zeroBase()
       break
@@ -281,12 +299,24 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       if (e.b === 1) {
         if (!g.rushing) saveKindness(g.kind)
         fx.value?.almost(e.a, e.c === 1)
+        if (INTERSTITIAL_ADS && !g.rushing) requestFoldInterstitial('crumple')
       }
       break
     case 'pageDrop':
       hud.hp = g.hero.hp
       hud.retry = false
+      hud.retryAd = false
       fx.value?.clearAlmost()
+      resetDeath()
+      break
+    case 'lastChance':
+      hud.chance = true
+      noteSecondChanceOffered()
+      break
+    case 'heartRestored':
+      hud.hp = e.b
+      hud.chance = false
+      resetDeath()
       break
   }
 }
@@ -332,7 +362,14 @@ const onFrame = (g: FoldGame): void => {
   }
   if (hud.hp !== g.hero.hp) hud.hp = g.hero.hp
   const retry = g.phase === 'crumple' && g.defeated && g.phaseTime >= ALMOST.button
-  if (hud.retry !== retry) hud.retry = retry
+  if (hud.retry !== retry) {
+    hud.retry = retry
+    // The button's look is read once, as it comes up (roadmap #9: rewarded only in ad builds, after the grace).
+    hud.retryAd = retry && REWARDED_ADS && almostVariant(g.continuesLeft, g.rushing) === 'rewarded'
+  }
+  const chance = g.lastChance > 0
+  if (hud.chance !== chance) hud.chance = chance
+  if (INTERSTITIAL_ADS) pollFoldInterstitial(g)
   if (hud.boss) {
     const broken = brokenCount(g.boss)
     if (hud.bossBroken !== broken) hud.bossBroken = broken
@@ -412,6 +449,7 @@ onMounted(() => {
     }
   ))
   engine.value = eng
+  if (REWARDED_ADS) eng.setSecondChance(secondChanceOn.value)
   eng.attach()
   eng.setVolumes(userSoundVolume.value, userMusicVolume.value)
   applySettings(eng, foldSettings.value)
@@ -445,6 +483,8 @@ watch(look, (l) => engine.value?.setLook({ ...l }))
 watch([wins, wins2, pagesCleared, pagesCleared2, pageStars, rushBest], () => engine.value?.setShelfProgress(shelfProgress()))
 
 onBeforeUnmount(() => {
+  stopPlaytimeClock()
+  cancelFoldInterstitial()
   ro?.disconnect()
   engine.value?.dispose()
   engine.value = null
@@ -474,6 +514,10 @@ watch(paused, (p) => engine.value?.setPaused(p))
 // Platform "gameplay" signal: live while the player is actually playing.
 const live = computed(() => !paused.value && !hud.victory && !hud.shelfOpen && !hud.rushDone)
 watch(live, (v) => syncGameplayLifecycle(v), { immediate: true })
+// The ad grace counts live play only (ad builds; a no-op elsewhere).
+onMounted(() => startPlaytimeClock(() => live.value))
+// Roadmap #19: the last heart may hold for a second-chance offer while a rewarded ad can be offered.
+if (REWARDED_ADS) watch(secondChanceOn, (on) => engine.value?.setSecondChance(on))
 
 const openPause = (): void => {
   pauseOpen.value = true
@@ -492,6 +536,33 @@ const restartPage = (): void => {
 /** The Almost! moment's Try again: the page drops straight back. */
 const tryAgain = (): void => {
   if (engine.value?.tryAgain()) hud.retry = false
+}
+/** …its rewarded variant (roadmap #9): a watched video retries; no fill or a skip falls back to the plain button. */
+const tryAgainRewarded = async (): Promise<void> => {
+  if (!REWARDED_ADS) return
+  const ok = await watchRewarded()
+  if (ok && engine.value?.tryAgain()) {
+    hud.retry = false
+    hud.retryAd = false
+  } else {
+    hud.retryAd = false
+  }
+}
+const onRetry = (): void => {
+  if (hud.retryAd) void tryAgainRewarded()
+  else tryAgain()
+}
+/** Roadmap #19: a watched video gives a heart back; anything else lets the page crumple. */
+const takeSecondChance = async (): Promise<void> => {
+  if (!REWARDED_ADS) return
+  const ok = await watchRewarded()
+  const eng = engine.value
+  if (!eng) return
+  if (ok) eng.restoreHeart()
+  else eng.declineSecondChance()
+}
+const skipSecondChance = (): void => {
+  engine.value?.declineSecondChance()
 }
 /** Start a book from its first page (restart, play again, or a pick from the shelf). */
 const openBook = (book: BookId): void => {
@@ -553,7 +624,7 @@ const onKey = (e: KeyboardEvent): void => {
     rushAgain()
   } else if ((e.key === 'Enter' || e.key === ' ') && hud.retry) {
     e.preventDefault()
-    tryAgain()
+    onRetry()
   }
 }
 onMounted(() => window.addEventListener('keydown', onKey))
@@ -610,6 +681,8 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       return { x: out.x, y: out.y }
     },
     tryAgain: () => eng.tryAgain(),
+    /** Ads (roadmaps #9, #17, #19; ad builds only): the interstitial pacer and the grace clock. */
+    ads: () => ({ ...foldAdsDebug(), rewarded: REWARDED_ADS, interstitials: INTERSTITIAL_ADS, retryAd: hud.retryAd, chance: hud.chance }),
     /** Dragon Rush (roadmap #16) and the page secrets (roadmap #15). */
     startRush: (book: number) => eng.startRush(book === 2 ? 2 : 1),
     lampScreen: () => {
@@ -732,6 +805,19 @@ const pageAria = computed(() => t('fold.a11y.board'))
     )
 
     AlmostRetry(:open="hud.retry && !pauseOpen" @retry="tryAgain")
+      template(v-if="RewardedRetry && hud.retryAd" #action)
+        component(:is="RewardedRetry" :busy="rewardedInFlight" @watch="tryAgainRewarded")
+
+    component(
+      v-if="SecondChanceOffer"
+      :is="SecondChanceOffer"
+      :open="hud.chance && !pauseOpen"
+      :seconds="SECOND_CHANCE.window"
+      :paused="paused"
+      :busy="rewardedInFlight"
+      @watch="takeSecondChance"
+      @skip="skipSecondChance"
+    )
 
     CootieCatcherPause(
       :open="pauseOpen"

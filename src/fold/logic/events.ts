@@ -62,6 +62,8 @@ export type FoldEventType =
   | 'night'         // the desk lamp was tapped: a = 1 night mode on / 0 off
   | 'rushStart'     // a Dragon Rush dragon drops (roadmap #16): a = book, b = par (s), c = attempt (1 = first)
   | 'rushDone'      // the rush dragon is beaten: a = book, b = time (s), c = par (s)
+  | 'lastChance'    // the last heart went and the world holds for a second-chance offer (roadmap #19): a = seconds offered
+  | 'heartRestored' // the second chance was taken: b = hearts now
 
 export const KILL_LAUNCH = 1
 export const KILL_CRUSH = 2

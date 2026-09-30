@@ -150,6 +150,13 @@ export default {
       'shelf': 'Bookshelf',
       'backToBook': 'Back to the book'
     },
+    'ads': {
+      'video': 'Video',
+      'tryAgain': 'Watch a video to try again',
+      'secondChance': 'Second chance!',
+      'secondChanceWatch': 'Watch a video for one more heart',
+      'noThanks': 'No thanks'
+    },
     'page': {
       'border': 'The Border',
       'ravine': 'The Ravine',
