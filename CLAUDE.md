@@ -11,8 +11,8 @@ changing gameplay or the look.
 Also in the repo:
 
 * **`src/world/`, route `/world`** — *Meadowfall*, the cel-shaded open-world
-  engine the project grew out of. Kept as a lazy-loaded bench (with `/water` and
-  `/characters`) and not on the hot path. The *Chroniken von Arlaan* chapter,
+  engine the project grew out of. Kept as a lazy-loaded bench and not on the
+  hot path. The `/water` lab, the `/characters` creator, the *Chroniken von Arlaan* chapter,
   the 2D tower game and the meta systems (battle pass, achievements, daily
   rewards and missions, treasure chest, ad-reward buttons) have been
   **removed**; don't resurrect them.

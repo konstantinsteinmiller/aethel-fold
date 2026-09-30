@@ -37,8 +37,8 @@ import { HAIR_COLOURS, SKIN_TONES, TUNIC_COLOURS } from './variants'
  * renderer in behind it", and pins the two together with a test. That workaround
  * is what this module removes the need for.
  *
- * `CreatorScene.ts` re-exports every name here, so the creation screen, the
- * roster and three test suites are unchanged.
+ * `CreatorScene.ts` and the `/characters` screen have since been removed
+ * (roadmap #7); the roster and the tests import from here directly.
  */
 
 // ─── The appearance options, and where the UI reads them from ───────────────

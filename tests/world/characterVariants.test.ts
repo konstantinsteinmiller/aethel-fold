@@ -27,9 +27,6 @@ import { BROW_VERTICES, FACE_VERTICES, HEAD } from '@/world/characters/face'
 import { limbMesh } from '@/world/characters/limb'
 import { BONE_NAMES, FIGURE_HEIGHT, boneDefinition } from '@/world/characters/rig'
 import { triangleCount } from '@/world/geometry/budget'
-import de from '@/i18n/locales/de'
-import en from '@/i18n/locales/en'
-import { LANGUAGES } from '@/utils/enums'
 
 /**
  * ─── The variant contract ───────────────────────────────────────────────────
@@ -1432,84 +1429,6 @@ describe('the brow colour', () => {
         }
       }
       expect(painted, `hair ${hair} brow vertices`).toBe(BROW_VERTICES)
-    }
-  })
-})
-
-// ─── The names a player reads ───────────────────────────────────────────────
-
-/**
- * Every style needs a label in every language, and there is no type that says so.
- *
- * A missing key does not throw, does not warn in production and does not fail a
- * type-check: it ships as the literal string `characters.hairStyles.topknot` in
- * the middle of somebody's character-creation screen, in their language, and the
- * only way to find it is to switch to that language and look. It is asserted
- * here as well as in `characterCreator.test.ts` — that file checks the *picker's*
- * list against English, and the picker's list is derived from a `Record`
- * somewhere else, which is exactly the sort of indirection that lets a style go
- * unlabelled in every language while every test stays green.
- *
- * ── Two languages, and the count is derived rather than written down ────────
- *
- * The game shipped 21 locales as a tower-defence game and ships **English and
- * German** now; the other 19 bundles were deleted. This block used to name
- * all 21 and assert `toHaveLength(21)`, and when they were deleted the file
- * stopped *collecting* — 1400 lines of geometry assertions that have nothing to
- * do with i18n went dark because of an import at the top.
- *
- * So the roster is now checked against `LANGUAGES` (`utils/enums.ts`), the list
- * the language picker itself is built from. Adding a language fails this test
- * with "missing a bundle" instead of shipping an unlabelled picker, and removing
- * one cannot break the file again.
- */
-const BUNDLES: Record<string, unknown> = { de, en }
-
-const hairStyleLabels = (bundle: unknown): Record<string, unknown> => {
-  const characters = (bundle as { characters?: { hairStyles?: Record<string, unknown> } }).characters
-  return characters?.hairStyles ?? {}
-}
-
-describe('hair style labels', () => {
-  it('has a bundle for every language the picker offers', () => {
-    for (const language of LANGUAGES) {
-      expect(BUNDLES[language], `${language} is offered but missing a bundle`).toBeDefined()
-    }
-    expect(Object.keys(BUNDLES).sort()).toEqual([...LANGUAGES].sort())
-  })
-
-  it('names every style in every language', () => {
-    for (const [locale, bundle] of Object.entries(BUNDLES)) {
-      const labels = hairStyleLabels(bundle)
-      for (const hair of HAIRS) {
-        const value = labels[hair]
-        expect(typeof value, `${locale}.characters.hairStyles.${hair}`).toBe('string')
-        expect((value as string).length, `${locale}.characters.hairStyles.${hair} is empty`).toBeGreaterThan(0)
-      }
-    }
-  })
-
-  it('carries no label for a style that no longer exists', () => {
-    // The other half of the same bug. A stale key is a translation somebody paid
-    // for that nothing renders, and it hides the fact that a style was removed.
-    for (const [locale, bundle] of Object.entries(BUNDLES)) {
-      expect(Object.keys(hairStyleLabels(bundle)).sort(), locale).toEqual([...HAIRS].sort())
-    }
-  })
-
-  it('does not leave a language reading English', () => {
-    // Twenty-one bundles is enough that "translated" quietly becomes "copied".
-    // Not every language has to differ from English on every word — `id` and `nl`
-    // legitimately share a few — but a whole bundle that matches English is a
-    // bundle nobody translated.
-    const english = hairStyleLabels(en)
-    for (const [locale, bundle] of Object.entries(BUNDLES)) {
-      if (locale === 'en') {
-        continue
-      }
-      const labels = hairStyleLabels(bundle)
-      const same = HAIRS.filter(hair => labels[hair] === english[hair]).length
-      expect(same, `${locale} copied English`).toBeLessThan(HAIRS.length)
     }
   })
 })

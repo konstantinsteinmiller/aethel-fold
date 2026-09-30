@@ -136,7 +136,7 @@ aethel_state = {
 - [x] A4 `useAethelState` + save pipeline on `aethel_state` (allowlist, strategies, merge policy, fresh-guard, keys.ts, useUser settings, i18n locale key).
 - [x] A5 `.env.example` + per-platform `.env.<mode>` templates with **empty** keys/ids (game ids, title_id, test_install_id, tokens).
 - [x] A6 Fonts: only Angry; remove other font stacks (Georgia in logo, monospace in editor only stays debug-only).
-- [x] A7 Router: `/` → FoldScene; `/world` Meadowfall bench (lazy), `/characters`, `/water` benches stay lazy.
+- [x] A7 Router: `/` → FoldScene; `/world` Meadowfall bench (lazy). The `/characters` and `/water` benches were removed (roadmap #7).
 - [x] A8 Rename product strings/meta: title, manifest, package scripts (`aethel-fold`), README.
 
 ### B. Logic (`src/fold/logic`, pure TS)

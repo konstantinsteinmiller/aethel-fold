@@ -109,7 +109,7 @@ src/components/atoms|molecules  F-* design system (origami-styled)
 src/use/                  module-level singleton composables
 src/platforms/, src/utils/save/  platform registry, SaveManager, strategies
 src/voice/                voice-over system (kept for later use)
-src/world/                Meadowfall 3D world (bench route /world)
+src/world/                Meadowfall 3D world (lazy dev bench, route /#/world)
 ```
 
 ### Unit art overrides

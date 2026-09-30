@@ -8,7 +8,7 @@ import {
   copyAppearance,
   randomAppearance,
   sanitiseAppearance
-} from '@/world/characters/CreatorScene'
+} from '@/world/characters/appearance'
 import {
   DEFAULT_APPEARANCE,
   type BeardStyle,
