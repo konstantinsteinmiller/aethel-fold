@@ -292,7 +292,8 @@ export class DragonView {
     this.group.userData.perfTag = 'fold.dragon'
   }
 
-  update(game: FoldGame, time: number, dt: number): void {
+  /** Pose the rig from the boss state (a `FoldGame`, or any puppet with a boss and a hero: the intro's fly-over). */
+  update(game: Pick<FoldGame, 'boss' | 'hero'>, time: number, dt: number): void {
     const b = game.boss
     // Authored seconds: a faster rush dragon (roadmap #16) plays the same moves, faster.
     const bt = bossClock(b)

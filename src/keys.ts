@@ -57,6 +57,11 @@ export const RUSH_KEY = 'fold_rush'
  * merge keeps the union and the winning side's equipped items where owned.
  */
 export const COSMETICS_KEY = 'fold_cosmetics'
+/**
+ * The first-launch intro (roadmap #12) was watched or skipped: `true` once,
+ * never unset. It never plays again (the settings can replay it on demand).
+ */
+export const INTRO_KEY = 'fold_intro'
 
 // ─── User settings (shared platform layer) ──────────────────────────────────
 

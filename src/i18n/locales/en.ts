@@ -269,7 +269,8 @@ export default {
       'highlight_standard': 'Pulse',
       'highlight_steady': 'Steady',
       'highlight_bold': 'Bold',
-      'seasonal': 'Seasonal decorations'
+      'seasonal': 'Seasonal decorations',
+      'replayIntro': 'Watch the intro again'
     },
     'cosmetics': {
       'title': 'Paper & style',
@@ -323,6 +324,9 @@ export default {
       'again': 'Rush again',
       'back': 'Back to the story',
       'clock': 'Dragon Rush: {time}, par {par}'
+    },
+    'intro': {
+      'skip': 'Skip the intro'
     },
     'a11y': {
       'board': 'Aethel Fold — a pop-up book on a desk',

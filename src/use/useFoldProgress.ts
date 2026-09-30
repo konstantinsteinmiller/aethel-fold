@@ -1,7 +1,7 @@
 import { ref, watch, type Ref } from 'vue'
 import {
   BEST2_KEY, BEST_KEY, BOOK_KEY, CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUN_KEY, RUNS_KEY, RUSH_KEY,
-  SECRETS_KEY, SETTINGS_KEY, STARS_KEY, STATS_KEY, WINS2_KEY, WINS_KEY, COSMETICS_KEY
+  SECRETS_KEY, SETTINGS_KEY, STARS_KEY, STATS_KEY, WINS2_KEY, WINS_KEY, COSMETICS_KEY, INTRO_KEY
 } from '@/keys'
 import { aethelState, getState, setState, setStates } from '@/use/useAethelState'
 import { saveDataVersion, flushSaveNow } from '@/use/useSaveStatus'
@@ -14,6 +14,7 @@ import { bookUnlockedBy, type ShelfProgress } from '@/fold/logic/shelf'
 import { SECRET_TOTAL, countFound, readSecretList, secretsInBook, type SecretId } from '@/fold/logic/secrets'
 import { readRushRecord, rushKey, rushResult, type RushRecord, type RushResult } from '@/fold/logic/rush'
 import { equip, newUnlocks, readCosmetics, withUnlocks, type CosmeticId, type CosmeticsRecord } from '@/fold/logic/cosmetics'
+import type { IntroProfile } from '@/fold/logic/intro'
 
 /**
  * Aethel Fold progress — a module-level singleton view over the fields of
@@ -147,6 +148,8 @@ export const secretsFound: Ref<SecretId[]> = ref(readSecretList(getState(SECRETS
 export const rushBest: Ref<RushRecord> = ref(readRushRecord(getState(RUSH_KEY)))
 /** Paper cosmetics (roadmap #6): what the stars have unlocked, and what is equipped. */
 export const cosmetics: Ref<CosmeticsRecord> = ref(readCosmetics(getState(COSMETICS_KEY)))
+/** The first-launch intro (roadmap #12) was watched or skipped. */
+export const introSeen: Ref<boolean> = ref(getState(INTRO_KEY) === true)
 /** Bumped when a cloud hydrate replaced the progress under a running game. */
 export const progressRevision = ref(0)
 
@@ -168,6 +171,7 @@ const refresh = (): void => {
   secretsFound.value = readSecretList(getState(SECRETS_KEY))
   rushBest.value = readRushRecord(getState(RUSH_KEY))
   cosmetics.value = readCosmetics(getState(COSMETICS_KEY))
+  introSeen.value = getState(INTRO_KEY) === true
 }
 
 watch(aethelState, refresh, { deep: false })
@@ -423,6 +427,29 @@ export const equipCosmetic = (id: string): boolean => {
 
 export const setFoldSetting = <K extends keyof FoldSettings>(key: K, value: FoldSettings[K]): void => {
   setState(SETTINGS_KEY, { ...foldSettings.value, [key]: value })
+}
+
+// ─── The first-launch intro (roadmap #12) ───────────────────────────────────
+
+/**
+ * What the save says about the player, as the intro's policy (`shouldPlayIntro`)
+ * reads it: seen, and any progress at all — a run started, a lesson learned,
+ * a page cleared, a star, a secret, a win, a bookmark past page 1.
+ * `countRuns: false` leaves out the run counter (a late hydrate mid-intro:
+ * this very boot has already started a run).
+ */
+export const introProfile = (countRuns = true): IntroProfile => ({
+  seen: introSeen.value,
+  progress: hasProgress() || (countRuns && runs.value > 0) || Object.values(lessons.value).some(Boolean) ||
+    Object.keys(pageStars.value).length > 0 || secretsFound.value.length > 0
+})
+
+/** The intro was watched or skipped: never again (on this device or, via the cloud save, another). */
+export const markIntroSeen = (): void => {
+  if (introSeen.value) return
+  introSeen.value = true
+  setState(INTRO_KEY, true)
+  void flushSaveNow()
 }
 
 export { flushSaveNow }

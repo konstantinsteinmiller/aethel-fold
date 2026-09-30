@@ -33,6 +33,8 @@ export interface FoldState {
   rush: { time: number; par: number; done: boolean; attempts: number }
   /** Page secrets (roadmap #15): ids found, night mode, this page's secret. */
   secrets: { found: string[]; night: boolean; page: string | null }
+  /** The first-launch intro (roadmap #12) is on screen. */
+  intro: boolean
 }
 
 declare global {
@@ -48,8 +50,14 @@ declare global {
       startRush(book: number): void
       lampScreen(): { x: number; y: number }
       secretScreen(): { x: number; y: number }
+      /** The first-launch intro (roadmap #12). */
+      intro(): { playing: boolean; t: number; duration: number }
+      skipIntro(): boolean
+      replayIntro(): void
       boot(): {
         boot_ms: number; first_input_ms: number; precompile_ms: number; precompile_parallel: boolean; stages: Record<number, number>
+        /** The first-launch intro (roadmap #12): none / playing / skipped / watched, and when page 1 took over. */
+        intro: string; intro_end_ms: number
         /** Standee atlas paint times (ms): at boot, the deferred frames, the season's bats, a hero repaint. */
         paint: { atlasBoot: number; atlasDeferred: number; atlasSeason: number; atlasHero: number }
       }

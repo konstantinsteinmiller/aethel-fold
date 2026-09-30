@@ -114,6 +114,11 @@ export interface GameOptions {
   secrets?: readonly string[]
   /** Night mode (the desk lamp secret), as saved. */
   night?: boolean
+  /**
+   * Play this one page instead of the book's pages (the first-launch intro's
+   * demo page, roadmap #12). Every load, restart or turn reloads it.
+   */
+  page?: PageDef
 }
 
 const createTear = (def: PageDef['tears'][number]): TearState => ({
@@ -238,6 +243,8 @@ export class FoldGame {
   private slowmoColumn = 0
   /** Real seconds of kind slow-mo left. */
   private kindSlowmo = 0
+  /** A page played instead of the book's (`GameOptions.page`). */
+  private readonly pageOverride: PageDef | null
 
   constructor(opts: GameOptions = {}) {
     this.rng = createRng(opts.seed ?? 0x5eed)
@@ -252,6 +259,7 @@ export class FoldGame {
     if (opts.book) this.book = opts.book
     this.secrets = createSecretState(opts.secrets ?? [])
     this.secrets.night = opts.night === true
+    this.pageOverride = opts.page ?? null
   }
 
   // ─── Run / page lifecycle ────────────────────────────────────────────────
@@ -335,7 +343,7 @@ export class FoldGame {
 
   loadPage(id: PageId): void {
     this.pageId = id
-    this.page = pageDef(this.book, id)
+    this.page = this.pageOverride ?? pageDef(this.book, id)
     this.folds = this.page.folds.map(createFold)
     this.tears = this.page.tears.map(createTear)
     const boss = this.page.exit === 'boss'
