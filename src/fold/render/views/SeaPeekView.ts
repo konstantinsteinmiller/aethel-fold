@@ -13,12 +13,11 @@
  *   }
  *
  * `createSeaPeek` builds whatever `setSeaPeekFactory` registered, or the
- * placeholder below. To show the real kraken, Book 3 registers its view once
- * (e.g. next to its own view module, or in `IntroView`'s imports):
+ * placeholder below. The real kraken is registered in `IntroView`'s imports:
  *
  *   setSeaPeekFactory((ctx) => new KrakenPeek(ctx.sprites, ctx.overlay))
  *
- * where `KrakenPeek.update` maps the pose onto the kraken rig: `pose.sea`
+ * (`KrakenPeek.ts`), where `KrakenPeek.update` maps the pose onto the kraken rig: `pose.sea`
  * (0…1, the paper sea popping up and folding away), `pose.rise` (0…1, how far
  * it has surfaced), `pose.x`/`pose.z` (where, behind the top edge),
  * `pose.sway` and `pose.time` (idle motion). The pose comes from
@@ -26,6 +25,7 @@
  * actor only draws. The actor is built lazily, only when the intro plays.
  *
  * ── The placeholder ──────────────────────────────────────────────────────
+ * Kept as the fallback (`setSeaPeekFactory(null)`).
  * Three rows of scalloped paper waves (the sea, a pop-up strip standing on
  * the desk) and, between them, a folded-paper monster: a faceted mantle dome
  * with two eyes and four tentacles that curl and uncurl. Palette sea tones
@@ -69,7 +69,7 @@ export const createSeaPeek = (ctx: SeaPeekContext): SeaPeekActor => (factory ? f
 
 // ─── Placeholder geometry ──────────────────────────────────────────────────
 
-/** Rows of the paper sea: z offset from the spot, height, colour. The monster rises between rows 1 and 2. */
+/** Rows of the paper sea: z offset from the spot, height, colour. The monster rises between rows 1 and 2 (shared with `KrakenPeek`). */
 const SEA_ROWS: readonly { z: number; h: number; c: Col }[] = [
   { z: 0.55, h: 0.75, c: 'waterLight' },
   { z: 0, h: 1.05, c: 'water' },
@@ -77,9 +77,10 @@ const SEA_ROWS: readonly { z: number; h: number; c: Col }[] = [
 ]
 const SEA_HALF = 3.6
 /** Where the monster stands inside the sea (z offset from the spot). */
-const MONSTER_Z = -0.65
+export const MONSTER_Z = -0.65
 
-const seaGeometry = (): BufferGeometry => {
+/** The paper sea: three rows of scalloped waves standing on the desk (the placeholder's and the kraken peek's). */
+export const seaGeometry = (): BufferGeometry => {
   const b = new PaperBuilder()
   const n = 18
   SEA_ROWS.forEach((row, r) => {

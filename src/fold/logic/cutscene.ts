@@ -1,8 +1,9 @@
 /**
  * Cutscenes (C9b): a small, reusable, data-driven runner — a timeline of
  * beats (camera moves, a crowd popping up, firework volleys, cheers, the end)
- * played in real time. The boss outro (`outros.ts`) is its first user; the
- * intro cutscene (C9) can reuse it as is.
+ * played on the real clock. Both cutscenes run on it: the boss outros
+ * (`outros.ts`) and the first-launch intro (`intro.ts`, whose input beats are
+ * windowed `cue` beats the intro's director answers).
  *
  * The runner only keeps time and state: which beats have fired, where each
  * paper person stands and when it popped up, and a tiny firework pool. The
@@ -21,10 +22,18 @@ import { OUTRO, PAGE_HALF_D, PAGE_HALF_W } from './config'
 import type { EventQueue } from './events'
 import { createRng, type Rng } from './rng'
 
-/** Who pops up in a crowd beat. The view maps each to its standee frames and its cheer. */
-export type CutActor = 'villagers' | 'soldiers' | 'farmers' | 'kids'
-/** Where a crowd beat lines up: along an edge of the page. */
-export type CutEdge = 'left' | 'right' | 'top' | 'bottom'
+/**
+ * Who pops up in a crowd beat. The view maps each to its standee frames, its
+ * motion (hopping, leaping out of the sea, bobbing on it) and its cheer.
+ * Book 3 adds the dolphins and the people waving from paper boats.
+ */
+export type CutActor = 'villagers' | 'soldiers' | 'farmers' | 'kids' | 'dolphins' | 'boats'
+/**
+ * Where a crowd beat lines up: along an edge of the page, or (book 3's
+ * finale page, which has a sea along its top) out in the sea and along its
+ * shoreline.
+ */
+export type CutEdge = 'left' | 'right' | 'top' | 'bottom' | 'sea' | 'shore'
 /** A firework volley's colours (the view maps each to a confetti palette). */
 export type FireworkTint = 'festive' | 'gold' | 'cool' | 'warm'
 export const FIREWORK_TINTS: readonly FireworkTint[] = ['festive', 'gold', 'cool', 'warm']
@@ -54,6 +63,13 @@ export type CutBeat =
   | { at: number; kind: 'fireworks'; count: number; gap: number; x0: number; x1: number; z0: number; z1: number; tint: FireworkTint }
   /** Everybody cheers: a hop, arms up, hats in the air, and a "yay!". */
   | { at: number; kind: 'cheer' }
+  /**
+   * A windowed cue for the script's host (the intro's input beats): offered
+   * every frame from `at` until the host takes it or `at + dur` has passed
+   * (then offered once more as late, and dropped). `cue` is the host's own
+   * number for it.
+   */
+  | { at: number; kind: 'cue'; dur: number; cue: number }
   /** The end: the camera goes home and the victory card may come. Always the last beat. */
   | { at: number; kind: 'end' }
 
@@ -88,6 +104,7 @@ export const validateScript = (s: CutScript): string[] => {
     if (b.kind === 'crowd') crowd += b.count
     if (b.kind === 'camera' && !(b.dur > 0 && b.shot.zoom > 0)) out.push(`beat ${i}: bad camera`)
     if (b.kind === 'fireworks' && (b.count < 1 || b.gap < 0)) out.push(`beat ${i}: bad fireworks`)
+    if (b.kind === 'cue' && !(b.dur >= 0)) out.push(`beat ${i}: bad cue`)
   })
   if (s.beats[s.beats.length - 1]?.kind !== 'end') out.push('no end beat')
   if (crowd > OUTRO.crowdCap) out.push(`crowd ${crowd} > cap ${OUTRO.crowdCap}`)
@@ -109,14 +126,23 @@ export interface CrowdMember {
 
 /** Page inset of the crowd lines from the page edges. */
 const EDGE_IN = 0.55
+/** The side lines run from just below the top row (and book 3's beach) down to beside the castle. */
+const SIDE_Z0 = -2.7
+const SIDE_Z1 = 3.4
+/** The top row, just under the printed story line. */
+const TOP_Z = -PAGE_HALF_D + 2.1
 
 /**
  * Where the `j`-th of `n` paper people along `edge` stands (page space).
  * Left and right run down the long edges between the top border and the
  * castle; the top row, under the printed story line, is where the marchers
  * came from; the bottom flanks the player's castle, clear of its keep and
- * towers. Deterministic; `jitter`
- * (−1…1) nudges it off the line so a row doesn't look ruled.
+ * towers. Book 3's finale page has a sea along its top (`OUTRO.seaZ`): the
+ * dolphins swim out in it (`sea`, staggered in two rows so no one hides
+ * another) and the paper boats bob just off the beach (`shore`).
+ * Deterministic; `jitter` (−1…1) nudges it off the line so a row doesn't
+ * look ruled. Nothing on these lines is hidden by the finale page's trees:
+ * the page keeps its props off them (`onCrowdLine`).
  */
 export const crowdSpot = (edge: CutEdge, j: number, n: number, jitter: number, out: { x: number; z: number }): void => {
   const k = n <= 1 ? 0.5 : j / (n - 1)
@@ -125,13 +151,23 @@ export const crowdSpot = (edge: CutEdge, j: number, n: number, jitter: number, o
     case 'right': {
       const s = edge === 'left' ? -1 : 1
       out.x = s * (PAGE_HALF_W - EDGE_IN) + jitter * 0.18
-      out.z = -PAGE_HALF_D + 2.2 + k * (PAGE_HALF_D * 2 - 5.6) + jitter * 0.2
+      out.z = SIDE_Z0 + k * (SIDE_Z1 - SIDE_Z0) + jitter * 0.2
       return
     }
     case 'top':
       // Just under the printed story line, never on it.
       out.x = -PAGE_HALF_W + 1.4 + k * (PAGE_HALF_W * 2 - 2.8) + jitter * 0.2
-      out.z = -PAGE_HALF_D + 2.1 + jitter * 0.15
+      out.z = TOP_Z + jitter * 0.15
+      return
+    case 'sea':
+      // Out in the water, in two staggered rows (the far one a little further out).
+      out.x = -PAGE_HALF_W + 1.3 + k * (PAGE_HALF_W * 2 - 2.6) + jitter * 0.25
+      out.z = OUTRO.seaZ - 1.15 - (j % 2) * 0.55 + jitter * 0.12
+      return
+    case 'shore':
+      // Just off the beach, in front of the dolphins' rows.
+      out.x = -PAGE_HALF_W + 1.0 + k * (PAGE_HALF_W * 2 - 2.0) + jitter * 0.2
+      out.z = OUTRO.seaZ - 0.5 + jitter * 0.08
       return
     case 'bottom': {
       // Alternate sides, outward from beside the towers, three to a row.
@@ -142,6 +178,24 @@ export const crowdSpot = (edge: CutEdge, j: number, n: number, jitter: number, o
       return
     }
   }
+}
+
+/**
+ * Is (x, z) on or just in front of a crowd line (the finale pages keep their
+ * trees off it)? A tree a little down the page from a paper person stands
+ * between it and the steep play camera, so the band reaches further toward
+ * the camera (+z) than away from it. Covers every land edge `crowdSpot`
+ * uses; the sea has no trees anyway.
+ */
+export const onCrowdLine = (x: number, z: number): boolean => {
+  const ax = Math.abs(x)
+  // The long sides.
+  if (ax > PAGE_HALF_W - EDGE_IN - 0.8 && z > SIDE_Z0 - 0.7 && z < SIDE_Z1 + 1.3) return true
+  // The top row.
+  if (z > TOP_Z - 0.5 && z < TOP_Z + 1.4) return true
+  // Beside the castle (the bottom rows).
+  if (ax > 2.5 && z > 3.6) return true
+  return false
 }
 
 // ─── Fireworks ─────────────────────────────────────────────────────────────
@@ -237,11 +291,23 @@ export const fireworkParticleCap = (lite: boolean): number => {
 
 // ─── Runner ────────────────────────────────────────────────────────────────
 
+/** The host of a script's `cue` beats (the intro's director): acts on a cue, true when it did. */
+export interface CutCueHost {
+  cue(cue: number, late: boolean): boolean
+}
+
+/** Cue beats waiting for their host at once, at most (the intro's windows overlap by two or three). */
+const CUE_CAP = 16
+
 /**
  * Plays one script at a time. `update(realDt, events)` advances the clock and
  * fires every beat whose time has come, in order, emitting `outroBeat`
  * (a = beat index, b = 1 when the skip fired it). `start` emits `outro`
  * a = 1; the end (reached or skipped) emits `outro` a = 0, b = 1 if skipped.
+ *
+ * The clock is the real one: callers pass the frame's real dt, capped only
+ * at `OUTRO.maxDt` (a tab switch), never the game's 0.05 s clamp — so a
+ * script takes as long on a 12 fps phone as on a desktop.
  */
 export class CutsceneRunner {
   script: CutScript | null = null
@@ -267,14 +333,20 @@ export class CutsceneRunner {
   private readonly fuseY = new Float32Array(OUTRO.fuseCap)
   private readonly fuseTint = new Uint8Array(OUTRO.fuseCap)
   private fuses = 0
+  // Cue beats offered to the host until taken or late (beat indices, in script order).
+  private host: CutCueHost | null = null
+  private readonly pending = new Int16Array(CUE_CAP)
+  private pendingN = 0
 
   constructor() {
     for (let i = 0; i < OUTRO.crowdCap; i++) this.crowd.push({ actor: 'villagers', x: 0, z: 0, popAt: 0, seed: 0 })
   }
 
-  /** Begin `script` (seeded, so a replay lays the crowd out the same). */
-  start(script: CutScript, ev: EventQueue, seed = 1): void {
+  /** Begin `script` (seeded, so a replay lays the crowd out the same); `host` answers its `cue` beats. */
+  start(script: CutScript, ev: EventQueue, seed = 1, host: CutCueHost | null = null): void {
     this.script = script
+    this.host = host
+    this.pendingN = 0
     this.active = true
     this.time = 0
     this.skipped = false
@@ -291,6 +363,8 @@ export class CutsceneRunner {
   /** Forget everything (a new run or page): the crowd goes, nothing is emitted. */
   stop(): void {
     this.script = null
+    this.host = null
+    this.pendingN = 0
     this.active = false
     this.time = 0
     this.skipped = false
@@ -335,19 +409,30 @@ export class CutsceneRunner {
     return true
   }
 
-  update(dt: number, ev: EventQueue): void {
+  update(realDt: number, ev: EventQueue): void {
     if (!this.active) return
     const s = this.script!
+    const dt = Math.min(Math.max(realDt, 0), OUTRO.maxDt)
     this.time += dt
-    // Beats whose time has come, in order.
+    // Beats whose time has come, in order (a cue waits in line for its host).
+    let ended = -1
     while (this.cursor < s.beats.length && s.beats[this.cursor]!.at <= this.time) {
       const i = this.cursor++
       const b = s.beats[i]!
-      this.fire(b, i, ev)
       if (b.kind === 'end') {
-        this.finish(ev)
-        return
+        ended = i
+        break
       }
+      if (b.kind === 'cue') {
+        if (this.pendingN < CUE_CAP) this.pending[this.pendingN++] = i
+        else this.offer(i, true, ev)
+      } else this.fire(b, i, ev)
+    }
+    this.offerCues(ev)
+    if (ended >= 0) {
+      this.fire(s.beats[ended]!, ended, ev)
+      this.finish(ev)
+      return
     }
     // Fuses.
     for (let i = 0; i < this.fuses; ) {
@@ -369,6 +454,27 @@ export class CutsceneRunner {
     this.fireworks.update(dt, ev)
   }
 
+  /** Offer every waiting cue to the host, in script order; drop those taken or late. */
+  private offerCues(ev: EventQueue): void {
+    const beats = this.script!.beats
+    let keep = 0
+    for (let k = 0; k < this.pendingN; k++) {
+      const i = this.pending[k]!
+      const b = beats[i]!
+      const late = b.kind === 'cue' && this.time >= b.at + b.dur
+      if (!this.offer(i, late, ev) && !late) this.pending[keep++] = i
+    }
+    this.pendingN = keep
+  }
+
+  /** One cue to the host: true when it acted (emits `outroBeat` then). */
+  private offer(i: number, late: boolean, ev: EventQueue): boolean {
+    const b = this.script!.beats[i]!
+    if (b.kind !== 'cue' || !this.host?.cue(b.cue, late)) return false
+    ev.emit('outroBeat', i, 0)
+    return true
+  }
+
   private fire(b: CutBeat, i: number, ev: EventQueue): void {
     switch (b.kind) {
       case 'crowd':
@@ -383,7 +489,7 @@ export class CutsceneRunner {
           this.fuseAt[f] = b.at + k * gap
           this.fuseX[f] = this.rng.range(b.x0, b.x1)
           this.fuseZ[f] = this.rng.range(b.z0, b.z1)
-          this.fuseY[f] = this.rng.range(3.2, 4.4)
+          this.fuseY[f] = this.rng.range(OUTRO.burstLow, OUTRO.burstHigh)
           this.fuseTint[f] = FIREWORK_TINTS.indexOf(b.tint)
         }
         break
@@ -392,6 +498,7 @@ export class CutsceneRunner {
         this.cheerAt = b.at
         break
       case 'camera':
+      case 'cue':
       case 'end':
         break
     }
@@ -413,6 +520,7 @@ export class CutsceneRunner {
   private finish(ev: EventQueue): void {
     this.active = false
     this.fuses = 0
+    this.pendingN = 0
     // Rockets still rising never burst (scripts end after their last burst; a skip drops them).
     this.fireworks.clear()
     ev.emit('outro', 0, this.skipped ? 1 : 0)

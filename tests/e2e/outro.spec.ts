@@ -8,8 +8,16 @@ import { ALL_LESSONS, collectErrors, ff, readSave, seedState, state, waitForGame
  */
 const SHOTS = process.env.OUTRO_SHOTS ?? 'test-results'
 
+/**
+ * The outro runs on the real clock (a 5 fps software renderer would race
+ * through it between two assertions): hold the live clock, so only the
+ * fast-forwards move it.
+ */
+const hold = (page: Page) => page.evaluate(() => window.__fold!.holdClock(true))
+
 /** Beat book `book`'s dragon and fold the finale: stops on the victory frame (the outro has just begun). */
 const beatBoss = async (page: Page, book = 1): Promise<void> => {
+  await hold(page)
   await page.evaluate((b) => window.__fold!.jumpTo(5, b), book)
   await ff(page, 1)
   await page.evaluate(() => window.__fold!.clearPage())
@@ -106,6 +114,44 @@ test.describe('Aethel Fold — the boss outro', () => {
     await ff(page, 0.1)
     expect((await outro(page)).active).toBe(false)
     await expect(page.getByTestId('outro-skip')).toHaveCount(0)
+  })
+
+  test('book 3: the kraken\'s defeat is saved, dolphins leap and paper boats wave with the fireworks, a tap skips to the card', async ({ page }) => {
+    const errors = collectErrors(page)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await seedState(page, {
+      fold_lessons: ALL_LESSONS, fold_wins: 1, fold_cleared: 6, fold_wins2: 1, fold_cleared2: 6, fold_book: 3, fold_page: 5, fold_cleared3: 4
+    })
+    await page.goto('/')
+    await waitForGame(page)
+    await beatBoss(page, 3)
+    // Saved before the outro: the kraken's book is won.
+    await expect.poll(async () => (await readSave(page))?.fold_wins3).toBe(1)
+    let o = await outro(page)
+    expect(o.active).toBe(true)
+    expect(o.script).toBe('b3-outro')
+    await expect(page.getByTestId('outro-skip')).toBeVisible()
+    // The dolphins, the boats and the banks' crowd, and the first fireworks.
+    await ff(page, 2.4)
+    await frames(page)
+    o = await outro(page)
+    expect(o.cast.filter((a) => a === 'dolphins')).toHaveLength(5)
+    expect(o.cast.filter((a) => a === 'boats')).toHaveLength(3)
+    expect(o.crowd).toBeGreaterThanOrEqual(18)
+    expect(o.crowdShown).toBe(true)
+    expect(o.chips).toBeGreaterThan(0)
+    expect(o.dropped).toBe(0)
+    await page.screenshot({ path: `${SHOTS}/outro-b3-dolphins.png` })
+    // A tap on the page skips; the victory card follows.
+    await page.mouse.click(195, 520)
+    await ff(page, 0.1)
+    o = await outro(page)
+    expect(o.active).toBe(false)
+    expect(o.skipped).toBe(true)
+    await expect(page.getByText('The sea is calm.', { exact: false })).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('victory-rush')).toContainText('Kraken Rush')
+    expect((await state(page)).phase).toBe('victory')
+    expect(errors).toEqual([])
   })
 
   test('Dragon Rush never plays it', async ({ page }) => {

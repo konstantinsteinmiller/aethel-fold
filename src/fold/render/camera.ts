@@ -362,7 +362,8 @@ export class DeskCamera {
     cam.updateMatrixWorld(true)
   }
 
-  update(dt: number): void {
+  /** `cutDt`: the real frame time for the cutscene framing (a cutscene runs on the real clock; `dt` is clamped). */
+  update(dt: number, cutDt = dt): void {
     this.shakeTime += dt
     this.shakeAmp = Math.max(0, this.shakeAmp - dt * 1.6 * Math.max(0.3, this.shakeAmp * 6))
     // Critically-damped spring for the punch.
@@ -378,7 +379,7 @@ export class DeskCamera {
       this.pose()
     }
     this.distance = this.baseDistance * this.zoom * (1 + this.punch * 0.06)
-    this.updateCut(dt)
+    this.updateCut(cutDt)
     this.placeCut(this.distance)
     if (this.shakeAmp > 0.0005) {
       // GDD §5: sharp, low-amplitude, high-frequency, *vertical*.

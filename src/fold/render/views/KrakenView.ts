@@ -26,10 +26,15 @@
  * the mantle's core is the fifth. `anchors` are their world points (the game
  * projects them onto the page for the gesture layer, like the dragon's), and
  * `mouth`/`mouthDir` are the beak the ink jet leaves from.
+ *
+ * The rig only reads a boss (`update({ boss })`), so a puppet boss can pose
+ * it outside a fight: the intro's sea peek (`KrakenPeek`) drives it through
+ * the surfacing pose, with `look` (the head turned to peer around) and
+ * `sleepy` (eyelids down) on top.
  */
 
 import { Group, InstancedMesh, Mesh, Quaternion, Vector3, type BufferGeometry, type Scene } from 'three'
-import type { FoldGame } from '../../logic/game'
+import type { Boss } from '../../logic/types'
 import { KRAKEN } from '../../logic/config'
 import { krakenClock } from '../../logic/kraken'
 import { clamp01, easeOutBack } from '../../logic/math'
@@ -227,6 +232,10 @@ export class KrakenView {
   private glare = 0
   private sad = 0
   private lastRev = -1
+  /** Head turn (radians about the vertical): a puppet peering around (the intro's peek). 0 in a fight. */
+  look = 0
+  /** 0…1 eyelids down (asleep): the intro's peek opens its eyes as it surfaces. 0 in a fight. */
+  sleepy = 0
 
   constructor(sprites: SpriteTextures, overlay: Scene) {
     this.bodyMat = createPaperMaterial({ vertexColors: true, grain: 0.05 })
@@ -305,7 +314,8 @@ export class KrakenView {
     this.group.userData.perfTag = 'fold.kraken'
   }
 
-  update(game: FoldGame, time: number, dt: number): void {
+  /** Pose the rig from a boss (the fight's, or a puppet's). */
+  update(game: { readonly boss: Boss }, time: number, dt: number): void {
     const b = game.boss
     const ph = b.phase
     if (b.kind !== 'kraken' || ph === 'flat') {
@@ -352,12 +362,13 @@ export class KrakenView {
     // (Hurt, it looks up at the camera, wide-eyed: the face tips toward the lens.)
     this.head.rotation.x = -0.26 - rear * 0.16 - this.sad * 0.2
     this.head.rotation.z = Math.sin(time * 1.1) * 0.05 * (1 - rear)
+    this.head.rotation.y = this.look
     this.bodyMat.uniforms.uFlash.value = this.hurtFlash * 0.6
     this.bodyMat.uniforms.uHighlight.value = b.exposed === 4 && ph === 'exposed' ? 1 : 0
 
     // The face: brows fold down into a glare (inner ends low) or lift into a sad, surprised look;
     // the eyes narrow when it glares, go wide when it hurts, and blink now and then.
-    const blink = ph === 'dormant' ? 1 : time % 3.7 < 0.12 ? 0.15 : 1
+    const blink = (ph === 'dormant' ? 1 : time % 3.7 < 0.12 ? 0.15 : 1) * (1 - this.sleepy * 0.88)
     const narrow = 1 - this.glare * 0.42
     const wide = 1 + this.sad * 0.22
     const tilt = this.glare * 0.5 - this.sad * 0.45

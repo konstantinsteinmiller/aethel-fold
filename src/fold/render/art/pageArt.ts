@@ -23,7 +23,7 @@
  */
 
 import type { CanvasTexture } from 'three'
-import { BOAT, PAGE_D, PAGE_HALF_D, PAGE_HALF_W, PAGE_W, PLEAT } from '../../logic/config'
+import { BOAT, OUTRO, PAGE_D, PAGE_HALF_D, PAGE_HALF_W, PAGE_W, PLEAT } from '../../logic/config'
 import type { FoldDef, PageDef } from '../../logic/types'
 import type { Rng } from '../../logic/rng'
 import type { PaperPattern } from '../../logic/cosmetics'
@@ -566,8 +566,10 @@ const paintCore = (ctx: CanvasRenderingContext2D, _page: PageDef, rng: Rng): voi
   ctx.restore()
 }
 
-const paintFinale = (ctx: CanvasRenderingContext2D, _page: PageDef, rng: Rng): void => {
+const paintFinale = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
   meadows(ctx, rng, 9)
+  // Book 3's "Calm Water": the sea along the top, where the outro's dolphins leap and its paper boats bob.
+  if (page.book === 3) seaTop(ctx, rng, OUTRO.seaZ)
   flowers(ctx, rng, 120)
   // Printed confetti and stars around the edges.
   const cols = [HEX.c1, HEX.c2, HEX.c3, HEX.c4, HEX.c5, HEX.c6]
@@ -939,6 +941,10 @@ const pool = (ctx: CanvasRenderingContext2D, rng: Rng, x: number, z: number, r: 
 export const SEA_SHORE: Readonly<Partial<Record<PageDef['theme'], number>>> = {
   harbour: -4.9, marsh: -5.7, lighthouse: -5.2, shipyard: -5.6, deep: -1.9
 }
+
+/** A page's printed shoreline, if it has a sea (book 3's sea pages, and its finale page). */
+export const shoreOf = (page: PageDef): number | undefined =>
+  SEA_SHORE[page.theme] ?? (page.book === 3 && page.theme === 'finale' ? OUTRO.seaZ : undefined)
 
 /** The page's roads from the beach down (the marchers wade out of the sea to them). */
 const roadsAshore = (ctx: CanvasRenderingContext2D, page: PageDef, shoreZ: number, width: number): void => {
@@ -1588,7 +1594,7 @@ const winterPrint = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): vo
   v.globalCompositeOperation = 'source-over'
   ctx.drawImage(vc, 0, 0)
   // Snow lies on land: not in a boat channel, not out on the sea (book 3).
-  const shore = SEA_SHORE[page.theme]
+  const shore = shoreOf(page)
   const dry = (x: number, z: number): boolean => {
     if (shore !== undefined && z < shore + 0.4) return false
     for (const f of page.folds) {

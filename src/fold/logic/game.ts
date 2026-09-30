@@ -687,7 +687,8 @@ export class FoldGame {
       case 'victory':
         this.updateHero(simDt)
         if (this.outro.active) {
-          this.outro.update(realDt, this.events)
+          // The real clock (only capped at `OUTRO.maxDt`), not the 0.05 s clamp: the outro never stretches on a slow phone.
+          this.outro.update(realDtIn, this.events)
           // A cheer beat: the hero on his keep cheers with the crowd.
           if (this.outroCheered !== this.outro.cheerAt) {
             this.outroCheered = this.outro.cheerAt

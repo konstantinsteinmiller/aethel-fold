@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { ALL_LESSONS, collectErrors, ff, readSave, seedState, state, swipe, tapShelf, waitForGame } from './helpers'
+import { ALL_LESSONS, collectErrors, ff, readSave, seedState, skipOutro, state, swipe, tapShelf, waitForGame } from './helpers'
 
 // Roadmap #3: Book 3 — "The Sea of Paper" (aethel-fold-GDD §13).
 
@@ -109,6 +109,8 @@ test.describe('Aethel Fold — book 3 (The Sea of Paper)', () => {
     await page.evaluate(() => window.__fold!.game.foldNow(0))
     for (let i = 0; i < 12 && (await state(page)).phase !== 'victory'; i++) await ff(page, 0.5)
     expect((await state(page)).phase).toBe('victory')
+    // Book 3's dolphin outro (the win is already saved); past it to the card.
+    await skipOutro(page)
     await expect(page.getByText('The sea is calm.', { exact: false })).toBeVisible({ timeout: 8000 })
     await expect(page.getByTestId('victory-rush')).toContainText('Kraken Rush')
     const save = await readSave(page)

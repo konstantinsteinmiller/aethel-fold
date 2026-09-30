@@ -22,7 +22,7 @@ import { Box3, Color, Mesh, Scene, SpotLight, Vector3, type WebGLRenderTarget } 
 import type { FoldGame } from '../logic/game'
 import type { FoldEvent } from '../logic/events'
 import { BLOCK_BEARER, KILL_BOLT, KILL_CAPSIZE, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from '../logic/events'
-import { CASTLE, DESK_LAMP, PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME, PAGE_HALF_D, PAGE_HALF_W, SHELF } from '../logic/config'
+import { CASTLE, DESK_LAMP, KRAKEN, PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME, PAGE_HALF_D, PAGE_HALF_W, SHELF } from '../logic/config'
 import { SECRET_IDS } from '../logic/secrets'
 import { PAGE_COUNT, pageDef } from '../logic/pages'
 import type { PageDef, PageId } from '../logic/types'
@@ -705,8 +705,16 @@ export class GameView {
           fx.burst(a.x, a.y, a.z, { count: 70, palette: g.boss.kind === 'kraken' ? 'kraken' : 'dragon', speed: 6, up: 5 })
           fx.burst(a.x, a.y, a.z, { count: 30, palette: 'gold', speed: 4, up: 5 })
           fx.glow(a.x, a.y, a.z, 3.5, 0.6, 'star', 'highlightHot', 4)
-          this.project(a.x, a.y, a.z, this.sp)
-          this.signals.word(w?.mode === 'crease' ? 'crease' : 'rip', this.sp.x, this.sp.y - 30, 1.4, 'crease')
+          if (g.boss.kind === 'kraken') {
+            // The kraken's weak points sit around its face: the word goes out beside the hurt arm
+            // (below the beak for the core), down the page, never over the eyes it is pulling.
+            const side = e.a >= 4 ? 0 : a.x < KRAKEN.bodyX ? -1 : 1
+            this.project(a.x + side * 1.1, 0.4, a.z + (side === 0 ? 3.2 : 1.9), this.sp)
+            this.signals.word(w?.mode === 'crease' ? 'crease' : 'rip', this.sp.x, this.sp.y, 1.4, 'crease')
+          } else {
+            this.project(a.x, a.y, a.z, this.sp)
+            this.signals.word(w?.mode === 'crease' ? 'crease' : 'rip', this.sp.x, this.sp.y - 30, 1.4, 'crease')
+          }
         }
         this.desk.shake(0.25)
         this.white = 0.3
@@ -850,7 +858,8 @@ export class GameView {
 
   // ─── Frame ───────────────────────────────────────────────────────────────
 
-  update(dt: number): void {
+  /** `cutDt`: the frame's real time for the cutscene camera (the outro runs on the real clock, `dt` is clamped). */
+  update(dt: number, cutDt = dt): void {
     const g = this.game
     this.time += dt
     paperGlobals.uTime.value = this.time
@@ -989,7 +998,7 @@ export class GameView {
     }
     // Out at the shelf or back at the book (real time, whatever the world's clock).
     this.desk.setShelf(g.shelf.open)
-    this.desk.update(dt)
+    this.desk.update(dt, cutDt)
     this.shelf.update(g, dt, this.desk.shelfK)
 
     // Composite juice.

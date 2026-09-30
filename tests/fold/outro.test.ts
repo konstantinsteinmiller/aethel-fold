@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { FoldGame } from '@/fold/logic/game'
 import { OUTRO, PAGE_HALF_D, PAGE_HALF_W, SHELF } from '@/fold/logic/config'
 import {
-  CutsceneRunner, FW_FREE, FireworkPool, SHOT_HOME, crowdSpot, fireworkParticleCap, scriptDuration, sparksPerBurst,
+  CutsceneRunner, FW_FREE, FireworkPool, SHOT_HOME, crowdSpot, fireworkParticleCap, onCrowdLine, scriptDuration, sparksPerBurst,
   trailChips, validateScript, type CutEdge, type CutScript
 } from '@/fold/logic/cutscene'
-import { OUTROS, OUTRO_BOOK1, OUTRO_BOOK2, outroFor } from '@/fold/logic/outros'
+import { OUTROS, OUTRO_BOOK1, OUTRO_BOOK2, OUTRO_BOOK3, outroFor } from '@/fold/logic/outros'
 import { EventQueue, type FoldEventType } from '@/fold/logic/events'
 import type { BookId } from '@/fold/logic/types'
 import { ALL_LESSONS_LEARNED } from './bot'
@@ -81,7 +81,23 @@ describe('outro scripts (data)', () => {
   it('looks a script up per book; a book without one gets none', () => {
     expect(outroFor(1)).toBe(OUTRO_BOOK1)
     expect(outroFor(2)).toBe(OUTRO_BOOK2)
-    expect(outroFor(3 as BookId)).toBeNull()
+    expect(outroFor(3)).toBe(OUTRO_BOOK3)
+    expect(outroFor(4 as BookId)).toBeNull()
+  })
+
+  it('book 3: dolphins in the sea and paper boats along its shore, then the banks cheer', () => {
+    const cast = (actor: string) => OUTRO_BOOK3.beats.filter((b) => b.kind === 'crowd' && b.actor === actor)
+    const dolphins = cast('dolphins')
+    const boats = cast('boats')
+    expect(dolphins).toHaveLength(1)
+    expect(boats).toHaveLength(1)
+    expect(dolphins[0]!.kind === 'crowd' && dolphins[0]!.edge).toBe('sea')
+    expect(boats[0]!.kind === 'crowd' && boats[0]!.edge).toBe('shore')
+    // Nobody lines up along the top edge in book 3: that is the sea.
+    expect(OUTRO_BOOK3.beats.some((b) => b.kind === 'crowd' && b.edge === 'top')).toBe(false)
+    // The dolphins' spray fits the particle budget on top of the fireworks.
+    const n = dolphins.reduce((k, b) => k + (b.kind === 'crowd' ? b.count : 0), 0)
+    expect(fireworkParticleCap(false) + n * OUTRO.splashChips).toBeLessThanOrEqual(OUTRO.maxParticles)
   })
 
   it('validation catches a missing end, an out-of-order beat and an oversized crowd', () => {
@@ -94,7 +110,7 @@ describe('outro scripts (data)', () => {
 
   it('crowd spots are finite, on the page, and the bottom row stays clear of the keep and towers', () => {
     const out = { x: 0, z: 0 }
-    for (const edge of ['left', 'right', 'top', 'bottom'] as CutEdge[]) {
+    for (const edge of ['left', 'right', 'top', 'bottom', 'sea', 'shore'] as CutEdge[]) {
       for (let n = 1; n <= 8; n++) {
         for (let j = 0; j < n; j++) {
           for (const jitter of [-1, 0, 1]) {
@@ -103,10 +119,33 @@ describe('outro scripts (data)', () => {
             expect(Math.abs(out.x)).toBeLessThan(PAGE_HALF_W)
             expect(Math.abs(out.z)).toBeLessThan(PAGE_HALF_D)
             if (edge === 'bottom') expect(Math.abs(out.x)).toBeGreaterThan(2.9)
+            // Book 3: the dolphins out in the sea, the boats in it too, the side lines on the beach below it.
+            if (edge === 'sea' || edge === 'shore') expect(out.z).toBeLessThan(OUTRO.seaZ)
+            if (edge === 'sea') expect(out.z).toBeLessThan(OUTRO.seaZ - 0.9)
+            if (edge === 'left' || edge === 'right') expect(out.z).toBeGreaterThan(OUTRO.seaZ)
           }
         }
       }
     }
+  })
+
+  it('the finale pages keep their trees off every land crowd line (onCrowdLine)', () => {
+    const out = { x: 0, z: 0 }
+    for (const edge of ['left', 'right', 'top', 'bottom'] as CutEdge[]) {
+      for (let n = 1; n <= 6; n++) {
+        for (let j = 0; j < n; j++) {
+          for (const jitter of [-1, 0, 1]) {
+            crowdSpot(edge, j, n, jitter, out)
+            // The spot itself, and just in front of it (toward the camera: a tree there would hide it).
+            expect(onCrowdLine(out.x, out.z), `${edge} ${j}/${n}`).toBe(true)
+            expect(onCrowdLine(out.x, out.z + 0.5), `${edge} ${j}/${n} front`).toBe(true)
+          }
+        }
+      }
+    }
+    // The middle of the page (where the finale's flap and the laurel ring are) stays free.
+    expect(onCrowdLine(0, 0)).toBe(false)
+    expect(onCrowdLine(2, -1)).toBe(false)
   })
 })
 
@@ -179,6 +218,62 @@ describe('cutscene runner', () => {
     // A second skip does nothing; later updates emit nothing.
     expect(r.skip(ev)).toBe(false)
     expect(run(r, ev, 3)).toEqual([])
+  })
+
+  it('runs on the real clock: at 10 fps (dt 0.1, twice the game clamp) a script still ends on time', () => {
+    const r = new CutsceneRunner()
+    const ev = new EventQueue()
+    r.start(OUTRO_BOOK1, ev)
+    let frames = 0
+    while (r.active && frames < 1000) {
+      r.update(0.1, ev)
+      ev.clear()
+      frames++
+    }
+    // 7.2 s of script in ~72 frames of 0.1 s (not ~144: the 0.05 s clamp would double it).
+    expect(frames * 0.1).toBeGreaterThanOrEqual(scriptDuration(OUTRO_BOOK1) - 1e-6)
+    expect(frames * 0.1).toBeLessThan(scriptDuration(OUTRO_BOOK1) + 0.1 + 1e-6)
+    // A tab switch (a huge dt) is capped: one frame never jumps the whole script.
+    const s = new CutsceneRunner()
+    s.start(OUTRO_BOOK1, ev)
+    s.update(30, ev)
+    expect(s.time).toBeCloseTo(OUTRO.maxDt, 9)
+    expect(s.active).toBe(true)
+  })
+
+  it('cue beats: offered to the host every frame of their window, in order, until taken; late ones once more', () => {
+    const r = new CutsceneRunner()
+    const ev = new EventQueue()
+    const script: CutScript = {
+      id: 'cues',
+      beats: [
+        { at: 0.1, kind: 'cue', dur: 0.3, cue: 7 },
+        { at: 0.2, kind: 'cue', dur: 0.1, cue: 8 },
+        { at: 1, kind: 'end' }
+      ]
+    }
+    expect(validateScript(script)).toEqual([])
+    const calls: [number, boolean, number][] = []
+    let take7 = false
+    r.start(script, ev, 1, {
+      cue: (c, late) => {
+        calls.push([c, late, r.time])
+        return c === 7 ? take7 : false
+      }
+    })
+    run(r, ev, 0.35)
+    // Both offered, 7 before 8 in every frame, 8 dropped after its late offer.
+    expect(calls.every(([c, , t]) => (c === 7 ? t >= 0.1 : t >= 0.2))).toBe(true)
+    const eights = calls.filter(([c]) => c === 8)
+    expect(eights[eights.length - 1]![1]).toBe(true)
+    expect(eights.filter(([, late]) => late)).toHaveLength(1)
+    take7 = true
+    const seen = run(r, ev, 0.1)
+    expect(seen.filter((e) => e.type === 'outroBeat')).toEqual([expect.objectContaining({ a: 0, b: 0 })])
+    const n = calls.length
+    run(r, ev, 1)
+    expect(calls.length).toBe(n)
+    expect(r.active).toBe(false)
   })
 
   it('stop forgets everything without a word', () => {
@@ -279,6 +374,29 @@ describe('the outro in the game', () => {
     expect(g.outro.script).toBe(OUTRO_BOOK2)
   })
 
+  it('book 3: after the kraken, the fish is folded, the win is saved first, then the dolphins and boats', () => {
+    const seen: Seen[] = []
+    const g = toVictory(3, seen)
+    expect(g.outro.script).toBe(OUTRO_BOOK3)
+    expect(seen.findIndex((e) => e.type === 'victory')).toBeLessThan(seen.findIndex((e) => e.type === 'outro' && e.a === 1))
+    step(g, 1.2)
+    const actors = new Set(g.outro.crowd.slice(0, g.outro.crowdCount).map((m) => m.actor))
+    expect(actors.has('dolphins')).toBe(true)
+    expect(actors.has('boats')).toBe(true)
+    // The skip works as in the other books: straight to the card.
+    expect(g.skipOutro()).toBe(true)
+    expect(g.outro.active).toBe(false)
+    expect(g.outro.crowdCount).toBe(crowdOf(OUTRO_BOOK3))
+    expect(g.phase).toBe('victory')
+  })
+
+  it('the game feeds the outro its real dt, not the 0.05 s clamp (no stretch below 20 fps)', () => {
+    const g = toVictory(1)
+    const t0 = g.outro.time
+    g.update(0.2)
+    expect(g.outro.time - t0).toBeCloseTo(0.2, 9)
+  })
+
   it('holds the shelf back while it plays; its end starts the shelf clock', () => {
     const g = toVictory(1)
     g.setShelfProgress({ wins: [1, 0], cleared: [6, 0], stars: [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0]] })
@@ -321,8 +439,8 @@ describe('the outro in the game', () => {
     expect(h.outro.time).toBe(t)
   })
 
-  it('is never played in Dragon Rush', () => {
-    for (const book of [1, 2] as const) {
+  it('is never played in Dragon (or Kraken) Rush', () => {
+    for (const book of [1, 2, 3] as const) {
       const g = new FoldGame({ learned: ALL_LESSONS_LEARNED, demos: false })
       g.startRun({ mode: 'dragonRush', book })
       step(g, 1)

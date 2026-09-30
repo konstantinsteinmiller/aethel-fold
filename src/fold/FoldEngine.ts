@@ -26,7 +26,7 @@ import { FoldAudio } from './audio/FoldAudio'
 import { haptics } from './haptics'
 import { getAudioContext } from '@/use/useAssets'
 import { SHELF_NONE, type ShelfProgress } from './logic/shelf'
-import { SLOW_MODE_SCALE } from './logic/config'
+import { OUTRO, SLOW_MODE_SCALE } from './logic/config'
 import type { Look } from './logic/cosmetics'
 import { IntroDirector, INTRO_PAGE, skipIntro as skipIntroState } from './logic/intro'
 import { LESSON_IDS } from './logic/lessons'
@@ -113,6 +113,13 @@ export class FoldEngine {
   private skipPtr = -1
   /** Low quality setting / reduced motion: the outro's lighter fireworks (C9b). */
   private lowQuality = false
+  /**
+   * Tests only (the DEV handle's `holdClock`): the frame loop keeps rendering
+   * but advances no clock — only `fastForward` moves time. The cutscenes run
+   * on the real clock, which a 5 fps software-rendered test browser would
+   * otherwise race through between two assertions.
+   */
+  holdClock = false
   /** A pointer that went down on the desk lamp (−1 none), and where and when. */
   private lampPtr = -1
   private lampX = 0
@@ -177,6 +184,7 @@ export class FoldEngine {
   async prewarm(timeoutMs = 2000): Promise<{ ms: number; parallel: boolean }> {
     const t0 = performance.now()
     this.dispatch()
+    this.prewarmCutscenes()
     if (!this.view.canCompileParallel()) {
       this.compileLater = true
       return { ms: performance.now() - t0, parallel: false }
@@ -190,6 +198,16 @@ export class FoldEngine {
     ])
     if (timer) clearTimeout(timer)
     return { ms: performance.now() - t0, parallel: true }
+  }
+
+  /**
+   * Called from `prewarm` on both paths: the one program `compile` cannot
+   * reach — the outro crowd's shadow-depth program (shadow passes are not
+   * compiled ahead) — is linked by drawing the empty crowd into the first
+   * frames, behind the splash, instead of on the outro's first frame.
+   */
+  private prewarmCutscenes(): void {
+    this.view.outro.prewarm()
   }
 
   start(): void {
@@ -441,16 +459,19 @@ export class FoldEngine {
   private frame(now: number): void {
     const dtMs = now - this.last
     this.last = now
-    const dt = Math.min(0.05, Math.max(0, dtMs / 1000))
+    const held = this.holdClock
+    const dt = held ? 0 : Math.min(0.05, Math.max(0, dtMs / 1000))
+    // The cutscenes' clock: real time, capped only for a tab switch (the game clamps the rest to 0.05 s).
+    const realDt = held ? 0 : Math.min(OUTRO.maxDt, Math.max(0, dtMs / 1000))
     const g = this.game
     if (this.intro) {
-      this.introFrame(dt, dtMs, now)
+      this.introFrame(dt, realDt, dtMs, now)
       return
     }
     // Hold to fold (roadmap #14) advances with the real clock, not the world's.
     this.gestures.frame(now)
-    g.update(dt)
-    this.view.update(g.paused ? dt * 0.25 : dt)
+    g.update(realDt)
+    this.view.update(g.paused ? dt * 0.25 : dt, g.paused ? dt * 0.25 : realDt)
     this.dispatch()
     this.view.render()
     this.audio?.update()
@@ -463,10 +484,10 @@ export class FoldEngine {
    * does not (its page is hidden and waits, untouched). The desk, camera,
    * effects and composite still run through the main view.
    */
-  private introFrame(dt: number, dtMs: number, now: number): void {
+  private introFrame(dt: number, realDt: number, dtMs: number, now: number): void {
     const g = this.game
     const it = this.intro!
-    if (!g.paused) this.stepIntro(it, dt)
+    if (!g.paused) this.stepIntro(it, realDt)
     this.view.update(g.paused ? dt * 0.25 : dt)
     this.dispatch()
     this.view.render()
@@ -476,6 +497,7 @@ export class FoldEngine {
     if (this.intro === it && it.director.state.done) this.endIntro()
   }
 
+  /** `dt`: the frame's real time (the intro's timeline runs on it; the demo game sub-steps it). */
   private stepIntro(it: IntroRun, dt: number): void {
     it.director.step(dt)
     const ev = it.game.events
@@ -485,7 +507,7 @@ export class FoldEngine {
       if (INTRO_SOUNDS.has(e.type)) this.audio?.onEvent(e, it.game)
     }
     ev.clear()
-    it.view.update(it.director.state.t, dt)
+    it.view.update(it.director.state.t, Math.min(0.05, dt))
   }
 
   // ─── Intro (roadmap #12) ─────────────────────────────────────────────────

@@ -24,7 +24,8 @@ import { makeCanvas, toTexture } from './canvas'
 export const CELL_W = 128
 export const CELL_H = 192
 const COLS = 8
-const ROWS = 5
+/** Six rows since book 3's outro cast (dolphins, boats): 48 cells, 42 used. */
+const ROWS = 6
 export const ATLAS_W = CELL_W * COLS
 export const ATLAS_H = CELL_H * ROWS
 
@@ -41,6 +42,8 @@ export type FrameName =
   | 'bat0' | 'bat1'
   // C12: the shield-bearer (books 2 and 3), appended so the older cells keep their places.
   | 'bearer0' | 'bearer1' | 'bearerBlock' | 'bearerFlail'
+  // Book 3's outro: dolphins (swimming, and the happy leap and spin) and two paper boats of waving folk.
+  | 'dolphin0' | 'dolphin1' | 'boatA0' | 'boatA1' | 'boatB0' | 'boatB1'
 
 const ORDER: FrameName[] = [
   'knight0', 'knight1', 'knightFlail', 'brute0', 'brute1', 'bruteFlail', 'archer0', 'archerDraw',
@@ -48,7 +51,8 @@ const ORDER: FrameName[] = [
   'cheerVillager0', 'cheerVillager1', 'cheerSoldier0', 'cheerSoldier1', 'cheerFarmer0', 'cheerFarmer1', 'cheerKid0', 'cheerKid1',
   'runner0', 'runner1', 'runnerFlail', 'leaper0', 'leaper1', 'leaperJump', 'leaperFlail',
   'bat0', 'bat1',
-  'bearer0', 'bearer1', 'bearerBlock', 'bearerFlail'
+  'bearer0', 'bearer1', 'bearerBlock', 'bearerFlail',
+  'dolphin0', 'dolphin1', 'boatA0', 'boatA1', 'boatB0', 'boatB1'
 ]
 
 /** The hero's cells: repainted together when the look changes. */
@@ -98,7 +102,9 @@ const DEFERRED: ReadonlySet<FrameName> = new Set<FrameName>([
   'cheerVillager0', 'cheerVillager1', 'cheerSoldier0', 'cheerSoldier1', 'cheerFarmer0', 'cheerFarmer1', 'cheerKid0', 'cheerKid1',
   'runner0', 'runner1', 'runnerFlail', 'leaper0', 'leaper1', 'leaperJump', 'leaperFlail',
   // C12: shield-bearers march only in books 2 and 3.
-  'bearer0', 'bearer1', 'bearerBlock', 'bearerFlail'
+  'bearer0', 'bearer1', 'bearerBlock', 'bearerFlail',
+  // Book 3's outro cast: only its victory page shows them.
+  'dolphin0', 'dolphin1', 'boatA0', 'boatA1', 'boatB0', 'boatB1'
 ])
 
 export interface StandeeAtlas {
@@ -480,7 +486,7 @@ const bat = (ctx: CanvasRenderingContext2D, down: boolean): void => {
 // Pose 0 waves (one arm up, hat on); pose 1 is the hooray (both arms up, the
 // hat tossed into the air — the soldier's helmet only bounces).
 
-type ChibiHat = 'bonnet' | 'helmet' | 'straw' | 'party'
+type ChibiHat = 'bonnet' | 'helmet' | 'straw' | 'party' | 'sailor'
 
 interface ChibiStyle {
   outfit: string
@@ -552,6 +558,16 @@ const chibiHat = (ctx: CanvasRenderingContext2D, s: ChibiStyle, x: number, y: nu
       ellipse(ctx, 5, -1, 2.4, 2.4, HEX.pastelPink, 1.6)
       ellipse(ctx, 1, -18, 2, 2, HEX.pastelMint, 1.4)
       ellipse(ctx, 0, -32, 5.5, 5.5, HEX.pastelPink, 2.4)
+      break
+    case 'sailor':
+      // A round white sailor's cap with a navy band and a pompom.
+      ellipse(ctx, 0, 4, 30, 9, HEX.sailorWhite)
+      ctx.beginPath()
+      ctx.ellipse(0, 2, 22, 16, 0, Math.PI, 0)
+      ctx.closePath()
+      fillStroke(ctx, HEX.sailorWhite)
+      rrect(ctx, -22, -2, 44, 6, 3, HEX.sailorNavy, 2.4)
+      ellipse(ctx, 0, -15, 5, 5, HEX.pastelPink, 2.2)
       break
     case 'helmet':
       ctx.beginPath()
@@ -801,6 +817,156 @@ const bearer = (ctx: CanvasRenderingContext2D, pose: 0 | 1 | 'block' | 'flail'):
   ctx.restore()
 }
 
+// ─── Book 3's outro: dolphins and paper boats ───────────────────────────────
+//
+// Cute like the kraken: chunky rounded origami bodies with a fold or two,
+// big glossy eyes with a paper-white highlight, happy smiles, pastel sea
+// tokens. A dolphin is painted nose up with its belly to the right, so the
+// view can roll the card to point it along its leap (and mirror it for a
+// dolphin heading left).
+
+/** A dolphin, nose up. `leap`: the happy pose (mouth open, fins out, flukes curled, spray). */
+const dolphin = (ctx: CanvasRenderingContext2D, leap: boolean): void => {
+  ctx.save()
+  if (leap) {
+    ctx.translate(64, 100)
+    ctx.rotate(0.1)
+    ctx.translate(-64, -100)
+  }
+  // Flukes (behind the body): two rounded lobes, curled up in the leap.
+  const fy = leap ? -6 : 0
+  ctx.beginPath()
+  ctx.moveTo(62, 148)
+  ctx.quadraticCurveTo(38, 154 + fy, 22, 172 + fy * 2)
+  ctx.quadraticCurveTo(46, 174 + fy, 62, 164)
+  ctx.quadraticCurveTo(80, 174 + fy, 102, 172 + fy * 2)
+  ctx.quadraticCurveTo(88, 154 + fy, 62, 148)
+  fillStroke(ctx, HEX.dolphinDark)
+  // The dorsal fin on the back (left), swept toward the tail.
+  ctx.beginPath()
+  ctx.moveTo(32, 84)
+  ctx.quadraticCurveTo(6, 94, 10, 120)
+  ctx.quadraticCurveTo(22, 108, 38, 110)
+  ctx.closePath()
+  fillStroke(ctx, HEX.dolphinDark)
+  // The chunky rounded body: a big round melon of a forehead, a short snout, a plump belly.
+  ctx.beginPath()
+  ctx.moveTo(78, 10)
+  ctx.quadraticCurveTo(66, 10, 62, 20)
+  ctx.bezierCurveTo(40, 20, 26, 48, 28, 80)
+  ctx.bezierCurveTo(30, 110, 42, 132, 55, 152)
+  ctx.lineTo(70, 152)
+  ctx.bezierCurveTo(78, 132, 102, 112, 102, 78)
+  ctx.bezierCurveTo(102, 54, 94, 38, 88, 32)
+  ctx.quadraticCurveTo(91, 20, 86, 14)
+  ctx.quadraticCurveTo(83, 9, 78, 10)
+  fillStroke(ctx, HEX.dolphin)
+  // The pale belly along the right, a folded facet and one origami crease down the back.
+  ctx.beginPath()
+  ctx.moveTo(88, 36)
+  ctx.bezierCurveTo(100, 54, 100, 100, 74, 140)
+  ctx.quadraticCurveTo(86, 96, 80, 52)
+  ctx.closePath()
+  ctx.fillStyle = HEX.dolphinBelly
+  ctx.fill()
+  poly(ctx, [40, 30, 29, 82, 50, 66], css('dolphinDark', 0.3), 0)
+  ctx.beginPath()
+  ctx.moveTo(46, 30)
+  ctx.quadraticCurveTo(44, 92, 62, 148)
+  ctx.strokeStyle = css('paperWhite', 0.55)
+  ctx.lineWidth = 2
+  ctx.stroke()
+  // The pectoral fin, on the belly side.
+  ctx.beginPath()
+  ctx.moveTo(92, 96)
+  ctx.quadraticCurveTo(leap ? 120 : 112, leap ? 98 : 104, leap ? 116 : 108, leap ? 120 : 126)
+  ctx.quadraticCurveTo(100, 116, 86, 110)
+  ctx.closePath()
+  fillStroke(ctx, HEX.dolphinDark, 2.8)
+  // The smile along the snout, curling up into the cheek: open wide (with a tongue) in the leap.
+  if (leap) {
+    ctx.beginPath()
+    ctx.moveTo(84, 14)
+    ctx.quadraticCurveTo(96, 34, 80, 44)
+    ctx.quadraticCurveTo(74, 30, 84, 14)
+    fillStroke(ctx, INK, 2.2)
+    ellipse(ctx, 83, 36, 4.2, 3, HEX.tongue, 0)
+  } else {
+    ctx.beginPath()
+    ctx.moveTo(84, 16)
+    ctx.quadraticCurveTo(88, 34, 76, 40)
+    ctx.quadraticCurveTo(73, 40, 72, 36)
+    stroke(ctx, 2.8)
+  }
+  // A rosy cheek and the big glossy eye with its paper highlight.
+  ellipse(ctx, 74, 54, 6.5, 4, css('blush', 0.85), 0)
+  ellipse(ctx, 58, 44, 9, 11, INK, 0)
+  ellipse(ctx, 55, 39.5, 3.8, 4, HEX.paperWhite, 0)
+  ellipse(ctx, 61.5, 49.5, 1.7, 1.7, HEX.paperWhite, 0)
+  if (leap) {
+    // Spray: paper droplets flung off the leap.
+    for (const [x, y, r] of [[22, 40, 5], [14, 62, 3.5], [108, 70, 4.5], [112, 148, 3.5], [24, 140, 4]] as const) {
+      ellipse(ctx, x, y, r, r * 1.2, HEX.waterLight, 2)
+    }
+  }
+  ctx.restore()
+}
+
+/** A paper boat's crew member: a chibi from the waist up (the hull hides the rest). */
+interface Sailor {
+  style: ChibiStyle
+  x: number
+}
+
+/**
+ * A folded paper boat (the classic hat-fold, a sail rising in the middle)
+ * with two chibi people in it, waving (`hooray`: both arms up).
+ */
+const boat = (ctx: CanvasRenderingContext2D, hull: string, hullDark: string, sail: string, crew: readonly [Sailor, Sailor], hooray: boolean): void => {
+  // The sail behind the crew.
+  poly(ctx, [64, 34, 20, 132, 108, 132], sail)
+  ctx.beginPath()
+  ctx.moveTo(64, 34)
+  ctx.lineTo(64, 132)
+  stroke(ctx, 2)
+  poly(ctx, [64, 34, 84, 40, 64, 48], HEX.pastelPink, 2.2)
+  // Two chibis, standing in the boat (scaled down about their feet, which the hull hides).
+  crew.forEach((c, i) => {
+    ctx.save()
+    ctx.translate(c.x, 154)
+    ctx.scale(0.62, 0.62)
+    ctx.translate(-64, -180)
+    // The second one waves on the other beat: never two identical poses side by side.
+    chibi(ctx, c.style, i === 0 ? hooray : !hooray)
+    ctx.restore()
+  })
+  // The hull: a folded trapezoid with its inner fold and a darker keel.
+  poly(ctx, [4, 128, 124, 128, 104, 178, 24, 178], hull)
+  poly(ctx, [24, 128, 104, 128, 64, 170], css('paperWhite', 0.4), 2)
+  ctx.beginPath()
+  ctx.moveTo(14, 154)
+  ctx.lineTo(114, 154)
+  ctx.lineTo(104, 178)
+  ctx.lineTo(24, 178)
+  ctx.closePath()
+  fillStroke(ctx, hullDark, 2.6)
+}
+
+const SAILOR_KID: ChibiStyle = {
+  outfit: HEX.pastelSky, outfitDark: HEX.pastelSkyDark, legs: HEX.paperWhite, hair: HEX.hairBrown, hat: 'sailor'
+}
+const HARBOUR_GIRL: ChibiStyle = {
+  outfit: HEX.pastelPink, outfitDark: HEX.pastelPinkDark, legs: HEX.paperWhite, hair: HEX.hairGold, hat: 'party', buns: true
+}
+const FISHER: ChibiStyle = {
+  outfit: HEX.pastelLemon, outfitDark: HEX.pastelLemonDark, legs: HEX.pastelSkyDark, hair: HEX.hairBrown, hat: 'straw', flag: true
+}
+const BOAT_KID: ChibiStyle = {
+  outfit: HEX.pastelLilac, outfitDark: HEX.pastelLilacDark, legs: HEX.paperWhite, hair: HEX.hairGold, hat: 'sailor', buns: true
+}
+const CREW_A: readonly [Sailor, Sailor] = [{ style: SAILOR_KID, x: 40 }, { style: HARBOUR_GIRL, x: 88 }]
+const CREW_B: readonly [Sailor, Sailor] = [{ style: FISHER, x: 40 }, { style: BOAT_KID, x: 88 }]
+
 const crushed: Painter = (ctx) => {
   // A flattened knight: a splat of red paper with a squashed helm.
   ctx.save()
@@ -857,6 +1023,12 @@ const PAINTERS: Record<FrameName, Painter> = {
   scrap,
   bat0: (c) => bat(c, false),
   bat1: (c) => bat(c, true),
+  dolphin0: (c) => dolphin(c, false),
+  dolphin1: (c) => dolphin(c, true),
+  boatA0: (c) => boat(c, HEX.boatHull, HEX.boatHullDark, HEX.boatSail, CREW_A, false),
+  boatA1: (c) => boat(c, HEX.boatHull, HEX.boatHullDark, HEX.boatSail, CREW_A, true),
+  boatB0: (c) => boat(c, HEX.pastelMint, HEX.pastelMintDark, HEX.pastelLemon, CREW_B, false),
+  boatB1: (c) => boat(c, HEX.pastelMint, HEX.pastelMintDark, HEX.pastelLemon, CREW_B, true),
   bearer0: (c) => bearer(c, 0),
   bearer1: (c) => bearer(c, 1),
   bearerBlock: (c) => bearer(c, 'block'),

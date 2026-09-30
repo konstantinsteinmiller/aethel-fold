@@ -44,11 +44,14 @@ declare global {
       jumpTo(p: number, book?: number): void
       clearPage(): void
       fastForward(s: number): void
+      /** Freeze the live clocks (rendering goes on); only fastForward moves time. */
+      holdClock(on: boolean): void
       /** The boss outro (C9b): skip it as a tap would, and read it. */
       skipOutro(): boolean
       outro(): {
         active: boolean; time: number; skipped: boolean; lite: boolean; script: string | null
         crowd: number; fireworks: number; dropped: number; chips: number; cutting: boolean; crowdShown: boolean
+        cast: string[]
       }
       screenOf(x: number, z: number, y?: number): { x: number; y: number }
       shelfScreen(slot: number): { x: number; y: number }

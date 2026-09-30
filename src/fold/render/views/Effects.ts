@@ -127,6 +127,8 @@ export class Effects {
   private readonly maxLife = new Float32Array(MAX_CONFETTI)
   private readonly size = new Float32Array(MAX_CONFETTI)
   private readonly grav = new Float32Array(MAX_CONFETTI)
+  /** Drag on the vertical velocity too (firework chips; 0 for every other chip). */
+  private readonly vdrag = new Float32Array(MAX_CONFETTI)
   private readonly settle = new Uint8Array(MAX_CONFETTI)
   private readonly flat = new Uint8Array(MAX_CONFETTI)
   private cursor = 0
@@ -242,6 +244,7 @@ export class Effects {
       this.grav[i] = o.gravity ?? 7
       this.settle[i] = o.settle === false ? 0 : 1
       this.flat[i] = 0
+      this.vdrag[i] = 0
       this.confetti.setColorAt(i, this.colors.get(pal[Math.floor(Math.random() * pal.length)]!)!)
     }
     this.live = Math.min(MAX_CONFETTI, this.live + o.count)
@@ -251,8 +254,13 @@ export class Effects {
    * One chip with its own velocity (a firework rocket's trail): no options
    * object, so a per-frame caller allocates nothing.
    */
-  chip(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, gravity: number, color: PaletteKey): void {
+  chip(
+    x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, gravity: number, color: PaletteKey,
+    /** Air drag on the rise too (a firework's shell slows in every direction, so it holds its round shape). */
+    vdrag = 0
+  ): void {
     const i = this.cursor
+    this.vdrag[i] = vdrag
     this.cursor = (this.cursor + 1) % MAX_CONFETTI
     this.px[i] = x
     this.py[i] = y
@@ -277,12 +285,44 @@ export class Effects {
   }
 
   /**
-   * A paper firework (C9b): `count` chips thrown out on a sphere shell from
-   * one point, falling slowly and never settling — the same instanced mesh
-   * as every other chip, so a burst costs no draw call. Allocation-free.
+   * A paper firework (C9b): `count` chips thrown out from one point, falling
+   * slowly and never settling — the same instanced mesh as every other chip,
+   * so a burst costs no draw call. Allocation-free.
+   *
+   * With the camera, the shell opens *facing the lens*: two rings (an outer
+   * one and a tighter inner one of another colour) in the camera's screen
+   * plane, with a little depth, slowed by drag in every direction. From the
+   * steep desk camera a round 3D shell foreshortens into a puff; a ring in
+   * the screen plane reads as a firework at any pitch.
    */
-  fireworkBurst(x: number, y: number, z: number, count: number, palette: ConfettiPalette, life = 1.3): void {
+  fireworkBurst(x: number, y: number, z: number, count: number, palette: ConfettiPalette, life = 1.3, camera: PerspectiveCamera | null = null): void {
     const pal = PALETTES[palette]
+    if (camera) {
+      camera.getWorldDirection(this.fwd)
+      this.right.set(1, 0, 0).applyQuaternion(camera.quaternion)
+      this.upV.set(0, 1, 0).applyQuaternion(camera.quaternion)
+      const inner = Math.round(count * 0.32)
+      const spin = Math.random() * Math.PI * 2
+      for (let n = 0; n < count; n++) {
+        const ring = n < inner ? 0 : 1
+        const m = ring ? count - inner : inner
+        const k = ring ? n - inner : n
+        const a = spin + (k / m) * Math.PI * 2 + (Math.random() - 0.5) * 0.12
+        const sp = (ring ? 4.5 : 2.6) * (0.94 + Math.random() * 0.12)
+        const c = Math.cos(a) * sp
+        const s = Math.sin(a) * sp
+        const d = (Math.random() - 0.5) * sp * 0.25
+        this.chip(
+          x, y, z,
+          this.right.x * c + this.upV.x * s + this.fwd.x * d,
+          this.right.y * c + this.upV.y * s + this.fwd.y * d + 0.4,
+          this.right.z * c + this.upV.z * s + this.fwd.z * d,
+          life * (0.85 + Math.random() * 0.3), 1.7 + Math.random() * 0.6, 1.2,
+          pal[(ring * 3 + (n % 2)) % pal.length]!, 2.1
+        )
+      }
+      return
+    }
     for (let n = 0; n < count; n++) {
       // An even-ish shell: golden-angle spiral in height, a little random speed.
       const u = 1 - (2 * (n + 0.5)) / count
@@ -338,6 +378,7 @@ export class Effects {
       this.grav[i] = 1.2
       this.settle[i] = 0
       this.flat[i] = 0
+      this.vdrag[i] = 0
       this.confetti.setColorAt(i, this.colors.get(pal[Math.floor(Math.random() * pal.length)]!)!)
     }
     this.live = Math.min(MAX_CONFETTI, this.live + 34)
@@ -426,7 +467,7 @@ export class Effects {
         const drag = 1.9
         this.vx[i]! -= this.vx[i]! * drag * dt
         this.vz[i]! -= this.vz[i]! * drag * dt
-        this.vy[i]! -= this.grav[i]! * dt
+        this.vy[i]! -= this.grav[i]! * dt + this.vy[i]! * this.vdrag[i]! * dt
         if (this.vy[i]! < -2.2) this.vy[i]! += (-2.2 - this.vy[i]!) * 4 * dt
         const t = l * 7 + i
         this.vx[i]! += Math.sin(t) * 1.4 * dt

@@ -4,19 +4,23 @@
  *
  * Pure logic, like the rest of `src/fold/logic`: no three.js, no Vue.
  *
- *   INTRO_BEATS   the timeline, as plain data: `{ id, at, dur, kind, target }`.
- *                 Nothing here depends on a particular runner — another
- *                 cutscene runner can read the same list (the boss outro's,
- *                 once the two are unified): a beat is "at `at` seconds, for
- *                 `dur` seconds, do `kind` to `target`".
+ *   INTRO_BEATS   the timeline, as plain data: `{ id, at, dur, kind, target }`:
+ *                 a beat is "at `at` seconds, for `dur` seconds, do `kind` to
+ *                 `target`". `introScript` turns it into a `CutScript` for the
+ *                 one cutscene runner the boss outros use too
+ *                 (`CutsceneRunner`, `cutscene.ts`): every beat but the end is a
+ *                 windowed `cue` beat, the end is the script's `end`.
  *   INTRO_PAGE    the demo page it plays on (its own def: never a page of a
  *                 book, never saved).
- *   IntroDirector drives a *separate* `FoldGame` (the demo game) through the
- *                 public input API — `foldNow`, `stamp`, `fireBallista`,
- *                 `slingAt` — on the beats' cues. Each input beat has a window:
- *                 it fires on the first frame its condition holds (enough
- *                 knights on the flap, a crowd to crush), or at the window's end
- *                 regardless, so the show never waits on the simulation.
+ *   IntroDirector the runner's cue host: it drives a *separate* `FoldGame` (the
+ *                 demo game) through the public input API — `foldNow`, `stamp`,
+ *                 `fireBallista`, `slingAt` — on the beats' cues. Each input
+ *                 beat has a window: it fires on the first frame its condition
+ *                 holds (enough knights on the flap, a crowd to crush), or at the
+ *                 window's end regardless, so the show never waits on the
+ *                 simulation. The timeline runs on the real clock (the runner's);
+ *                 the demo game sub-steps it, so a slow phone neither stretches
+ *                 the 15 s nor lets the show fall behind it.
  *   dragonPose / seaPeekPose
  *                 the two puppet beats (the dragon's fly-over and the sea
  *                 monster's peek) as pure functions of time: the view just
@@ -37,7 +41,9 @@
  * `FoldGame` whose events feed only the intro's view and the audio.
  */
 
-import { BREACH_Z, PAGE_HALF_D } from './config'
+import { BREACH_Z, OUTRO, PAGE_HALF_D } from './config'
+import { CutsceneRunner, type CutBeat, type CutCueHost, type CutScript } from './cutscene'
+import { EventQueue } from './events'
 import type { FoldGame } from './game'
 import { isGrabbable, isStampable, onFootprint } from './folds'
 import { clamp01, easeInOutCubic, lerp, smoothstep } from './math'
@@ -98,6 +104,16 @@ export const introBeat = (kind: IntroBeatKind, beats: readonly IntroBeat[] = INT
   for (const b of beats) if (b.kind === kind) return b
   return null
 }
+
+/**
+ * The timeline as a script for the cutscene runner: each beat a `cue` beat
+ * (its index in `beats` is the cue number), the last one the `end`.
+ * Built once per director (allocates).
+ */
+export const introScript = (beats: readonly IntroBeat[] = INTRO_BEATS): CutScript => ({
+  id: 'intro',
+  beats: beats.map((b, i): CutBeat => (b.kind === 'end' ? { at: b.at, kind: 'end' } : { at: b.at, kind: 'cue', dur: b.dur, cue: i }))
+})
 
 /** 0…1 through a beat at time `t`, or −1 outside it. */
 export const beatProgress = (b: IntroBeat | null, t: number): number => {
@@ -372,7 +388,7 @@ export const seaPeekPose = (t: number, out: SeaPeekPose, beat: IntroBeat | null 
 // ─── The director ──────────────────────────────────────────────────────────
 
 export interface IntroState {
-  /** Seconds since the intro started (the frame loop's clamped dt). */
+  /** Seconds since the intro started (the real clock: the runner's time). */
   t: number
   /** The intro is over (ended by itself, or skipped). */
   done: boolean
@@ -392,16 +408,22 @@ export const skipIntro = (s: IntroState): void => {
 /** Enemies that can still be hit (walking, bashing, trapped). */
 const alive = (state: string): boolean => state === 'march' || state === 'blocked' || state === 'trapped' || state === 'stand'
 
+/** The demo game's longest step: the frame's real time is cut into steps no longer (the game's own clamp). */
+const DEMO_STEP = 0.05
+
 /**
  * Plays the timeline on a demo `FoldGame` through its public input API only.
- * `step` applies the beats that are due, then advances the demo game; the
- * caller drains `game.events` (the intro's view and the audio react to them).
+ * `step` runs the timeline on the shared `CutsceneRunner` — which offers each
+ * due beat to `cue` — then advances the demo game; the caller drains
+ * `game.events` (the intro's view and the audio react to them).
  * Allocation-free after construction.
  */
-export class IntroDirector {
+export class IntroDirector implements CutCueHost {
   readonly state = createIntroState()
-  /** Per beat: acted (or its window ran out). */
-  private readonly acted: Uint8Array
+  /** The shared cutscene runner, playing `introScript(beats)`. */
+  readonly runner = new CutsceneRunner()
+  /** The runner's own events (beats taken, the end): kept off the demo game's queue. */
+  private readonly runnerEvents = new EventQueue(32)
   /** Per beat: index of its target fold in the demo game (−1 none). */
   private readonly fold: Int16Array
   /** How many beats of each kind acted (tests and debugging). */
@@ -411,7 +433,6 @@ export class IntroDirector {
   readonly duration: number
 
   constructor(readonly game: FoldGame, readonly beats: readonly IntroBeat[] = INTRO_BEATS) {
-    this.acted = new Uint8Array(beats.length)
     this.fold = new Int16Array(beats.length)
     for (let i = 0; i < beats.length; i++) {
       const id = beats[i]!.target
@@ -420,30 +441,41 @@ export class IntroDirector {
     let end = 0
     for (const b of beats) end = Math.max(end, b.kind === 'end' ? b.at : b.at + b.dur)
     this.duration = end
+    this.runner.start(introScript(beats), this.runnerEvents, 1, this)
+    this.runnerEvents.clear()
   }
 
-  /** Advance the intro by `dt` seconds (the frame's clamped real dt). */
+  /** Advance the intro by `dt` seconds of real time (the runner caps it at `OUTRO.maxDt`). */
   step(dt: number): void {
     const s = this.state
-    if (s.done) return
-    s.t += dt
-    const t = s.t
-    const beats = this.beats
-    for (let i = 0; i < beats.length; i++) {
-      if (this.acted[i]) continue
-      const b = beats[i]!
-      if (t < b.at) continue
-      const late = t >= b.at + b.dur
-      if (this.act(i, b, late) || late) {
-        this.acted[i] = 1
-        if (b.kind === 'end') {
-          s.done = true
-          return
-        }
-      }
+    const r = this.runner
+    if (s.done) {
+      // Skipped (`skipIntro`): the runner stops with it.
+      if (r.active) r.stop()
+      return
+    }
+    r.update(dt, this.runnerEvents)
+    this.runnerEvents.clear()
+    s.t = r.time
+    if (!r.active) {
+      this.counts.end++
+      s.done = true
+      return
     }
     this.guard()
-    this.game.update(dt)
+    // The demo game in steps of at most its own clamp, so the show keeps up with the timeline.
+    let left = Math.min(Math.max(dt, 0), OUTRO.maxDt)
+    while (left > 1e-6) {
+      const h = Math.min(DEMO_STEP, left)
+      this.game.update(h)
+      left -= h
+    }
+  }
+
+  /** The runner offers a due beat (`CutCueHost`): true when it acted. */
+  cue(i: number, late: boolean): boolean {
+    const b = this.beats[i]
+    return !!b && this.act(i, b, late)
   }
 
   /** Run a beat's action; true when it happened (or needs nothing). */

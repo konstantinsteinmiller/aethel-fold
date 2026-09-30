@@ -129,6 +129,27 @@ describe('standee atlas looks', () => {
   })
 })
 
+describe("book 3's outro cast in the atlas", () => {
+  it('dolphins and paper boats have their own cells inside the grown atlas, and paint finite (deferred)', async () => {
+    const { createStandeeAtlas, ATLAS_H, CELL_H } = await import('@/fold/render/art/standeeArt')
+    expect(ATLAS_H / CELL_H).toBe(6)
+    bad.length = 0
+    const a = createStandeeAtlas()
+    const names = ['dolphin0', 'dolphin1', 'boatA0', 'boatA1', 'boatB0', 'boatB1', 'bearer0', 'bat1', 'knight0'] as const
+    const seen = new Set<string>()
+    for (const n of names) {
+      const f = a.frame(n)
+      for (const v of [f.u0, f.v0, f.u1, f.v1]) expect(v >= 0 && v <= 1, n).toBe(true)
+      seen.add(`${f.u0.toFixed(4)},${f.v0.toFixed(4)}`)
+    }
+    expect(seen.size).toBe(names.length)
+    expect(a.complete).toBe(false)
+    expect(a.paintDeferred()).toBe(true)
+    expect(bad).toEqual([])
+    a.dispose()
+  })
+})
+
 describe('look geometry', () => {
   it('confetti chips, the castle dress and snowy scenery are finite', async () => {
     const { confettiGeometry } = await import('@/fold/render/views/Effects')

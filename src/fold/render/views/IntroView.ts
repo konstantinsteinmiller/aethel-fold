@@ -10,8 +10,8 @@
  *   ProjectilesView the ballista bolts and the sling stone
  *   DragonView      the boss rig, posed by `dragonPose` for a fly-over instead of
  *                   by a boss fight: a puppet `{ boss, hero }` feeds its update
- *   SeaPeekActor    the sea monster's peek (placeholder until Book 3 registers
- *                   its kraken — see `SeaPeekView.ts`)
+ *   SeaPeekActor    the sea monster's peek: book 3's kraken (`KrakenPeek`,
+ *                   registered below through `setSeaPeekFactory`)
  *
  * While it is up, the page in play, its units and projectiles are hidden
  * (and the player's game is frozen by the engine); `detach` shows them again
@@ -20,7 +20,8 @@
  *
  * Draw calls: the demo page replaces the hidden page 1, so the intro costs
  * what a page with a castle and two ballistas costs, plus the dragon (as on
- * the dragon's page) while it is on screen and the sea peek's 10 meshes;
+ * the dragon's page) while it is on screen and the sea peek (the paper sea
+ * and the kraken rig's head, face and instanced arms);
  * below the dragon page's measured 123 (implementation plan §7).
  */
 
@@ -39,7 +40,11 @@ import { PageView } from './PageView'
 import { UnitsView, type SurfaceSampler } from './UnitsView'
 import { ProjectilesView } from './ProjectilesView'
 import { DragonView } from './DragonView'
-import { createSeaPeek, type SeaPeekActor } from './SeaPeekView'
+import { createSeaPeek, setSeaPeekFactory, type SeaPeekActor } from './SeaPeekView'
+import { KrakenPeek } from './KrakenPeek'
+
+// The sea peek shows book 3's real kraken (built only when the intro plays; the placeholder stays as the fallback).
+setSeaPeekFactory((ctx) => new KrakenPeek(ctx))
 
 /** How big the flying dragon is next to the page's dragon. */
 const DRAGON_SCALE = 0.72

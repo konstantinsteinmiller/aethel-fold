@@ -3,8 +3,9 @@ import { FoldGame } from '@/fold/logic/game'
 import { KILL_BOLT, KILL_CRUSH, KILL_LAUNCH, KILL_SHOT } from '@/fold/logic/events'
 import {
   beatProgress, createDragonPose, createSeaPeekPose, dragonPose, INTRO_BEATS, INTRO_DURATION, INTRO_PAGE, IntroDirector,
-  introBeat, introUrlFlag, SEA_PEEK_SPOT, seaPeekPose, shouldPlayIntro, skipIntro
+  introBeat, introScript, introUrlFlag, SEA_PEEK_SPOT, seaPeekPose, shouldPlayIntro, skipIntro
 } from '@/fold/logic/intro'
+import { scriptDuration, validateScript } from '@/fold/logic/cutscene'
 import { LESSON_IDS } from '@/fold/logic/lessons'
 import { PAGE_HALF_D, PAGE_HALF_W } from '@/fold/logic/config'
 import type { LessonId } from '@/fold/logic/types'
@@ -135,6 +136,47 @@ describe('the director plays the showcase on its own demo game', () => {
     expect(g.page).toBe(INTRO_PAGE)
     // Knights enter on the page, in front of every fold (nothing walks through paper).
     for (const f of INTRO_PAGE.folds) expect(Math.min(f.az, f.bz) - f.depth).toBeGreaterThan(INTRO_PAGE.spawnZ!)
+  })
+})
+
+describe('one cutscene runner for the intro and the outros', () => {
+  it('the timeline is a valid runner script: a windowed cue per beat, the end last', () => {
+    const s = introScript()
+    expect(validateScript(s)).toEqual([])
+    expect(scriptDuration(s)).toBe(INTRO_DURATION)
+    expect(s.beats).toHaveLength(INTRO_BEATS.length)
+    INTRO_BEATS.forEach((b, i) => {
+      const c = s.beats[i]!
+      expect(c.at).toBe(b.at)
+      if (b.kind === 'end') expect(c.kind).toBe('end')
+      else expect(c).toEqual({ at: b.at, kind: 'cue', dur: b.dur, cue: i })
+    })
+  })
+
+  it('the director plays it on the shared CutsceneRunner (its clock is the intro clock)', () => {
+    const d = new IntroDirector(demoGame())
+    expect(d.runner.active).toBe(true)
+    expect(d.runner.script?.id).toBe('intro')
+    for (let i = 0; i < 90; i++) d.step(DT)
+    expect(d.state.t).toBe(d.runner.time)
+    skipIntro(d.state)
+    d.step(DT)
+    expect(d.runner.active).toBe(false)
+  })
+
+  it('real time: at 10 fps the intro still lasts 15 s, and every beat still lands (the demo game sub-steps)', () => {
+    const d = new IntroDirector(demoGame())
+    let frames = 0
+    while (!d.state.done && frames < 1000) {
+      d.step(0.1)
+      d.game.events.clear()
+      frames++
+    }
+    expect(d.state.done).toBe(true)
+    expect(d.state.t).toBeGreaterThanOrEqual(INTRO_DURATION - 1e-6)
+    expect(d.state.t).toBeLessThan(INTRO_DURATION + 0.1 + 1e-6)
+    expect(d.counts).toEqual({ open: 1, fold: 2, stamp: 2, ballistaUp: 1, bolt: 2, sling: 1, dragon: 1, seaPeek: 1, end: 1 })
+    expect(d.game.hero.hp).toBe(3)
   })
 })
 

@@ -467,10 +467,39 @@ export const OUTRO = {
   /** Seconds from launch to burst, and a burst's chip life (its slot stays busy that long). */
   rise: 0.7,
   linger: 1.3,
+  /**
+   * Burst heights above the page (a random height in between). High enough
+   * that a burst opens against the desk and the page's upper half, not on the
+   * crowd's heads, from the steep play camera.
+   */
+  burstLow: 4.3,
+  burstHigh: 5.3,
+  /**
+   * Cutscenes run on the real clock (intro and outro): the frame's real dt,
+   * capped here only so a tab switch doesn't jump a whole script. Below
+   * 20 fps the game's own dt is clamped to 0.05 s, so a timeline on that
+   * clock would stretch and fall behind the skip ring's CSS fill.
+   */
+  maxDt: 0.25,
+  /**
+   * Book 3's finale page ("Calm Water"): its printed shoreline. The sea runs
+   * from here to the page's top edge; the dolphins swim in it and the paper
+   * boats bob along it (and the page's props keep out of it).
+   */
+  seaZ: -3.3,
   /** Fireworks waiting on their fuse (a beat's volley), at most. */
   fuseCap: 16,
   /** Hard particle budget for the fireworks (slots × (sparks + live trail)); a unit test holds it. */
   maxParticles: 220,
+  /**
+   * Book 3's dolphins: paper spray chips a dolphin throws where it leaves or
+   * dives back into the sea (lite: half), and their life. A dolphin is under
+   * water or in the air far longer than a splash lives, so each has at most
+   * one splash alive: 5 × 4 = 20 chips on top of the fireworks' 196 — the
+   * `maxParticles` budget holds (a unit test checks the authored scripts).
+   */
+  splashChips: 4,
+  splashLife: 0.45,
   /** Firework pops the audio lets ring at once. */
   popVoices: 3
 } as const

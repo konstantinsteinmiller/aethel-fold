@@ -808,6 +808,10 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       snow: eng.view.snow.visible, snowFlakes: eng.view.snow.count
     }),
     fastForward: (s: number) => eng.fastForward(s),
+    /** Tests: freeze the live clocks (the frame loop still renders); only fastForward moves time. */
+    holdClock: (on: boolean) => {
+      eng.holdClock = on
+    },
     /** The boss outro (C9b): skip it as a tap would; its crowd, fireworks and the chips on screen. */
     skipOutro: () => eng.skipOutro(),
     outro: () => {
@@ -815,7 +819,9 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       return {
         active: r.active, time: r.time, skipped: r.skipped, lite: r.lite, script: r.script?.id ?? null,
         crowd: r.crowdCount, fireworks: r.fireworks.busy, dropped: r.fireworks.dropped,
-        chips: eng.view.effects.liveChips, cutting: eng.view.desk.cutting, crowdShown: eng.view.outro.mesh.visible
+        chips: eng.view.effects.liveChips, cutting: eng.view.desk.cutting, crowdShown: eng.view.outro.mesh.visible,
+        /** Who is in the crowd (book 3: dolphins and boats too). */
+        cast: r.crowd.slice(0, r.crowdCount).map((m) => m.actor)
       }
     },
     /** The intro (roadmap #12): is it playing, how far in; skip it; play it (as the settings' replay does). */

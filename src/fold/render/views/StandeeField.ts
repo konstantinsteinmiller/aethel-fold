@@ -6,7 +6,7 @@
  */
 
 import {
-  BufferGeometry, Color, DynamicDrawUsage, InstancedBufferAttribute, InstancedMesh, PlaneGeometry
+  BufferGeometry, Color, DynamicDrawUsage, InstancedBufferAttribute, InstancedMesh, Matrix4, PlaneGeometry
 } from 'three'
 import type { FrameName, StandeeAtlas } from '../art/standeeArt'
 import { createCutoutDepthMaterial, createPaperMaterial, type PaperMaterial } from '../paperMaterial'
@@ -17,6 +17,9 @@ export const STANDEE_H = 1.3
 const STANDEE_W = (STANDEE_H * 128) / 192
 /** Backward lean of every upright standee (radians). */
 export const STANDEE_LEAN = -0.62
+
+/** Scratch: the half-height offset of a card turned about its middle (`placeAbout`). */
+const LIFT = new Matrix4()
 
 let sharedGeometry: BufferGeometry | null = null
 const standeeGeometry = (): BufferGeometry => {
@@ -34,6 +37,8 @@ export class StandeeField {
   readonly material: PaperMaterial
   private readonly frames: InstancedBufferAttribute
   private readonly frameOf: (FrameName | null)[]
+  /** Per instance: its frame is drawn mirrored (u0 and u1 swapped). */
+  private readonly flipOf: Uint8Array
   private readonly white = new Color(1, 1, 1)
 
   constructor(private readonly atlas: StandeeAtlas, readonly capacity: number) {
@@ -51,6 +56,7 @@ export class StandeeField {
     this.mesh.frustumCulled = false
     this.mesh.customDepthMaterial = createCutoutDepthMaterial(atlas.texture)
     this.frameOf = new Array<FrameName | null>(capacity).fill(null)
+    this.flipOf = new Uint8Array(capacity)
     for (let i = 0; i < capacity; i++) {
       this.hide(i)
       this.mesh.setColorAt(i, this.white)
@@ -58,11 +64,15 @@ export class StandeeField {
     this.mesh.instanceColor!.setUsage(DynamicDrawUsage)
   }
 
-  setFrame(i: number, name: FrameName): void {
-    if (this.frameOf[i] === name) return
+  /** The instance's atlas frame; `flip` mirrors it left to right (a dolphin heading the other way). */
+  setFrame(i: number, name: FrameName, flip = false): void {
+    const fl = flip ? 1 : 0
+    if (this.frameOf[i] === name && this.flipOf[i] === fl) return
     this.frameOf[i] = name
+    this.flipOf[i] = fl
     const f = this.atlas.frame(name)
-    this.frames.setXYZW(i, f.u0, f.v0, f.u1, f.v1)
+    if (flip) this.frames.setXYZW(i, f.u1, f.v0, f.u0, f.v1)
+    else this.frames.setXYZW(i, f.u0, f.v0, f.u1, f.v1)
     this.frames.needsUpdate = true
   }
 
@@ -85,6 +95,22 @@ export class StandeeField {
     TMP.p.set(x, y, z)
     TMP.s.set(scale, scale * squashY, scale)
     TMP.m.compose(TMP.p, TMP.q, TMP.s)
+    this.mesh.setMatrixAt(i, TMP.m)
+  }
+
+  /**
+   * `place`, but turned about the card's middle instead of its foot: (x, y, z)
+   * is where the middle goes, and `roll` spins the card in its own plane
+   * about it — a dolphin's leap and spin. No lean is added.
+   */
+  placeAbout(i: number, x: number, y: number, z: number, yaw: number, roll: number, pitch: number, scale: number): void {
+    TMP.e.set(pitch, yaw, roll, 'YXZ')
+    TMP.q.setFromEuler(TMP.e)
+    TMP.p.set(x, y, z)
+    TMP.s.set(scale, scale, scale)
+    TMP.m.compose(TMP.p, TMP.q, TMP.s)
+    LIFT.makeTranslation(0, -STANDEE_H / 2, 0)
+    TMP.m.multiply(LIFT)
     this.mesh.setMatrixAt(i, TMP.m)
   }
 

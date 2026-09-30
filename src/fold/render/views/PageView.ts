@@ -19,13 +19,14 @@
 
 import { Group, InstancedMesh, Mesh, PlaneGeometry, type BufferGeometry, type Scene, type Texture } from 'three'
 import { CASTLE, HERO_INVULN, PAGE_HALF_D, PAGE_HALF_W } from '../../logic/config'
+import { onCrowdLine } from '../../logic/cutscene'
 import type { FoldGame } from '../../logic/game'
 import type { FoldState, PageDef } from '../../logic/types'
 import { acrossHinge, alongHinge, inChannel, isStampable, onFootprint } from '../../logic/folds'
 import { clamp01, easeOutBack } from '../../logic/math'
 import { createRng } from '../../logic/rng'
 import { secretOnPage } from '../../logic/secrets'
-import { PLAIN_LOOK, SEA_SHORE, paintPage, type PageLook, type PageTextures } from '../art/pageArt'
+import { PLAIN_LOOK, SEA_SHORE, paintPage, shoreOf, type PageLook, type PageTextures } from '../art/pageArt'
 import type { SpriteTextures } from '../art/spriteArt'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
 import { TMP } from '../paperGeometry'
@@ -341,13 +342,15 @@ export class PageView {
     if (def.theme === 'deep' && Math.abs(x) < 4.4 && z < -1) return false
     if (def.theme === 'siege' && z < -5.3) return false
     if (def.theme === 'finale' && Math.abs(x) < 3.9 && z > -2.4 && z < 3.6) return false
+    // The victory page: no tree on (or just in front of) a line where the outro's crowd stands.
+    if (def.exit === 'finale' && onCrowdLine(x, z)) return false
     if (def.theme === 'core' && Math.abs(x) < 4.4 && z < 1) return false
     // The player's castle and its grounds along the bottom edge.
     if (z > 5.2) return false
     if (def.sling && Math.hypot(x - def.sling.x, z - def.sling.z) < 2.2) return false
     if (def.theme === 'mill' && Math.hypot(x - 4.3, z + 1.4) < 1.4) return false
     // Book 3: nothing stands in the sea, on the lighthouse's rock, or where the kraken rises.
-    const shore = SHORE[def.theme]
+    const shore = shoreOf(def)
     if (shore !== undefined && z < shore + 0.7) return false
     if (def.theme === 'lighthouse' && Math.hypot(x - LIGHTHOUSE.x, z - LIGHTHOUSE.z) < 1.3) return false
     // A tap secret's target stays clear, so the finger finds it (roadmap #15).

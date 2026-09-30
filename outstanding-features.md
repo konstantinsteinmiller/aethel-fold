@@ -4,64 +4,9 @@ Work that was deferred or left unfinished for the game-jam submission (30 Sep 20
 Each entry says what exists, what is missing and where it plugs in. Status as of the
 submission build; update or delete entries as they land.
 
----
-
-## Cutscenes
-
-### Book 3 boss outro (dolphins + boat people) — not started
-- **Exists:** the boss outro for books 1–2 (`src/fold/logic/cutscene.ts` runner,
-  `src/fold/logic/outros.ts` scripts keyed by `BookId`, `src/fold/render/views/OutroView.ts`).
-  Book 3 has no script, so after the kraken it goes straight to the victory card.
-- **Missing:**
-  - `OUTRO_BOOK3` in `OUTROS`: leaping/spinning dolphins in the sea plus people waving from
-    paper boats, with the same pooled fireworks.
-  - New `CutActor` kinds (dolphin, boat) with rows in `OutroView`'s `ACTORS` table, an
-    animation field for swimming/leaping arcs, and a `crowdSpot` line-up along the water.
-  - Atlas frames (8 free cells): cute style matching the kraken — rounded chunky origami
-    bodies, big glossy eyes with a paper highlight, happy smiles, pastel sea palette tokens.
-    Boat people: chibi (big round heads, rosy cheeks, open mouths, pastel clothes).
-    Painted deferred, never on the boot path.
-- **Budget:** same as books 1–2 (+2–3 draw calls, ≤220 particles, zero per-frame allocation).
-
-### Intro cutscene — kraken peek still a placeholder
-- **Exists:** 15 s first-launch intro (`logic/intro.ts`, `IntroView.ts`), skippable,
-  plays once. The 3 s sea-monster peek uses a placeholder silhouette in `SeaPeekView.ts`.
-- **Missing:** swap in the real kraken via `setSeaPeekFactory(ctx => new KrakenPeek(...))`
-  using `KrakenView`'s rig (asleep/eyes pose), without touching `IntroView`.
-
-### One cutscene runner for intro and outro — not done
-- **Exists:** the outro uses `CutsceneRunner` (`logic/cutscene.ts`); the intro has its own
-  timeline (`INTRO_BEATS` in `logic/intro.ts`).
-- **Missing:** feed `INTRO_BEATS` to `CutsceneRunner` and delete the intro's private runner.
-
-### Outro polish
-- Crowd reads small on phones; some edge standees stand partly behind page trees.
-- Fireworks read as confetti puffs from the steep camera; bigger/higher bursts would help.
-- The one extra shader program the outro camera reveals should be pre-warmed
-  (`FoldEngine.prewarm`) to avoid a first-frame hitch on low-end phones.
-- Intro runs longer than 15 s real time below ~20 fps (clock follows capped frame time).
-
----
-
-## Features in progress at submission time
-
-These were being built when the submission was cut; check `git log` / branches to see if
-they have landed since.
-
-### Shield-bearer enemy (C12)
-- Slow enemy (0.5× knight speed) with a big front shield: ballista bolts are blocked and
-  consumed without damage; sling stones hurt it; folds, stamp, pleat, boat, tears kill it.
-- Heavy use in Book 3 (escorting columns so folds/boat/pleat matter), 1–2 appearances in
-  Book 2 (later pages), none in Book 1. Pars recomputed with the existing rule.
-- Cute chibi look with a large round paper shield; frames painted deferred; "BLOCKED!" word
-  on first block (i18n).
-
-### Poki platform build (C13)
-- `src/platforms/poki` plugin: SDK load + CSP, `init` (graceful on adblock),
-  `gameLoadingFinished`, `gameplayStart/Stop`, `commercialBreak` → interstitial,
-  `rewardedBreak` → rewarded. `.env.poki.example` with ads on, Poki in the `adFlags` matrix.
-  (`build:poki` already exists in `package.json`.)
-- Needs a check in Poki's QA tool once built.
+The cutscene work (Book 3's dolphin outro, the kraken intro peek, one cutscene runner, the
+outro polish) and the features that were in progress at submission (C12 shield-bearer, C13 Poki)
+have landed; see the status log in `game-implementation-plan.md`.
 
 ---
 
@@ -81,7 +26,12 @@ they have landed since.
 - **Ads (ad builds only):** a player can skip the rewarded Try-again video and still get the
   plain retry. Second chance is *not offered* on non-ad builds (roadmap said "otherwise free";
   confirm intent).
-- **Kraken "hurt":** the "CREASE!" word covers its face.
+- **Cutscenes on real GPUs / slow phones:** the intro and outros now run on the real clock (capped
+  at 0.25 s per frame, so below ~4 fps they still stretch); the camera-facing firework rings, the
+  dolphins' leap arcs and spins, and the kraken peek were only checked under SwiftShader at 390×844,
+  658×320 and 320×658. The dolphins' paper spray adds up to 20 chips on top of the fireworks' 196.
+- **Kraken "hurt" word:** "CREASE!"/"RIP!" now sit beside the hurt arm (below the beak for the core),
+  clear of the face; not yet checked by a human in a real fight at every aspect.
 - **Shelf:** stars-per-page card is small on the smallest phones; ribbon/shelf spacing is
   measured at page clear, not every frame (wrong briefly after a resize).
 

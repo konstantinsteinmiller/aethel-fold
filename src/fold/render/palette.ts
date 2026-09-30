@@ -121,6 +121,14 @@ export const HEX = {
   hairGold: '#f2c35a',
   straw: '#f5d98a',
   strawDark: '#d9b55e',
+  // Book 3's outro (the dolphins and the paper boats): pastel sea folk. The
+  // dolphins are periwinkle, not sea blue, so they read against the sea they leap from.
+  dolphin: '#a9b6f4',
+  dolphinDark: '#7f8fdc',
+  dolphinBelly: '#f2f4ff',
+  boatSail: '#fff6e2',
+  boatHull: '#ffb8a8',
+  boatHullDark: '#ec8f82',
 
   // Paper patterns (roadmap #6) — pale stocks, so lanes, folds and standees stay the loudest thing on the page.
   washi: '#f6e6d6',          // kozo paper, faintly rosy
