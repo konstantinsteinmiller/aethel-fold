@@ -17,6 +17,9 @@ const PORT = Number(process.env.E2E_PORT) || 2050
 const CG_PORT = Number(process.env.E2E_CG_PORT) || 2051
 /** E2E_PLAIN_ONLY=1: only the plain server (every spec but cloud-hydration), for memory-tight containers. */
 const PLAIN_ONLY = !!process.env.E2E_PLAIN_ONLY
+/** The ad build (roadmaps #9, #17, #19: CrazyGames full release with both ad flags, fake SDK) on E2E_ADS_PORT; E2E_ADS=1 adds it to a plain-only run. */
+const ADS_PORT = Number(process.env.E2E_ADS_PORT) || 2052
+const ADS = !PLAIN_ONLY || !!process.env.E2E_ADS
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -46,6 +49,13 @@ export default defineConfig({
       env: { VITE_APP_CRAZY_WEB: 'true' },
       reuseExistingServer: true,
       timeout: 60_000
-    }])
+    }]),
+    ...(ADS ? [{
+      command: `pnpm vite --port ${ADS_PORT} --strictPort --host localhost`,
+      url: `http://localhost:${ADS_PORT}`,
+      env: { VITE_APP_CRAZY_WEB: 'true', VITE_APP_CRAZY_GAMES_FULL_RELEASE: 'true', VITE_APP_INTERSTITIALS: 'true', VITE_APP_REWARDED: 'true' },
+      reuseExistingServer: true,
+      timeout: 60_000
+    }] : [])
   ]
 })

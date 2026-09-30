@@ -10,7 +10,7 @@ import { computed } from 'vue'
 export type OrigamiName =
   | 'gear' | 'speaker' | 'speakerMute' | 'heart' | 'heartEmpty' | 'crane' | 'star' | 'close'
   | 'play' | 'restart' | 'book' | 'hand' | 'trophy' | 'clock' | 'frog' | 'check' | 'pause'
-  | 'left' | 'right' | 'plus' | 'minus' | 'vibrate' | 'shake' | 'quality' | 'globe' | 'music' | 'shelf' | 'dragon'
+  | 'left' | 'right' | 'plus' | 'minus' | 'vibrate' | 'shake' | 'quality' | 'globe' | 'music' | 'shelf' | 'dragon' | 'movie'
   | 'fish' | 'kraken'
 
 const props = withDefaults(defineProps<{
@@ -147,6 +147,13 @@ const dark = computed(() => c.value[1])
       path(fill="#d8612a" stroke="none" opacity=".7" d="M44 24L30 36 14 28z")
       circle(cx="33" cy="21" r="2.5" fill="#fff")
       circle(cx="33" cy="21" r="1.2" fill="#1c1724" stroke="none")
+    //- ── Movie (a rewarded video, ad builds only): a folded clapperboard with a play mark ──
+    template(v-else-if="name === 'movie'")
+      path(:fill="lit" d="M6 18h36v22H6z")
+      path(:fill="dark" stroke="none" opacity=".5" d="M24 18h18v22H24z")
+      path(fill="#fff6e3" d="M5 10l34-6 2 8-34 6z")
+      path(fill="#1c1724" stroke="none" d="M12 9l6-1-3 8-6 1zM24 7l6-1-3 8-6 1z")
+      path(fill="#fff6e3" d="M20 23l11 6-11 6z")
     //- ── Clock ──
     template(v-else-if="name === 'clock'")
       path(:fill="lit" d="M24 4l14 6 6 14-6 14-14 6-14-6-6-14 6-14z")

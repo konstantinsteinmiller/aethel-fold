@@ -58,7 +58,16 @@ Aethel Fold and the benches. Changes there must not break either.
   a trigger in `game.ts` and a ghost-hand script. The hint text under the hand
   is a secondary aid and goes through i18n like every other string.
 * **No ads in the jury build** — no interstitials, no rewarded, no reward
-  buttons.
+  buttons. **The jury build is the itch.io build** (`pnpm build:itch`,
+  `.env.itch.example`); ads are off there. Ads exist only behind the build
+  flags `VITE_APP_INTERSTITIALS` / `VITE_APP_REWARDED`
+  (`src/platforms/adFlags.ts`), which are honoured only on platforms with an ad
+  SDK (CrazyGames, GameDistribution, Playgama, GamePix, GameMonetize, Yandex)
+  and are off for itch.io (the jury), plain web, Glitch and Wavedash builds.
+  Any new ad code goes through `useFoldAds` and must early-return on those
+  constants; `tests/platforms/foldAdFlags.test.ts` and
+  `tests/ui/foldAdsUi.test.ts` guard the itch.io (jury) config and the plain
+  default one.
 * **Only the `Angry` font.** Monospace is allowed in debug overlays only.
 * **Nothing walks through paper.** Lane walkers spawn at `PageDef.spawnZ` in
   front of any structure across the top, and a page built under a turning or

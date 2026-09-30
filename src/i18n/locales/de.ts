@@ -147,6 +147,13 @@ export default {
       'shelf': 'Bücherregal',
       'backToBook': 'Zurück zum Buch'
     },
+    'ads': {
+      'video': 'Video',
+      'tryAgain': 'Video ansehen und nochmal versuchen',
+      'secondChance': 'Zweite Chance!',
+      'secondChanceWatch': 'Video ansehen für ein Herz mehr',
+      'noThanks': 'Nein danke'
+    },
     'page': {
       'border': 'Die Grenze',
       'ravine': 'Die Schlucht',

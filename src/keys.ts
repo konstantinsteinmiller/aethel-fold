@@ -61,6 +61,12 @@ export const RUSH_KEY = 'fold_rush'
  * merge keeps the union and the winning side's equipped items where owned.
  */
 export const COSMETICS_KEY = 'fold_cosmetics'
+/**
+ * Lifetime playtime in seconds (roadmaps #9, #17, #19): the ad grace reads it
+ * (no ad before 3 minutes of a first-time player's play). Only ever grows, and
+ * only ad builds write it.
+ */
+export const PLAYTIME_KEY = 'fold_playtime'
 
 // ─── User settings (shared platform layer) ──────────────────────────────────
 

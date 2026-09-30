@@ -64,6 +64,8 @@ export type FoldEventType =
   | 'rushDone'      // the rush dragon is beaten: a = book, b = time (s), c = par (s)
   | 'pleat'         // book 3: a pleat section shut: a = fold index, b = crushed on it, c = section (0 = top), x/z = its centre
   | 'capsize'       // book 3: the boat capsized a wader: a = enemy slot, b = fold index, x/z
+  | 'lastChance'    // the last heart went and the world holds for a second-chance offer (roadmap #19): a = seconds offered
+  | 'heartRestored' // the second chance was taken: b = hearts now
 
 export const KILL_LAUNCH = 1
 export const KILL_CRUSH = 2

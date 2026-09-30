@@ -359,6 +359,22 @@ export class FoldEngine {
     return this.game.tryAgain()
   }
 
+  /** Rewarded second chance (roadmap #19): may the last heart hold for an offer? */
+  setSecondChance(on: boolean): void {
+    this.game.setSecondChance(on)
+  }
+
+  /** The second-chance ad was watched: one heart back. */
+  restoreHeart(): boolean {
+    this.gestures.cancel()
+    return this.game.restoreHeart()
+  }
+
+  /** The second chance was turned down (or had no ad): the page crumples. */
+  declineSecondChance(): boolean {
+    return this.game.declineSecondChance()
+  }
+
   dispose(): void {
     this.disposed = true
     this.stop()
