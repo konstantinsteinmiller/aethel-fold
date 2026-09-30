@@ -961,6 +961,21 @@ const pageAria = computed(() => t('fold.a11y.board'))
 </template>
 
 <style scoped lang="sass">
+// Paper-cut hand cursor (fine pointers only; touch is untouched): a pointing
+// finger, and a pinch while a button is held so a fold pickup is precise.
+// Fill paperWhite / washi, outline ink — hexes from src/fold/render/palette.ts.
+// Hotspots: fingertip (12, 1), pinch point (12, 4).
+$cursor-finger: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg stroke='%231c1724' stroke-width='1.5' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath fill='%23fffaf0' d='M10 3Q10 1 12.5 1Q15 1 15 3L15 12L17 11.5Q19.5 11.5 19.5 13.5L21 13Q23.5 13 23.5 15L24.5 15Q27 15 27 17.5L27 23Q27 29 21 30L14 30Q10 30 8 26L4.5 19.5Q3.5 17.5 5.5 16.8Q7 16.3 8.2 17.8L10 20Z'/%3E%3Cpath fill='%23f6e6d6' stroke='none' d='M26.2 21L26.2 23Q26.2 28.3 21 29.2L14 29.2Q11.4 29.2 9.8 27.3L20 24Z'/%3E%3Cpath fill='none' d='M15 12L15 16M19.5 13.5L19.5 17M23.5 15L23.5 18'/%3E%3C/g%3E%3C/svg%3E") 12 1, pointer
+$cursor-pinch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg stroke='%231c1724' stroke-width='1.5' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath fill='%23fffaf0' d='M8.5 13Q10 11.5 12 12L17 12Q19.5 12 19.5 14L21 13.5Q23.5 13.5 23.5 15.5L24.5 15.5Q27 15.5 27 18L27 23Q27 29 21 30L14 30Q10 30 8.5 26Z'/%3E%3Cpath fill='%23f6e6d6' stroke='none' d='M26.2 21L26.2 23Q26.2 28.3 21 29.2L14 29.2Q11.4 29.2 10 27.3L20 24Z'/%3E%3Cpath fill='none' d='M19.5 14L19.5 18M23.5 15.5L23.5 18.5'/%3E%3Cpath fill='%23fffaf0' d='M6.5 19Q3.8 17.5 5 14L8.6 5.8Q9.6 3.6 11.4 4.4Q12.9 5.2 12.2 7.2L10.5 14Z'/%3E%3Cpath fill='%23fffaf0' d='M13.5 15L11.5 6.8Q11 4 13 3.4Q15.2 3 16 5.5L18.5 13.5Z'/%3E%3C/g%3E%3C/svg%3E") 12 4, grabbing
+
+@media (pointer: fine)
+  .fold-scene, .fold-scene :deep(*)
+    cursor: $cursor-finger
+  .fold-scene:active, .fold-scene:active :deep(*)
+    cursor: $cursor-pinch
+  .fold-scene :deep(input), .fold-scene :deep(textarea), .fold-scene :deep([contenteditable='true'])
+    cursor: text
+
 .fold-scene
   position: relative
   width: 100%
