@@ -1,7 +1,7 @@
 import { ref, watch, type Ref } from 'vue'
 import {
   BEST2_KEY, BEST3_KEY, BEST_KEY, BOOK_KEY, CLEARED2_KEY, CLEARED3_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUN_KEY, RUNS_KEY, RUSH_KEY,
-  SECRETS_KEY, SETTINGS_KEY, STARS_KEY, STATS_KEY, WINS2_KEY, WINS3_KEY, WINS_KEY, COSMETICS_KEY, INTRO_KEY
+  SECRETS_KEY, SETTINGS_KEY, STARS_KEY, STATS_KEY, WINS2_KEY, WINS3_KEY, WINS_KEY, COSMETICS_KEY, INTRO_KEY, PLAYTIME_KEY
 } from '@/keys'
 import { aethelState, getState, setState, setStates } from '@/use/useAethelState'
 import { saveDataVersion, flushSaveNow } from '@/use/useSaveStatus'
@@ -154,6 +154,8 @@ export const rushBest: Ref<RushRecord> = ref(readRushRecord(getState(RUSH_KEY)))
 export const cosmetics: Ref<CosmeticsRecord> = ref(readCosmetics(getState(COSMETICS_KEY)))
 /** The first-launch intro (roadmap #12) was watched or skipped. */
 export const introSeen: Ref<boolean> = ref(getState(INTRO_KEY) === true)
+/** Lifetime playtime (s) the ad grace reads; written by ad builds only (roadmaps #9, #17, #19). */
+export const playtime: Ref<number> = ref(num(getState(PLAYTIME_KEY)))
 /** Bumped when a cloud hydrate replaced the progress under a running game. */
 export const progressRevision = ref(0)
 
@@ -179,6 +181,8 @@ const refresh = (): void => {
   rushBest.value = readRushRecord(getState(RUSH_KEY))
   cosmetics.value = readCosmetics(getState(COSMETICS_KEY))
   introSeen.value = getState(INTRO_KEY) === true
+  // Playtime only grows: a hydrate from a device that has played less never takes it back.
+  playtime.value = Math.max(playtime.value, num(getState(PLAYTIME_KEY)))
 }
 
 watch(aethelState, refresh, { deep: false })
@@ -472,6 +476,14 @@ export const markIntroSeen = (): void => {
   introSeen.value = true
   setState(INTRO_KEY, true)
   void flushSaveNow()
+}
+
+/** Add played seconds to the lifetime playtime (the ad grace). */
+export const addPlaytime = (seconds: number): void => {
+  if (!(seconds > 0) || !Number.isFinite(seconds)) return
+  const next = Math.round((playtime.value + seconds) * 10) / 10
+  playtime.value = next
+  setState(PLAYTIME_KEY, next)
 }
 
 export { flushSaveNow }

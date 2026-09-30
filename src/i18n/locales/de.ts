@@ -148,6 +148,13 @@ export default {
       'backToBook': 'Zurück zum Buch',
       'skip': 'Überspringen'
     },
+    'ads': {
+      'video': 'Video',
+      'tryAgain': 'Video ansehen und nochmal versuchen',
+      'secondChance': 'Zweite Chance!',
+      'secondChanceWatch': 'Video ansehen für ein Herz mehr',
+      'noThanks': 'Nein danke'
+    },
     'page': {
       'border': 'Die Grenze',
       'ravine': 'Die Schlucht',

@@ -66,6 +66,12 @@ export const COSMETICS_KEY = 'fold_cosmetics'
  * never unset. It never plays again (the settings can replay it on demand).
  */
 export const INTRO_KEY = 'fold_intro'
+/**
+ * Lifetime playtime in seconds (roadmaps #9, #17, #19): the ad grace reads it
+ * (no ad before 3 minutes of a first-time player's play). Only ever grows, and
+ * only ad builds write it.
+ */
+export const PLAYTIME_KEY = 'fold_playtime'
 
 // ─── User settings (shared platform layer) ──────────────────────────────────
 
