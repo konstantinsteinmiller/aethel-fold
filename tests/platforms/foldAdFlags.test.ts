@@ -30,7 +30,8 @@ const MATRIX: Record<string, { rewarded: boolean; interstitials: boolean }> = {
   '.env.gamemonetize.example': { rewarded: true, interstitials: true },
   '.env.gamepix.example': { rewarded: true, interstitials: true },
   '.env.playgama.example': { rewarded: true, interstitials: true },
-  '.env.yandex.example': { rewarded: true, interstitials: true }
+  '.env.yandex.example': { rewarded: true, interstitials: true },
+  '.env.poki.example': { rewarded: true, interstitials: true }
 }
 
 describe('ad flag matrix per platform template', () => {

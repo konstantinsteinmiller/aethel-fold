@@ -580,6 +580,9 @@ export default defineConfig(({ mode, command }) => {
         ...(env.VITE_APP_GAME_MONETIZE === 'true' ? {} : {
           '@/use/ads/GameMonetizeProvider': fileURLToPath(new URL('./src/use/ads/GameMonetizeProvider.stub.ts', import.meta.url))
         }),
+        ...(env.VITE_APP_POKI === 'true' ? {} : {
+          '@/use/ads/PokiProvider': fileURLToPath(new URL('./src/use/ads/PokiProvider.stub.ts', import.meta.url))
+        }),
         '@': fileURLToPath(new URL('./src', import.meta.url)),
         '@/': fileURLToPath(new URL('./src/', import.meta.url)),
         '#': fileURLToPath(new URL('./src/assets', import.meta.url))
