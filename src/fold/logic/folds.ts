@@ -12,11 +12,24 @@
  * ridge at its peak). This module only moves `t` and reports *moments* (snap,
  * stamp impact) through return codes — what a snap launches or a stamp crushes
  * is decided by the game, which knows about enemies.
+ *
+ * Book 3 adds two kinds with their own rules here (roadmap #3):
+ *
+ *   boat  — `t` folds the dock flap into a boat; once `up`, `sail` runs 0 → 1
+ *           over `def.hold` sim seconds (out along the channel and back), then
+ *           it lowers (unfolds at the dock) and cools down. `boatPoint` is
+ *           where its bow is; `inChannel` / `boatReaches` are the wade and
+ *           capsize rules the game applies to marchers.
+ *   pleat — `t` closes `creases` sections top to bottom: section k is shut
+ *           once t·n ≥ k + 1 (`pleatShut`). While dragging, `t` follows the
+ *           finger, so the sections shut as the finger passes them; released
+ *           past the threshold, the rest shut at a steady `PLEAT.sectionTime`
+ *           each. `pleatSectionAt` tells which section a point stands on.
  */
 
 import {
-  FOLD_FLICK_SPEED, FOLD_LOWER_TIME, FOLD_SNAP_THRESHOLD, FOLD_SNAP_TIME, FOLD_SPRING_RATE,
-  FOLD_STAMP_TIME, VALLEY_SHUT_TIME
+  BOAT, FOLD_FLICK_SPEED, FOLD_LOWER_TIME, FOLD_SNAP_THRESHOLD, FOLD_SNAP_TIME, FOLD_SPRING_RATE,
+  FOLD_STAMP_TIME, PLEAT, VALLEY_SHUT_TIME
 } from './config'
 import { clamp01, damp } from './math'
 import type { FoldDef, FoldState } from './types'
@@ -45,9 +58,21 @@ export const createFold = (def: FoldDef): FoldState => {
     rev: 0,
     ammo: 0,
     aimX: (def.ax + def.bx) / 2,
-    aimZ: -7
+    aimZ: -7,
+    sail: 0,
+    sections: 0,
+    chain: 0
   }
 }
+
+/** Kinds whose footprint is a strip either side of the line (not a flap on one side of a hinge). */
+export const isStrip = (f: FoldState): boolean => {
+  const k = f.def.kind
+  return k === 'valley' || k === 'ridge' || k === 'boat' || k === 'pleat'
+}
+
+/** How far along the line the finger can take hold (a boat only at its dock). */
+export const grabLength = (f: FoldState): number => (f.def.kind === 'boat' ? Math.min(f.len, BOAT.dock) : f.len)
 
 // ─── Geometry queries ──────────────────────────────────────────────────────
 
@@ -67,8 +92,7 @@ export const onFootprint = (f: FoldState, x: number, z: number, margin = 0): boo
   const s = alongHinge(f, x, z)
   if (s < -margin || s > f.len + margin) return false
   const d = acrossHinge(f, x, z)
-  const k = f.def.kind
-  if (k === 'valley' || k === 'ridge') return Math.abs(d) <= f.def.depth + margin
+  if (isStrip(f)) return Math.abs(d) <= f.def.depth + margin
   return d >= -margin && d <= f.def.depth + margin
 }
 
@@ -96,6 +120,62 @@ export const isGrabbable = (f: FoldState): boolean => f.phase === 'ready'
 export const isStampable = (f: FoldState): boolean =>
   (f.def.kind === 'wall' || f.def.kind === 'valley') && f.phase === 'up' && f.t > 0.9
 
+// ─── Boat (book 3) ─────────────────────────────────────────────────────────
+
+/** Is (x, z) in the boat's channel (wading water)? */
+export const inChannel = (f: FoldState, x: number, z: number): boolean => f.def.kind === 'boat' && onFootprint(f, x, z, 0)
+
+/** Is the boat out on the water (folded and sailing)? */
+export const isSailing = (f: FoldState): boolean => f.def.kind === 'boat' && f.phase === 'up'
+
+/**
+ * Along-channel position of the boat's bow for voyage progress `p` (0…1):
+ * from the dock out to the far end by p = ½, and home again by 1, eased at
+ * both turns. Folded at the dock (not sailing) it sits at the dock's middle.
+ */
+export const boatAlong = (f: FoldState, p: number): number => {
+  const home = grabLength(f) / 2
+  const far = f.len - 0.45
+  const k = p < 0.5 ? p * 2 : (1 - p) * 2
+  const e = k * k * (3 - 2 * k)
+  return home + (far - home) * e
+}
+
+/** Page-space point of the boat's bow now. */
+export const boatPoint = (f: FoldState, out: { x: number; z: number }): { x: number; z: number } =>
+  flapPoint(f, isSailing(f) ? boatAlong(f, f.sail) : grabLength(f) / 2, 0, out)
+
+/** Would the sailing boat capsize someone wading at (x, z)? */
+export const boatReaches = (f: FoldState, x: number, z: number, radius = 0): boolean => {
+  if (!isSailing(f) || !inChannel(f, x, z)) return false
+  return Math.abs(alongHinge(f, x, z) - boatAlong(f, f.sail)) <= BOAT.reach + radius
+}
+
+// ─── Pleat (book 3) ────────────────────────────────────────────────────────
+
+/** Sections of a pleat. */
+export const pleatCount = (f: FoldState): number => Math.max(2, f.def.creases ?? PLEAT.creases)
+
+/** How shut section k is (0 open … 1 shut) at fold progress t — they close top to bottom. */
+export const pleatFold = (f: FoldState, k: number, t = f.t): number => {
+  const v = t * pleatCount(f) - k
+  return v <= 0 ? 0 : v >= 1 ? 1 : v
+}
+
+/** Sections shut at progress t (section k is shut once t·n ≥ k + 1; a hair of slack for float error). */
+export const pleatShut = (f: FoldState, t = f.t): number => {
+  const n = pleatCount(f)
+  return Math.max(0, Math.min(n, Math.floor(t * n + 1e-6)))
+}
+
+/** Which section (0 = top) a page point stands on, or -1 when it is off the strip. */
+export const pleatSectionAt = (f: FoldState, x: number, z: number, margin = 0): number => {
+  if (f.def.kind !== 'pleat' || !onFootprint(f, x, z, margin)) return -1
+  const n = pleatCount(f)
+  const k = Math.floor((alongHinge(f, x, z) / f.len) * n)
+  return k < 0 ? 0 : k >= n ? n - 1 : k
+}
+
 // ─── Player input ──────────────────────────────────────────────────────────
 
 export const grabFold = (f: FoldState): boolean => {
@@ -103,6 +183,8 @@ export const grabFold = (f: FoldState): boolean => {
   f.phase = 'dragging'
   f.drag = 0
   f.v = 0
+  // A new voyage / a new closing: the multi-kill chain starts over.
+  if (f.t <= 0.0005) f.chain = 0
   return true
 }
 
@@ -135,6 +217,7 @@ export const abandonFold = (f: FoldState): void => {
 /** Force-snap (lesson auto-complete, tests, keyboard accessibility). */
 export const snapFold = (f: FoldState): boolean => {
   if (f.phase !== 'ready' && f.phase !== 'dragging') return false
+  if (f.phase === 'ready' && f.t <= 0.0005) f.chain = 0
   f.phase = 'snapping'
   f.v = 1 / FOLD_SNAP_TIME
   return true
@@ -200,9 +283,15 @@ export const updateFold = (f: FoldState, dt: number): number => {
       f.t = damp(f.t, f.drag * 0.92, 28, dt)
       return FOLD_NONE
     case 'snapping': {
-      // Accelerating snap: the closer it gets, the faster it goes (a *snap*).
-      f.v += dt * 60
-      f.t += f.v * dt
+      if (f.def.kind === 'pleat') {
+        // The accordion shuts section after section at a steady beat (never
+        // skipping one inside a frame), so the crushes read in sequence.
+        f.t = Math.min(1, f.t + dt / (PLEAT.sectionTime * pleatCount(f)))
+      } else {
+        // Accelerating snap: the closer it gets, the faster it goes (a *snap*).
+        f.v += dt * 60
+        f.t += f.v * dt
+      }
       if (f.t >= 1) {
         f.t = 1
         f.v = 0
@@ -214,12 +303,22 @@ export const updateFold = (f: FoldState, dt: number): number => {
         else {
           f.phase = 'up'
           f.timer = f.def.hold
+          f.sail = 0
         }
         return FOLD_SNAPPED
       }
       return FOLD_NONE
     }
     case 'up': {
+      if (f.def.kind === 'boat') {
+        // Out along the channel and home again; then it unfolds at the dock.
+        f.sail = Math.min(1, f.sail + dt / Math.max(0.1, f.def.hold))
+        if (f.sail >= 1) {
+          f.sail = 1
+          f.phase = 'lowering'
+        }
+        return FOLD_NONE
+      }
       if (Number.isFinite(f.timer)) {
         f.timer -= dt
         if (f.timer <= 0) {
@@ -252,6 +351,8 @@ export const updateFold = (f: FoldState, dt: number): number => {
       f.t -= dt / FOLD_LOWER_TIME
       if (f.t <= 0) {
         f.t = 0
+        f.sail = 0
+        f.sections = 0
         f.phase = 'cooldown'
         f.timer = f.def.cooldown
         f.hp = f.def.hp

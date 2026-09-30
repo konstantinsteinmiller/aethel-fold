@@ -144,6 +144,7 @@ export default {
       'settings': 'Pause and settings',
       'hearts': '{n} of {max} hearts left',
       'dragon': 'Dragon',
+      'kraken': 'Kraken',
       'boss': '{n} weak points left',
       'tryAgain': 'Try again',
       'almost': 'Almost there',
@@ -162,7 +163,13 @@ export default {
       'mill': 'Windmill Hill',
       'camp': 'The Siege Camp',
       'return': 'The Dragon Returns',
-      'homecoming': 'Peace at Last'
+      'homecoming': 'Peace at Last',
+      'harbour': 'The Harbour',
+      'marsh': 'The Tide Flats',
+      'lighthouse': 'The Lighthouse',
+      'shipyard': 'The Shipyard',
+      'deep': 'The Deep',
+      'calm': 'Calm Water'
     },
     'story': {
       'b1p1': 'The Paper King’s knights are marching on the border…',
@@ -176,7 +183,13 @@ export default {
       'b2p3': 'Catapults on Windmill Hill. Fling them back, again and again!',
       'b2p4': 'The whole siege camp is coming for the gate.',
       'b2p5': 'The dragon returns!',
-      'b2p6': 'Fold it into a crane, and let it fly away in peace.'
+      'b2p6': 'Fold it into a crane, and let it fly away in peace.',
+      'b3p1': 'The King fled across the sea… his marines wade into the harbour!',
+      'b3p2': 'Long columns on the tide flats. Fold the pleat shut on them!',
+      'b3p3': 'Archers on the cliffs, a boat in the channel, a pleat on the road.',
+      'b3p4': 'The whole shipyard is coming ashore.',
+      'b3p5': 'Something huge is waking in the deep…',
+      'b3p6': 'The kraken is only paper now. Fold it into a little fish.'
     },
     'books': {
       'title': 'Books',
@@ -185,7 +198,10 @@ export default {
       'name2': 'Book 2: The Homefront',
       'blurb1': 'March on the enemy castle.',
       'blurb2': 'Defend your own keep.',
+      'name3': 'Book 3: The Sea of Paper',
+      'blurb3': 'Hold the harbour against the kraken.',
       'locked': 'Win book 1 to unlock.',
+      'locked3': 'Win book 2 to unlock.',
       'secrets': 'Secrets found: {n}/{total}'
     },
     'fx': {
@@ -218,7 +234,14 @@ export default {
       'whoosh': 'WHOOSH!',
       'crackle': 'CRACKLE!',
       'bonk': 'BONK!',
-      'rush': 'DRAGON DOWN!'
+      'rush': 'DRAGON DOWN!',
+      'rushKraken': 'KRAKEN DOWN!',
+      'crunch': 'CRUNCH!',
+      'regatta': 'REGATTA!',
+      'flash': 'FLASH!',
+      'shipshape': 'SHIPSHAPE!',
+      'giggle': 'BLUB BLUB!',
+      'blubRoar': 'BLUBROOOAR!'
     },
     'hint': {
       'swipe': 'Swipe along the dotted arrow to fold the page',
@@ -240,7 +263,9 @@ export default {
       'hold': 'Press and hold the glowing flap to fold it',
       'holdPeel': 'Press and hold the corner to peel back the page',
       'holdCrease': 'Press and hold the glowing crease',
-      'slingTap': 'Tap where the stone should land'
+      'slingTap': 'Tap where the stone should land',
+      'boat': 'Swipe the boat along the river to sail it',
+      'pleat': 'Swipe down the pleat to fold it shut'
     },
     'pause': {
       'title': 'Paused',
@@ -283,14 +308,17 @@ export default {
         'paper_washi': 'Washi',
         'paper_newsprint': 'Newsprint',
         'paper_map': 'Old map',
+        'paper_chart': 'Sea chart',
         'hero_classic': 'Classic',
         'hero_scarf': 'Scarf',
         'hero_sash': 'Royal sash',
         'hero_crown': 'Crown',
+        'hero_sailor': 'Sailor',
         'confetti_squares': 'Squares',
         'confetti_stars': 'Stars',
         'confetti_hearts': 'Hearts',
-        'confetti_cranes': 'Cranes'
+        'confetti_cranes': 'Cranes',
+        'confetti_fish': 'Fish'
       }
     },
     'victory': {
@@ -305,7 +333,11 @@ export default {
       'playAgain': 'Play again',
       'subtitle2': 'The dragon is a paper crane now!',
       'story1': '…but the frog hopped away to warn the Paper King. He is coming for your keep!',
-      'story2': 'Your keep stands. The crane flies home in peace.',
+      'story2': '…but the Paper King fled across the sea, and something is waking in the deep.',
+      'subtitle3': 'The kraken is a little paper fish now!',
+      'story3': 'The sea is calm. The fish swims home, and the harbour sleeps.',
+      'nextBook3': 'Book 3: The Sea of Paper',
+      'rushKraken': 'Kraken Rush',
       'nextBook': 'Book 2: The Homefront',
       'backToBook1': 'Read book 1 again',
       'stars': 'Stars',
@@ -313,6 +345,7 @@ export default {
     },
     'rush': {
       'title': 'DRAGON RUSH',
+      'titleKraken': 'KRAKEN RUSH',
       'time': 'Time',
       'par': 'Par',
       'best': 'Best',

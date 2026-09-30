@@ -526,7 +526,8 @@ export class GestureRecognizer {
       full = Math.max(1.4, f.len * 0.3)
     } else {
       along = dx * f.def.sx + dz * f.def.sz
-      full = k === 'ridge' ? Math.max(1.3, f.def.depth * 1.5) : Math.max(1.15, f.def.depth * 0.8)
+      // A pleat (book 3) follows the finger down its length: each section shuts as the finger passes it.
+      full = k === 'ridge' ? Math.max(1.3, f.def.depth * 1.5) : k === 'pleat' ? Math.max(1.4, f.len * 0.85) : Math.max(1.15, f.def.depth * 0.8)
     }
     return Math.max(0, Math.min(1, along / full))
   }

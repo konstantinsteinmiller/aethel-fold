@@ -21,25 +21,27 @@ import { Group, InstancedMesh, Mesh, PlaneGeometry, type BufferGeometry, type Sc
 import { CASTLE, HERO_INVULN, PAGE_HALF_D, PAGE_HALF_W } from '../../logic/config'
 import type { FoldGame } from '../../logic/game'
 import type { FoldState, PageDef } from '../../logic/types'
-import { acrossHinge, alongHinge, isStampable, onFootprint } from '../../logic/folds'
+import { acrossHinge, alongHinge, inChannel, isStampable, onFootprint } from '../../logic/folds'
 import { clamp01, easeOutBack } from '../../logic/math'
 import { createRng } from '../../logic/rng'
 import { secretOnPage } from '../../logic/secrets'
-import { PLAIN_LOOK, paintPage, type PageLook, type PageTextures } from '../art/pageArt'
+import { PLAIN_LOOK, SEA_SHORE, paintPage, type PageLook, type PageTextures } from '../art/pageArt'
 import type { SpriteTextures } from '../art/spriteArt'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
 import { TMP } from '../paperGeometry'
 import {
-  appleTreeGeometry, battlementGeometry, bushGeometry, castleBaileyGeometry, millSailsGeometry, millTowerGeometry,
-  playerCastleGeometry, pineGeometry,
+  appleTreeGeometry, battlementGeometry, bushGeometry, castleBaileyGeometry, lighthouseGeometry, lighthouseLampGeometry,
+  millSailsGeometry, millTowerGeometry, playerCastleGeometry, pineGeometry,
   rockGeometry, roundTreeGeometry, seasonCastleGeometry, snowyGeometry, tentGeometry
 } from '../models'
 import { FoldView } from './FoldView'
 import { CastleView } from './CastleView'
 import { DragonView } from './DragonView'
+import { KrakenView } from './KrakenView'
 import { FinaleView } from './FinaleView'
 import { SlingView } from './SlingView'
 import { CaptionLabel, captionZ } from './CaptionLabel'
+import { HEX } from '../palette'
 
 interface PropInstance {
   x: number
@@ -48,6 +50,12 @@ interface PropInstance {
   scale: number
   delay: number
 }
+
+/** Book 3: where each sea page's printed shoreline is (props stay out of the water). */
+const SHORE = SEA_SHORE
+
+/** The Lighthouse page's lighthouse (its tap secret's target, `beacon`). */
+const LIGHTHOUSE = { x: 4.2, z: -3.6 } as const
 
 const laneXAt = (page: PageDef, lane: number, z: number): number => {
   const p = page.lanes[lane]!.points
@@ -71,10 +79,15 @@ export class PageView {
   private seasonCastle: Mesh | null = null
   castle: CastleView | null = null
   dragon: DragonView | null = null
+  /** Book 3's boss page. */
+  kraken: KrakenView | null = null
   finale: FinaleView | null = null
   sling: SlingView | null = null
   caption: CaptionLabel | null = null
   private sails: Mesh | null = null
+  /** The Lighthouse's lamp room: it flashes for the beacon secret (1 → 0). */
+  private lampMat: PaperMaterial | null = null
+  private beaconK = 0
   /** The mill's secret: the sails whirl (1 → 0), their angle accumulated in real time. */
   private whirlK = 0
   private sailAngle = 0
@@ -111,7 +124,7 @@ export class PageView {
     this.group.add(page)
 
     folds.forEach((f) => {
-      const v = new FoldView(f, this.textures.art, this.pageMat.uniforms.uObjectId.value)
+      const v = new FoldView(f, this.textures.art, this.pageMat.uniforms.uObjectId.value, this.look.season === 'winter')
       this.folds.push(v)
       this.group.add(v.group)
     })
@@ -149,6 +162,20 @@ export class PageView {
     if (def.theme === 'core') {
       this.dragon = new DragonView(sprites, overlay)
       this.riser.add(this.dragon.group)
+    }
+    if (def.theme === 'deep') {
+      this.kraken = new KrakenView(sprites, overlay)
+      this.riser.add(this.kraken.group)
+    }
+    if (def.theme === 'lighthouse') {
+      const tower = new Mesh(lighthouseGeometry(), this.propMat)
+      tower.position.set(LIGHTHOUSE.x, 0, LIGHTHOUSE.z)
+      tower.castShadow = true
+      tower.receiveShadow = true
+      this.lampMat = createPaperMaterial({ vertexColors: true, grain: 0.02, emissive: HEX.lampWarm, emissiveIntensity: 0.3 })
+      const lamp = new Mesh(lighthouseLampGeometry(), this.lampMat)
+      lamp.position.set(LIGHTHOUSE.x, 1.98, LIGHTHOUSE.z)
+      this.riser.add(tower, lamp)
     }
     if (def.theme === 'finale') {
       this.finale = new FinaleView(def.finale ?? 'frog')
@@ -191,6 +218,7 @@ export class PageView {
   /** Put the season's dress on the castle and the scenery (or take it off). */
   private dressCastle(season: PageLook['season']): void {
     for (const p of this.props) p.mesh.geometry = season === 'winter' ? p.snow : p.geo
+    for (const f of this.folds) f.setWinter(season === 'winter')
     const geo = seasonCastleGeometry(season, CASTLE.keepZ, CASTLE.towerX, CASTLE.towerZ, CASTLE.keepTop, CASTLE.towerTop)
     if (this.seasonCastle && this.seasonCastle.geometry === geo) return
     if (this.seasonCastle) {
@@ -223,6 +251,11 @@ export class PageView {
     return true
   }
 
+  /** The boss rig on this page (the dragon, or book 3's kraken), for the game view's anchors and jets. */
+  get boss(): DragonView | KrakenView | null {
+    return this.dragon ?? this.kraken
+  }
+
   get artTexture(): Texture {
     return this.textures.art
   }
@@ -230,7 +263,15 @@ export class PageView {
   private placeProps(): void {
     const def = this.def
     const rng = createRng(def.book * 977 + def.id * 131 + 7)
-    const types: { geo: BufferGeometry; name: string; weight: number; scale: [number, number] }[] = def.theme === 'orchard'
+    const sea = SHORE[def.theme] !== undefined
+    const types: { geo: BufferGeometry; name: string; weight: number; scale: [number, number] }[] = sea
+      ? [
+          // The coast: rocks and bushes, a few wind-bent pines.
+          { geo: rockGeometry(), name: 'rock', weight: 0.4, scale: [0.6, 1.05] },
+          { geo: bushGeometry(), name: 'bush', weight: 0.35, scale: [0.7, 1] },
+          { geo: pineGeometry(), name: 'pine', weight: 0.25, scale: [0.5, 0.72] }
+        ]
+      : def.theme === 'orchard'
       ? [
           { geo: appleTreeGeometry(), name: 'appleTree', weight: 0.6, scale: [0.55, 0.78] },
           { geo: roundTreeGeometry(), name: 'roundTree', weight: 0.15, scale: [0.5, 0.7] },
@@ -250,7 +291,7 @@ export class PageView {
           ]
     const buckets: PropInstance[][] = types.map(() => [])
     const tries = 260
-    const want = def.theme === 'core' ? 8 : def.theme === 'finale' ? 16 : 18
+    const want = def.theme === 'core' || def.theme === 'deep' ? 8 : def.theme === 'finale' ? 16 : 18
     let placed = 0
     for (let n = 0; n < tries && placed < want; n++) {
       const x = -PAGE_HALF_W + 0.45 + rng.next() * (PAGE_HALF_W * 2 - 0.9)
@@ -297,6 +338,7 @@ export class PageView {
     // …of the hero's camp, the castle and the set pieces.
     if (z > 4.1 && Math.abs(x) < 2.8) return false
     if ((def.theme === 'gates' || def.theme === 'core') && z < -2.3) return false
+    if (def.theme === 'deep' && Math.abs(x) < 4.4 && z < -1) return false
     if (def.theme === 'siege' && z < -5.3) return false
     if (def.theme === 'finale' && Math.abs(x) < 3.9 && z > -2.4 && z < 3.6) return false
     if (def.theme === 'core' && Math.abs(x) < 4.4 && z < 1) return false
@@ -304,6 +346,10 @@ export class PageView {
     if (z > 5.2) return false
     if (def.sling && Math.hypot(x - def.sling.x, z - def.sling.z) < 2.2) return false
     if (def.theme === 'mill' && Math.hypot(x - 4.3, z + 1.4) < 1.4) return false
+    // Book 3: nothing stands in the sea, on the lighthouse's rock, or where the kraken rises.
+    const shore = SHORE[def.theme]
+    if (shore !== undefined && z < shore + 0.7) return false
+    if (def.theme === 'lighthouse' && Math.hypot(x - LIGHTHOUSE.x, z - LIGHTHOUSE.z) < 1.3) return false
     // A tap secret's target stays clear, so the finger finds it (roadmap #15).
     const sd = secretOnPage(def.book, def.id)
     if (sd && sd.trigger === 'taps' && !sd.hero && Math.hypot(x - sd.x, z - sd.z) < 1.2) return false
@@ -372,6 +418,8 @@ export class PageView {
 
   stand(x: number, z: number): number {
     if (this.def.theme === 'siege' && z < -5.6) return 0.55
+    // Book 3: wading a boat channel, knee-deep.
+    for (let i = 0; i < this.foldStates.length; i++) if (inChannel(this.foldStates[i]!, x, z)) return -0.14
     if (this.castle) return this.castle.standAt(x, z)
     return 0
   }
@@ -430,6 +478,13 @@ export class PageView {
     this.playerCastle.position.x = inv > 0.4 ? Math.sin(time * 60) * 0.04 * inv : 0
     this.castle?.update(game, time, dt)
     this.dragon?.update(game, time, dt)
+    this.kraken?.update(game, time, dt)
+    if (this.lampMat) {
+      // The lighthouse lamp turns (a slow pulse); the beacon secret flashes it bright.
+      this.beaconK = Math.max(0, this.beaconK - dt * 0.6)
+      const pulse = 0.5 + 0.5 * Math.sin(time * 2.4)
+      this.lampMat.uniforms.uEmissiveIntensity.value = 0.25 + pulse * 0.25 + this.beaconK * (1.2 + Math.sin(time * 18) * 0.5)
+    }
     // Only the page in play drives the sling (a preview under a turn stays at rest).
     if (this.sling) {
       if (game.page === this.def) this.sling.update(game, time, dt)
@@ -448,11 +503,18 @@ export class PageView {
     this.whirlK = 1
   }
 
+  /** The Lighthouse's secret: the beacon flashes. */
+  beacon(): void {
+    this.beaconK = 1
+  }
+
   dispose(): void {
     for (const f of this.folds) f.dispose()
     for (const p of this.props) p.mesh.dispose()
     this.castle?.dispose()
     this.dragon?.dispose()
+    this.kraken?.dispose()
+    this.lampMat?.dispose()
     this.finale?.dispose()
     this.sling?.dispose()
     this.caption?.dispose()

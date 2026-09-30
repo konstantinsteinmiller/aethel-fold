@@ -43,7 +43,7 @@ import { useI18n } from 'vue-i18n'
 import { FoldEngine } from '@/fold/FoldEngine'
 import type { FoldEvent } from '@/fold/logic/events'
 import type { FoldGame } from '@/fold/logic/game'
-import { PAGE_COUNT, pageDef } from '@/fold/logic/pages'
+import { PAGE_COUNT, asBookId, isBookId, pageDef } from '@/fold/logic/pages'
 import { LESSON_IDS } from '@/fold/logic/lessons'
 import { brokenCount } from '@/fold/logic/boss'
 import { ALMOST } from '@/fold/logic/config'
@@ -71,9 +71,9 @@ import { isGamePaused } from '@/use/useGamePause'
 import { syncGameplayLifecycle } from '@/use/useGameplayLifecycle'
 import {
   addStats, bankScore, bookUnlocked, checkpoint, cosmetics, equipCosmetic, foldSettings, learnLesson, lessons, pageStars,
-  pagesCleared, pagesCleared2, progressRevision, readKindness, recordRush, recordSecret, recordStars, recordVictory,
-  recordsFor, resumeBook, resumePage, runCheckpoint, rushBest, rushBestOf, saveKindness, secretsFound, setFoldSetting,
-  shelfProgress, startNewRun, unlockCosmetics, wins, wins2, flushSaveNow, type FoldSettings
+  pagesCleared, pagesCleared2, pagesCleared3, progressRevision, readKindness, recordRush, recordSecret, recordStars, recordVictory,
+  recordsFor, resumePage, runCheckpoint, rushBest, rushBestOf, saveKindness, savedBook, secretsFound, setFoldSetting,
+  shelfProgress, startNewRun, unlockCosmetics, wins, wins2, wins3, flushSaveNow, type FoldSettings
 } from '@/use/useFoldProgress'
 import { mobileCheck } from '@/utils/function'
 import { BOOT, bootSnapshot, bootStage, markFirstInput, markGameReady, markInteractive, markPrecompiled } from '@/use/useBoot'
@@ -123,7 +123,8 @@ const hud = reactive({
 const pauseOpen = ref(false)
 const nameKey = computed(() => pageDef(hud.book, hud.page).nameKey)
 const best = computed(() => recordsFor(hud.book).score)
-const book2Open = computed(() => bookUnlocked(2))
+/** The books the pause bookshelf can open. */
+const openBooks = computed((): BookId[] => ([1, 2, 3] as BookId[]).filter((b) => bookUnlocked(b)))
 
 // ─── Looks (roadmaps #6, #17) ───────────────────────────────────────────────
 
@@ -390,8 +391,8 @@ const learnedMap = (): Partial<Record<LessonId, boolean>> => ({ ...lessons.value
 
 const bootPage = (): { page: PageId; score: number; book: BookId } => {
   const page = resumePage.value
-  // A book-2 bookmark without book 2 unlocked (a hand-edited or torn save) falls back to book 1.
-  const book: BookId = resumeBook.value === 2 && bookUnlocked(2) ? 2 : 1
+  // A bookmark in a book that isn't unlocked (a hand-edited or torn save) falls back to book 1.
+  const book: BookId = savedBook()
   const score = page > 1 ? runCheckpoint.value?.score ?? 0 : 0
   return { page, score, book }
 }
@@ -442,7 +443,7 @@ watch(locale, () => engine.value?.refreshCaptions())
 // An equip on the settings face, the seasonal switch, or a cloud hydrate: the engine repaints without a hitch.
 watch(look, (l) => engine.value?.setLook({ ...l }))
 // The shelf shows the saved progress (wins unlock books, stars go on the spines).
-watch([wins, wins2, pagesCleared, pagesCleared2, pageStars, rushBest], () => engine.value?.setShelfProgress(shelfProgress()))
+watch([wins, wins2, wins3, pagesCleared, pagesCleared2, pagesCleared3, pageStars, rushBest], () => engine.value?.setShelfProgress(shelfProgress()))
 
 onBeforeUnmount(() => {
   ro?.disconnect()
@@ -506,8 +507,6 @@ const newGame = (): void => openBook(hud.book)
 
 // ─── Dragon Rush (roadmap #16) ───────────────────────────────────────────────
 
-/** The book the story's bookmark is in. */
-const savedBook = (): BookId => (resumeBook.value === 2 && bookUnlocked(2) ? 2 : 1)
 
 /** A book's Dragon Rush (the victory card's button; the shelf figurine starts it inside the game). */
 const startRush = (book: BookId): void => {
@@ -577,12 +576,12 @@ watch(progressRevision, () => {
   // …and stars from there unlock their cosmetics (quietly).
   unlockCosmetics()
   const saved = resumePage.value
-  const savedBook: BookId = resumeBook.value === 2 && bookUnlocked(2) ? 2 : 1
+  const book: BookId = savedBook()
   const early = g.book === 1 && g.pageId === 1 && g.runTime < 90 && g.pagesCleared === 0
-  if (early && (saved > g.pageId || savedBook !== g.book)) {
+  if (early && (saved > g.pageId || book !== g.book)) {
     // The restored run's kindness memory comes with it (in place: the game holds this object).
     Object.assign(g.kind, readKindness())
-    eng.jumpTo(saved, runCheckpoint.value?.score ?? 0, savedBook)
+    eng.jumpTo(saved, runCheckpoint.value?.score ?? 0, book)
   }
 })
 
@@ -600,7 +599,7 @@ const publishDebugHandle = (eng: FoldEngine): void => {
     engine: eng,
     game: eng.game,
     jumpTo: (p: number, book?: number) =>
-      eng.jumpTo(Math.max(1, Math.min(PAGE_COUNT, p)) as PageId, eng.game.score, book === 2 ? 2 : book === 1 ? 1 : eng.game.book),
+      eng.jumpTo(Math.max(1, Math.min(PAGE_COUNT, p)) as PageId, eng.game.score, isBookId(book) ? book : eng.game.book),
     clearPage: () => eng.game.debugClearPage(),
     /** The desk bookshelf: toggle it, and where a slot's spine is on screen. */
     toggleShelf: () => eng.toggleShelf(),
@@ -611,7 +610,7 @@ const publishDebugHandle = (eng: FoldEngine): void => {
     },
     tryAgain: () => eng.tryAgain(),
     /** Dragon Rush (roadmap #16) and the page secrets (roadmap #15). */
-    startRush: (book: number) => eng.startRush(book === 2 ? 2 : 1),
+    startRush: (book: number) => eng.startRush(asBookId(book)),
     lampScreen: () => {
       const out = { x: 0, y: 0, visible: false }
       eng.lampScreen(out)
@@ -632,7 +631,10 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       return look.value.season
     },
     equip: (id: string) => equipCosmetic(id),
-    look: () => ({ want: { ...eng.view.currentLook }, page: eng.view.printedLook, bats: eng.view.bats.group.visible, confetti: eng.view.effects.confettiShape }),
+    look: () => ({
+      want: { ...eng.view.currentLook }, page: eng.view.printedLook, bats: eng.view.bats.group.visible, confetti: eng.view.effects.confettiShape,
+      snow: eng.view.snow.visible, snowFlakes: eng.view.snow.count
+    }),
     fastForward: (s: number) => eng.fastForward(s),
     state: () => ({
       book: eng.game.book,
@@ -689,7 +691,7 @@ const pageAria = computed(() => t('fold.a11y.board'))
       div.hud-centre.flex.flex-col.items-center
         RushClock(v-if="hud.rush" :tenths="hud.rushTenths" :par="hud.rushPar" :best="hud.rushBest")
         ScoreBadge(v-else :score="hud.score" :best="best")
-        BossMeter(v-if="hud.boss" :total="5" :broken="hud.bossBroken" :exposed="hud.bossExposed")
+        BossMeter(v-if="hud.boss" :total="5" :broken="hud.bossBroken" :exposed="hud.bossExposed" :kraken="hud.book === 3")
       div.hud-right
         div.hud-right__row.flex.items-start
           FMuteButton
@@ -736,7 +738,7 @@ const pageAria = computed(() => t('fold.a11y.board'))
     CootieCatcherPause(
       :open="pauseOpen"
       :book="hud.book"
-      :unlocked="book2Open"
+      :unlocked="openBooks"
       @resume="resume"
       @restart-page="restartPage"
       @new-game="newGame"

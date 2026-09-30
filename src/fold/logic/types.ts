@@ -17,8 +17,10 @@ export type PageId = 1 | 2 | 3 | 4 | 5 | 6
  * Book 1 — "The Paper Dragon": the hero marches on the enemy castle.
  * Book 2 — "The Homefront": the perspective flips; the enemy besieges the
  * hero's own keep, which stands at the bottom of every page.
+ * Book 3 — "The Sea of Paper": the enemy wades ashore from the sea at the
+ * top of the page; the boat and the pleat folds, and the kraken.
  */
-export type BookId = 1 | 2
+export type BookId = 1 | 2 | 3
 
 /** Origami stars a cleared page earns (roadmap #1): 0 = never cleared. */
 export type Stars = 0 | 1 | 2 | 3
@@ -39,8 +41,16 @@ export type Stars = 0 | 1 | 2 | 3
  * ballista — a ballista folded flat on one of the player's castle towers;
  *           swiping it up flips it open for BALLISTA_SHOTS tap-aimed bolts,
  *           then it folds itself away and re-arms after a cooldown.
+ * boat    — book 3: a river channel runs along the hinge (a→b), `depth` its
+ *           half-width; marchers wade it slowly. The flap at the dock (end a)
+ *           folds into a paper boat that sails the channel out and back,
+ *           capsizing everyone wading within reach of it (see folds.ts).
+ * pleat   — book 3: an accordion strip down a lane (a = top, b = bottom,
+ *           `depth` its half-width) in `creases` sections. The sections close
+ *           one after another as `t` rises, following the finger, and each
+ *           one crushes whoever stands on it (see folds.ts).
  */
-export type FoldKind = 'wall' | 'valley' | 'launch' | 'ridge' | 'frog' | 'ballista'
+export type FoldKind = 'wall' | 'valley' | 'launch' | 'ridge' | 'frog' | 'ballista' | 'boat' | 'pleat'
 
 /** The pop-up that rises with a wall fold. Purely art + blocking strength. */
 export type FoldStructure = 'tower' | 'wall' | 'shield' | 'ballista' | 'none'
@@ -78,6 +88,8 @@ export interface FoldDef {
   fromWave: number
   /** Wordless lesson that introduces this line, if any. */
   lesson?: LessonId
+  /** Pleats: sections of the accordion (≥ 2). */
+  creases?: number
 }
 
 export type FoldPhase =
@@ -120,6 +132,12 @@ export interface FoldState {
   /** Ballistas: where the last bolt was aimed (the view turns toward it). */
   aimX: number
   aimZ: number
+  /** Boats: 0…1 along the out-and-back voyage while it sails (`up`). */
+  sail: number
+  /** Pleats: sections shut so far (0…creases). */
+  sections: number
+  /** Boats and pleats: enemies taken on this voyage / this closing (the multi-kill chain). */
+  chain: number
 }
 
 // ─── Tear targets (spread / pinch) ─────────────────────────────────────────
@@ -273,6 +291,8 @@ export type LessonId =
   | 'crush' | 'sling' | 'leaper' | 'ballista'
   // Added with the desk bookshelf (roadmap #2).
   | 'shelf'
+  // Added with book 3 (roadmap #3).
+  | 'boat' | 'pleat'
 
 // ─── Waves ─────────────────────────────────────────────────────────────────
 
@@ -342,7 +362,9 @@ export interface PageDef {
    */
   sally?: { untilTorn: string; every: number; count: number; x: number; z: number; after: number }
   /** Decorative theme used by the renderer's page painter. */
-  theme: 'border' | 'ravine' | 'siege' | 'gates' | 'core' | 'finale' | 'home' | 'orchard' | 'mill' | 'camp'
+  theme:
+    | 'border' | 'ravine' | 'siege' | 'gates' | 'core' | 'finale' | 'home' | 'orchard' | 'mill' | 'camp'
+    | 'harbour' | 'marsh' | 'lighthouse' | 'shipyard' | 'deep'
   /** The player's sling, if this page has one. */
   sling?: SlingDef
   /**
@@ -351,8 +373,10 @@ export interface PageDef {
    * standee) instead of walking through the paper structure.
    */
   spawnZ?: number
-  /** What the finale folds the dragon into. */
-  finale?: 'frog' | 'crane'
+  /** What the finale folds the dragon (or the kraken) into. */
+  finale?: 'frog' | 'crane' | 'fish'
+  /** Who the boss page's boss is (default the dragon). */
+  boss?: BossKind
   /** Who spills out when the dragon stomps (defaults to knights, then a brute). */
   stomp?: EnemyType[]
   /** Boss attack pace multiplier (< 1 = faster). */
@@ -369,8 +393,11 @@ export interface PageDef {
 
 // ─── Boss ──────────────────────────────────────────────────────────────────
 
+/** The boss of a boss page: book 1 and 2's origami dragon, or book 3's paper kraken. */
+export type BossKind = 'dragon' | 'kraken'
+
 export type BossPhase =
-  | 'dormant'      // castle, still
+  | 'dormant'      // castle, still (the kraken: only its eyes above the water)
   | 'rumble'       // castle shakes, gears glow through the seams
   | 'unfold'       // the castle opens outward into the dragon
   | 'roar'         // GROUAAARGH
@@ -382,8 +409,17 @@ export type BossPhase =
   | 'hurt'         // limb folding back
   | 'collapse'     // folding down into a flat sheet
   | 'flat'         // the sheet the finale folds
+  // The kraken's own moves (book 3, logic/kraken.ts); it shares dormant, roar,
+  // idle, exposed, hurt, collapse and flat with the dragon.
+  | 'surface'      // rising out of the sea
+  | 'inkCharge'    // siphon glows — raise a shield!
+  | 'ink'          // the ink jet
+  | 'slam'         // a tentacle slams a lane, boarders tumble off it
 
-export type BossLimb = 'legFL' | 'legFR' | 'wingL' | 'wingR' | 'neck'
+export type BossLimb =
+  | 'legFL' | 'legFR' | 'wingL' | 'wingR' | 'neck'
+  // The kraken: four tentacles (creases) and its mantle (the core).
+  | 'tentacleL' | 'tentacleR' | 'tentacleL2' | 'tentacleR2' | 'mantle'
 
 export interface BossWeakPoint {
   limb: BossLimb
@@ -401,6 +437,8 @@ export interface BossWeakPoint {
 }
 
 export interface Boss {
+  /** Which boss this page has (set when a boss page loads). */
+  kind: BossKind
   phase: BossPhase
   timer: number
   /** Total seconds in phase (for animation curves). */
@@ -422,6 +460,8 @@ export interface Boss {
    * play, `RUSH.timing` in a Dragon Rush (roadmap #16). Survives `resetBoss`.
    */
   timing: number
+  /** The kraken: the current attack has struck (ink landed, slam spilled). */
+  acted: boolean
   rev: number
 }
 

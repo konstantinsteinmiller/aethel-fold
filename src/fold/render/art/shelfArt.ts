@@ -32,11 +32,11 @@ export const SPINE_UV = {
 export const CARD_TEX_W = 256
 export const CARD_TEX_H = 320
 
-/** Cover colour per book (book 3 is painted when it arrives). */
+/** Cover colour per book (book 3, the Sea of Paper: sea blue; later books fall back to it). */
 const COVER: Readonly<Record<number, [PaletteKey, PaletteKey]>> = {
   1: ['bookCover', 'bookCoverDark'],
   2: ['heroBlue', 'heroBlueDark'],
-  3: ['dragonGreen', 'dragonGreenDark']
+  3: ['seaDeep', 'sailorNavy']
 }
 
 const star = (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, fill: string, stroke: string = HEX.ink): void => {
@@ -67,7 +67,7 @@ const fitText = (ctx: CanvasRenderingContext2D, text: string, size: number, maxW
   }
 }
 
-/** A small printed frog (book 1) or crane (book 2) on the spine. */
+/** A small printed frog (book 1), crane (book 2) or paper boat (book 3) on the spine. */
 const emblem = (ctx: CanvasRenderingContext2D, book: number, cx: number, cy: number): void => {
   ctx.save()
   ctx.translate(cx, cy)
@@ -97,6 +97,11 @@ const emblem = (ctx: CanvasRenderingContext2D, book: number, cx: number, cy: num
     tri([-30, -10, 0, 8, -6, 16], HEX.c3)
     tri([30, -14, 0, 8, 6, 16], HEX.guide)
     tri([-6, 16, 0, 8, 6, 16, 0, 24], HEX.c3)
+  } else if (book === 3) {
+    // A paper boat: the hull, and its folded sail.
+    tri([-30, 2, 30, 2, 18, 18, -18, 18], HEX.paperWhite)
+    tri([-14, 0, 14, 0, 0, -26], HEX.parchmentLight)
+    tri([-28, 6, 28, 6, 24, 10, -24, 10], HEX.guide)
   } else {
     tri([-24, 16, 0, -20, 24, 16], HEX.dragonGreen)
   }
@@ -294,33 +299,12 @@ export const paintRushCard = (ctx: CanvasRenderingContext2D, slot: ShelfSlot): v
   ctx.strokeStyle = HEX.ink
   ctx.lineWidth = 5
   ctx.strokeRect(4, 4, w - 8, h - 8)
-  ctx.fillStyle = slot.book === 2 ? HEX.dragonBlue : HEX.dragonRed
+  ctx.fillStyle = slot.book === 3 ? HEX.kraken : slot.book === 2 ? HEX.dragonBlue : HEX.dragonRed
   ctx.fillRect(8, 8, w - 16, 60)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  // A dragon's head in profile: a paper wedge with an eye and a horn.
-  ctx.save()
-  ctx.translate(46, 38)
-  ctx.fillStyle = HEX.dragonYellow
-  ctx.strokeStyle = HEX.ink
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.moveTo(-22, -12)
-  ctx.lineTo(24, 0)
-  ctx.lineTo(-22, 16)
-  ctx.closePath()
-  ctx.fill()
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.moveTo(-16, -10)
-  ctx.lineTo(-24, -24)
-  ctx.lineTo(-8, -8)
-  ctx.stroke()
-  ctx.fillStyle = HEX.ink
-  ctx.beginPath()
-  ctx.arc(-6, -2, 3.5, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.restore()
+  if (slot.book === 3) krakenHead(ctx, 46, 38)
+  else dragonHead(ctx, 46, 38)
   ctx.fillStyle = HEX.paperWhite
   fitText(ctx, String(slot.book), 44, 80)
   ctx.fillText(String(slot.book), w / 2 + 30, 40)
@@ -343,6 +327,66 @@ export const paintRushCard = (ctx: CanvasRenderingContext2D, slot: ShelfSlot): v
   const par = formatRushTime(slot.par).replace(/\.0$/, '')
   fitText(ctx, par, 40, 150)
   ctx.fillText(par, 160, 252)
+}
+
+/** The kraken's head on its rush card: a violet mantle with a gold eye and two curling arms. */
+const krakenHead = (ctx: CanvasRenderingContext2D, x: number, y: number): void => {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.fillStyle = HEX.krakenLight
+  ctx.strokeStyle = HEX.ink
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.moveTo(-16, 12)
+  ctx.lineTo(-12, -14)
+  ctx.lineTo(0, -24)
+  ctx.lineTo(12, -14)
+  ctx.lineTo(16, 12)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+  for (const sx of [-1, 1]) {
+    ctx.beginPath()
+    ctx.moveTo(sx * 10, 12)
+    ctx.quadraticCurveTo(sx * 26, 14, sx * 22, 0)
+    ctx.stroke()
+  }
+  ctx.fillStyle = HEX.krakenEye
+  ctx.beginPath()
+  ctx.arc(0, -4, 6, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = HEX.krakenPupil
+  ctx.beginPath()
+  ctx.arc(0, -3, 3, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+/** A dragon's head in profile on its rush card: a paper wedge with an eye and a horn. */
+const dragonHead = (ctx: CanvasRenderingContext2D, x: number, y: number): void => {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.fillStyle = HEX.dragonYellow
+  ctx.strokeStyle = HEX.ink
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.moveTo(-22, -12)
+  ctx.lineTo(24, 0)
+  ctx.lineTo(-22, 16)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(-16, -10)
+  ctx.lineTo(-24, -24)
+  ctx.lineTo(-8, -8)
+  ctx.stroke()
+  ctx.fillStyle = HEX.ink
+  ctx.beginPath()
+  ctx.arc(-6, -2, 3.5, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
 }
 
 /** The secrets counter's canvas size. */

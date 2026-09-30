@@ -4,7 +4,8 @@
  * the fearsome dragon into a tiny, harmless paper frog."
  *
  * Book 2 ends the same way but folds a paper crane that flutters above the
- * keep instead of a hopping frog.
+ * keep instead of a hopping frog; book 3 folds the flattened kraken (its
+ * violet sheet) into a little paper fish that leaps as if out of the sea.
  *
  * The sheet is printed with the flattened dragon (its colours in facets).
  * After the swipe: fold top-over-bottom, fold right-over-left, the packet
@@ -24,10 +25,14 @@ const HALF_W = 3.2
 const TOP_D = 2.4
 const BOT_D = 2.4
 
-/** Flat faceted sheet from x0..x1, z0..z1 (y = 0), with dragon-coloured triangles. */
-const sheetGeometry = (x0: number, x1: number, z0: number, z1: number, seed: number): BufferGeometry => {
+const DRAGON_SHEET: readonly Col[] = ['dragonRed', 'dragonBlue', 'dragonGreen', 'dragonYellow', 'dragonRedDark', 'dragonBlueDark', 'dragonOrange']
+const KRAKEN_SHEET: readonly Col[] = ['kraken', 'krakenDark', 'krakenLight', 'krakenSucker', 'kraken', 'seaDeep', 'krakenDark']
+
+/** Flat faceted sheet from x0..x1, z0..z1 (y = 0), with the boss's colours in triangles. */
+const sheetGeometry = (
+  x0: number, x1: number, z0: number, z1: number, seed: number, cols: readonly Col[] = DRAGON_SHEET
+): BufferGeometry => {
   const b = new PaperBuilder()
-  const cols: Col[] = ['dragonRed', 'dragonBlue', 'dragonGreen', 'dragonYellow', 'dragonRedDark', 'dragonBlueDark', 'dragonOrange']
   const nx = 4
   const nz = 3
   let k = seed
@@ -97,6 +102,45 @@ const frogGeometry = (): BufferGeometry => {
   return b.build()
 }
 
+/** Book 3's finale: a folded paper fish, nose toward +z, standing on its belly fin. */
+const fishGeometry = (): BufferGeometry => {
+  const b = new PaperBuilder()
+  const tri = (p: number[], q: number[], r: number[], c: Col): void => {
+    b.tri(p[0]!, p[1]!, p[2]!, q[0]!, q[1]!, q[2]!, r[0]!, r[1]!, r[2]!, c)
+  }
+  const N = [0, 0.4, 0.75]
+  const T = [0, 0.78, 0]
+  const B = [0, 0.08, 0.05]
+  const L = [-0.22, 0.4, 0.05]
+  const R = [0.22, 0.4, 0.05]
+  const K = [0, 0.4, -0.55]
+  // Body: two folded diamonds (front and back half).
+  tri(N, R, T, 'fish')
+  tri(N, T, L, 'fishDark')
+  tri(N, B, R, 'fishBelly')
+  tri(N, L, B, shade('fishBelly', 0.9))
+  tri(K, T, R, 'fishDark')
+  tri(K, L, T, 'fish')
+  tri(K, R, B, shade('fish', 0.85))
+  tri(K, B, L, 'fishDark')
+  // Tail: a notched fin, both faces.
+  const t1 = [0, 0.82, -0.95]
+  const t2 = [0, 0.02, -0.95]
+  const tm = [0, 0.4, -0.78]
+  tri(K, t1, tm, 'fish')
+  tri(K, tm, t1, 'fishDark')
+  tri(K, tm, t2, 'fish')
+  tri(K, t2, tm, 'fishDark')
+  // Eyes.
+  for (const sx of [-1, 1]) {
+    tri([sx * 0.2, 0.5, 0.42], [sx * 0.2, 0.38, 0.5], [sx * 0.2, 0.52, 0.56], 'paperWhite')
+    tri([sx * 0.2, 0.5, 0.42], [sx * 0.2, 0.52, 0.56], [sx * 0.2, 0.38, 0.5], 'paperWhite')
+    tri([sx * 0.21, 0.47, 0.47], [sx * 0.21, 0.43, 0.5], [sx * 0.21, 0.5, 0.51], 'ink')
+    tri([sx * 0.21, 0.47, 0.47], [sx * 0.21, 0.5, 0.51], [sx * 0.21, 0.43, 0.5], 'ink')
+  }
+  return b.build()
+}
+
 export class FinaleView {
   readonly group = new Group()
   private readonly top = new Group()
@@ -111,17 +155,18 @@ export class FinaleView {
   hops = 0
   private lastHop = -1
 
-  constructor(private readonly variant: 'frog' | 'crane' = 'frog') {
+  constructor(private readonly variant: 'frog' | 'crane' | 'fish' = 'frog') {
+    const cols = variant === 'fish' ? KRAKEN_SHEET : DRAGON_SHEET
     this.mat = createPaperMaterial({ vertexColors: true, grain: 0.05, doubleSided: true, backTint: '#efe4c8' })
     this.frogMat = createPaperMaterial({ vertexColors: true, grain: 0.04 })
     // The packet holds everything that folds; its origin is the page centre of the sheet.
     this.group.add(this.packet)
     // Bottom half (stays), split into left/right so the second fold works.
-    const botL = new Mesh(sheetGeometry(-HALF_W, 0, HINGE_Z, HINGE_Z + BOT_D, 3), this.mat)
-    const botR = new Mesh(sheetGeometry(0, HALF_W, HINGE_Z, HINGE_Z + BOT_D, 5), this.mat)
+    const botL = new Mesh(sheetGeometry(-HALF_W, 0, HINGE_Z, HINGE_Z + BOT_D, 3, cols), this.mat)
+    const botR = new Mesh(sheetGeometry(0, HALF_W, HINGE_Z, HINGE_Z + BOT_D, 5, cols), this.mat)
     // Top half hinged at z = HINGE_Z; its geometry is local to the hinge.
-    const topL = new Mesh(sheetGeometry(-HALF_W, 0, -TOP_D, 0, 7), this.mat)
-    const topR = new Mesh(sheetGeometry(0, HALF_W, -TOP_D, 0, 11), this.mat)
+    const topL = new Mesh(sheetGeometry(-HALF_W, 0, -TOP_D, 0, 7, cols), this.mat)
+    const topR = new Mesh(sheetGeometry(0, HALF_W, -TOP_D, 0, 11, cols), this.mat)
     for (const m of [botL, botR, topL, topR]) {
       m.castShadow = true
       m.receiveShadow = true
@@ -138,7 +183,9 @@ export class FinaleView {
     this.rightHalf.userData.topPivot = topRPivot
 
     // The crane geometry is a shared cached one; the finale owns (and disposes) a copy.
-    this.frog = new Mesh(variant === 'crane' ? craneGeometry('dragonRed').clone() : frogGeometry(), this.frogMat)
+    this.frog = new Mesh(
+      variant === 'crane' ? craneGeometry('dragonRed').clone() : variant === 'fish' ? fishGeometry() : frogGeometry(), this.frogMat
+    )
     this.frog.castShadow = true
     this.frog.visible = false
     this.frog.position.set(0, 0, 0.6)
@@ -229,6 +276,22 @@ export class FinaleView {
         this.frog.position.y += Math.sin(k * Math.PI) * 1.4
         this.frog.rotation.x += k * Math.PI * 2
         this.frog.scale.y *= 1 + Math.sin(time * 30) * 0.2 * this.trickK
+      }
+      return
+    }
+    if (this.variant === 'fish') {
+      // The fish leaps in arcs, nose up on the way up and down on the way down, turning side-on to the lens.
+      const leapT = Math.max(0, t - 1.7)
+      const k = (leapT % 1.6) / 1.6
+      const leapY = Math.sin(k * Math.PI) * 1.1
+      this.frog.position.set(Math.sin(time * 0.7) * 0.5, leapY, 0.6)
+      this.frog.scale.setScalar(base * 1.1)
+      this.frog.rotation.set(Math.cos(k * Math.PI) * -0.9, Math.PI / 2 + Math.sin(time * 0.5) * 0.3, 0)
+      if (this.trickK > 0) {
+        // A big leap with a twist.
+        const q = 1 - this.trickK
+        this.frog.position.y += Math.sin(q * Math.PI) * 2.6
+        this.frog.rotation.z += q * Math.PI * 2
       }
       return
     }

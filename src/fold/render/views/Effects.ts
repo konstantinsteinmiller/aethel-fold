@@ -30,7 +30,9 @@ const MAX_CONFETTI = 1100
 const MAX_RINGS = 10
 const MAX_GLOWS = 40
 
-export type ConfettiPalette = 'festive' | 'paper' | 'flame' | 'gold' | 'ink' | 'hero' | 'enemy' | 'dragon' | 'water' | 'apple'
+export type ConfettiPalette =
+  | 'festive' | 'paper' | 'flame' | 'gold' | 'ink' | 'hero' | 'enemy' | 'dragon' | 'water' | 'apple'
+  | 'kraken' | 'inkJet'
 
 const PALETTES: Record<ConfettiPalette, PaletteKey[]> = {
   festive: [...CONFETTI_KEYS],
@@ -42,7 +44,9 @@ const PALETTES: Record<ConfettiPalette, PaletteKey[]> = {
   enemy: ['enemyRed', 'enemySteel', 'gold', 'paperWhite'],
   dragon: ['dragonRed', 'dragonBlue', 'dragonGreen', 'dragonYellow'],
   water: ['water', 'waterLight', 'waterDark', 'paperWhite'],
-  apple: ['enemyRed', 'dragonRed', 'c1', 'forest']
+  apple: ['enemyRed', 'dragonRed', 'c1', 'forest'],
+  kraken: ['kraken', 'krakenLight', 'krakenSucker', 'krakenDark'],
+  inkJet: ['inkJet', 'krakenDark', 'inkSoft', 'kraken']
 }
 
 /**
@@ -65,6 +69,11 @@ export const confettiGeometry = (shape: ConfettiShape): BufferGeometry => {
     s.bezierCurveTo(-0.08, 0.09, -0.02, 0.09, 0, 0.05)
     s.bezierCurveTo(0.02, 0.09, 0.08, 0.09, 0.09, 0.04)
     s.bezierCurveTo(0.1, -0.01, 0.03, -0.05, 0, -0.08)
+  } else if (shape === 'fish') {
+    // A little paper fish in profile: a diamond body and a notched tail.
+    const p = [0.11, 0, 0.03, 0.055, -0.04, 0.02, -0.1, 0.06, -0.08, 0, -0.1, -0.06, -0.04, -0.02, 0.03, -0.055]
+    s.moveTo(p[0]!, p[1]!)
+    for (let i = 2; i < p.length; i += 2) s.lineTo(p[i]!, p[i + 1]!)
   } else {
     // A little origami crane in profile: tail, wing peak, neck and head.
     const p = [-0.11, 0.02, -0.03, -0.02, 0.0, 0.09, 0.03, -0.02, 0.08, 0.05, 0.11, 0.035, 0.06, -0.03, 0.02, -0.05, -0.04, -0.045]
@@ -147,7 +156,8 @@ export class Effects {
       squares: confettiGeometry('squares'),
       stars: confettiGeometry('stars'),
       hearts: confettiGeometry('hearts'),
-      cranes: confettiGeometry('cranes')
+      cranes: confettiGeometry('cranes'),
+      fish: confettiGeometry('fish')
     }
     this.confetti = new InstancedMesh(this.shapes.squares, this.confMat, MAX_CONFETTI)
     this.confetti.instanceMatrix.setUsage(DynamicDrawUsage)
@@ -312,11 +322,20 @@ export class Effects {
   }
 
   /** Paper-fire: a stream of flame-coloured paper strips along a direction. */
-  flame(x: number, y: number, z: number, dx: number, dy: number, dz: number, count: number): void {
-    this.burst(x, y, z, {
-      count, speed: 6.5, spread: 0.18, up: 0.5, palette: 'flame', size: 1.7, life: 0.75,
-      dirX: dx, dirY: dy, dirZ: dz, gravity: 1.5, settle: false
-    })
+  /** Reused by the per-frame jets (the dragon's fire, the kraken's ink): no allocation. */
+  private readonly jet: ConfettiOptions = {
+    count: 0, speed: 6.5, spread: 0.18, up: 0.5, palette: 'flame', size: 1.7, life: 0.75,
+    dirX: 0, dirY: 0, dirZ: 0, gravity: 1.5, settle: false
+  }
+
+  flame(x: number, y: number, z: number, dx: number, dy: number, dz: number, count: number, palette: ConfettiPalette = 'flame'): void {
+    const o = this.jet
+    o.count = count
+    o.palette = palette
+    o.dirX = dx
+    o.dirY = dy
+    o.dirZ = dz
+    this.burst(x, y, z, o)
   }
 
   // ─── Tick ────────────────────────────────────────────────────────────────

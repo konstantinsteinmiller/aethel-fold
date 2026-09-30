@@ -96,7 +96,7 @@ export const readKindMemory = (v: unknown): KindMemory => {
   if (r.crumples && typeof r.crumples === 'object' && !Array.isArray(r.crumples)) {
     for (const [k, n] of Object.entries(r.crumples as Record<string, unknown>)) {
       const c = typeof n === 'number' ? Math.floor(n) : NaN
-      if (/^b[12]p[1-6]$/.test(k) && Number.isFinite(c) && c > 0) out.crumples[k] = Math.min(c, 999)
+      if (/^b[123]p[1-6]$/.test(k) && Number.isFinite(c) && c > 0) out.crumples[k] = Math.min(c, 999)
     }
   }
   const s = typeof r.streak === 'number' ? Math.floor(r.streak) : 0

@@ -9,6 +9,14 @@
  *   ridge  — two panels rise into a ∧ mountain.
  *   ballista — no panel: a ballista lies folded on a castle tower and flips
  *            upright (t → 1), turning toward each bolt's aim point.
+ *   boat   — book 3: the dock flap lifts and shrinks into a paper boat that
+ *            grows at the dock (t → 1), then sails the channel out and back
+ *            (`sail`, the bow at `boatPoint`), and unfolds into the flap again.
+ *   pleat  — book 3: an accordion of 2 × n half-panels. Section k is a ∧
+ *            (two half-panels rising to a mountain crease in its middle) that
+ *            closes as `pleatFold(k)` goes 0 → 1; the closed sections bunch up
+ *            toward the strip's bottom edge, which stays put, so the top of
+ *            the strip opens onto the layer beneath as the accordion shuts.
  *
  * A lesson's first-encounter demonstration (roadmap #4) draws a *ghost* of the
  * flap — a translucent, ink-free copy sharing the real geometry — posed by the
@@ -18,9 +26,10 @@
 
 import { Group, Mesh, type BufferGeometry, type Texture } from 'three'
 import type { FoldState } from '../../logic/types'
+import { boatAlong, grabLength, isSailing, pleatCount, pleatFold } from '../../logic/folds'
 import { clamp01, easeOutBack } from '../../logic/math'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
-import { ballistaGeometry, shieldGeometry, towerGeometry, wallGeometry } from '../models'
+import { ballistaGeometry, paperBoatGeometry, shieldGeometry, snowyGeometry, towerGeometry, wallGeometry } from '../models'
 import { CASTLE } from '../../logic/config'
 import { buildFlapGeometry } from './flapGeometry'
 import { GuideLine } from './GuideLine'
@@ -36,7 +45,7 @@ class Panel {
   private readonly sgn: number
 
   constructor(
-    private readonly ax: number, private readonly az: number, private readonly ux: number, private readonly uz: number,
+    readonly ax: number, readonly az: number, private readonly ux: number, private readonly uz: number,
     len: number, private readonly w: number, mats: PaperMaterial[] | PaperMaterial, geometry?: BufferGeometry
   ) {
     this.sgn = Math.sign(w) || 1
@@ -82,6 +91,56 @@ const posePanels = (panels: readonly Panel[], kind: string, t: number, extra = 0
   }
 }
 
+/**
+ * Pose a pleat's half-panels (A then B per section, top section first) for
+ * fold progress `t`. The strip's bottom edge stays put; each section's width
+ * along the strip is 2·h·cos θ, so the shut sections bunch up toward it.
+ * Allocation-free.
+ */
+const posePleat = (panels: readonly Panel[], f: FoldState, t: number): void => {
+  const n = pleatCount(f)
+  const hs = f.len / (n * 2)
+  let bottom = f.len
+  for (let k = n - 1; k >= 0; k--) {
+    const a = pleatFold(f, k, t) * PLEAT_MAX
+    const w = 2 * hs * Math.cos(a)
+    const top = bottom - w
+    const A = panels[k * 2]
+    const B = panels[k * 2 + 1]
+    if (A && B) {
+      // Each panel keeps its hinge line's across position; only the along-strip offset moves.
+      A.pivot.position.x = A.ax + f.ux * (top - k * 2 * hs)
+      A.pivot.position.z = A.az + f.uz * (top - k * 2 * hs)
+      B.pivot.position.x = B.ax + f.ux * (bottom - (k + 1) * 2 * hs)
+      B.pivot.position.z = B.az + f.uz * (bottom - (k + 1) * 2 * hs)
+      A.set(a)
+      B.set(a)
+    }
+    bottom = top
+  }
+}
+
+/** A pleat section shuts to nearly upright (paper has thickness). */
+const PLEAT_MAX = (84 * Math.PI) / 180
+
+/**
+ * Pose the boat's dock flap and the boat for fold progress `t`: the flap lifts
+ * and shrinks away as the boat grows at the dock. Sailing, the boat rides the
+ * channel (`along` is its bow's along-channel position, `dir` +1 outward).
+ */
+const poseBoat = (flap: Panel, boat: Group, f: FoldState, t: number, along: number, dir: number, time: number): void => {
+  const k = clamp01(t)
+  flap.set(k * (Math.PI / 2))
+  const shrink = Math.max(0.001, 1 - k * k)
+  flap.pivot.scale.set(shrink, 1, shrink)
+  flap.pivot.visible = shrink > 0.01
+  const grow = easeOutBack(clamp01((k - 0.25) / 0.75), 1.8)
+  boat.visible = grow > 0.01
+  boat.scale.setScalar(Math.max(0.001, grow))
+  boat.position.set(f.def.ax + f.ux * along, 0.02 + Math.sin(time * 5.2) * 0.03 * k, f.def.az + f.uz * along)
+  boat.rotation.set(Math.sin(time * 3.1) * 0.06 * k, Math.atan2(-f.uz * dir, f.ux * dir), Math.sin(time * 4.3) * 0.08 * k)
+}
+
 /** Pop-up rise for fold progress `t` when nothing snapped it (the demo's ghost). */
 const ghostRise = (t: number): number => clamp01((t - 0.2) / 0.6)
 
@@ -110,7 +169,10 @@ export class FoldView {
   private readonly ownId: number
   private readonly pageId: number
 
-  constructor(private f: FoldState, art: Texture, pageId = -1) {
+  /** The pop-up's meshes with their everyday geometry and its Winter name (roadmap #17). */
+  private readonly dressable: { mesh: Mesh; geo: BufferGeometry; name: string }[] = []
+
+  constructor(private f: FoldState, art: Texture, pageId = -1, winter = false) {
     const d = f.def
     this.lastHp = f.hp
     this.artMat = createPaperMaterial({ map: art, vertexColors: true, grain: 0.05 })
@@ -136,10 +198,42 @@ export class FoldView {
       const pb = new Panel(bX, bZ, ux, uz, len, -d.side * d.depth, mats)
       this.panels.push(pa, pb)
       this.group.add(pa.pivot, pb.pivot)
+    } else if (d.kind === 'boat') {
+      // The dock square, hinged on its far (−n) edge: it covers −depth…depth across the channel.
+      const dock = grabLength(f)
+      const p = new Panel(d.ax - nx * d.depth, d.az - nz * d.depth, ux, uz, dock, d.side * d.depth * 2, mats)
+      this.panels.push(p)
+      this.group.add(p.pivot)
+    } else if (d.kind === 'pleat') {
+      // Two half-panels per section, hinged on lines across the strip. Panel A hangs from the
+      // section's top edge down the strip (+u), panel B from its bottom edge back up (−u).
+      const n = pleatCount(f)
+      const hs = len / (n * 2)
+      // Hinge direction across the strip, chosen so a positive width runs down the strip.
+      const hx = uz
+      const hz = -ux
+      for (let k = 0; k < n; k++) {
+        const topS = k * 2 * hs
+        const botS = (k + 1) * 2 * hs
+        const ta = d.ax + ux * topS - hx * d.depth
+        const tz = d.az + uz * topS - hz * d.depth
+        const ba = d.ax + ux * botS - hx * d.depth
+        const bz = d.az + uz * botS - hz * d.depth
+        const A = new Panel(ta, tz, hx, hz, d.depth * 2, hs, mats)
+        const B = new Panel(ba, bz, hx, hz, d.depth * 2, -hs, mats)
+        // Eight low panels: they receive shadows but cast none (a shut accordion is knee-high),
+        // which keeps a pleat page's shadow pass within the book 1–2 pages' draw budget.
+        A.mesh.castShadow = false
+        B.mesh.castShadow = false
+        this.panels.push(A, B)
+        this.group.add(A.pivot, B.pivot)
+      }
     }
 
     if (d.kind === 'wall' && d.structure !== 'none') this.buildStructure()
     if (d.kind === 'ballista') this.buildBallista()
+    if (d.kind === 'boat') this.buildBoat()
+    if (winter) this.setWinter(true)
 
     // Guide path.
     const c = { x: f.cx, z: f.cz }
@@ -156,6 +250,17 @@ export class FoldView {
       ]
     } else if (d.kind === 'ridge') {
       pts = [c.x + nx * d.depth * 0.95, c.z + nz * d.depth * 0.95, c.x - nx * d.depth * 0.95, c.z - nz * d.depth * 0.95]
+    } else if (d.kind === 'boat') {
+      // From the dock along the channel: the way the boat will sail.
+      const dock = grabLength(f)
+      pts = [
+        d.ax + ux * dock * 0.12, d.az + uz * dock * 0.12,
+        d.ax + ux * dock * 0.6 + nx * 0.18, d.az + uz * dock * 0.6 + nz * 0.18,
+        d.ax + ux * (dock + 1.0), d.az + uz * (dock + 1.0)
+      ]
+    } else if (d.kind === 'pleat') {
+      // Down the strip: the accordion shuts behind the finger.
+      pts = [d.ax + ux * 0.25, d.az + uz * 0.25, d.ax + ux * len * 0.5, d.az + uz * len * 0.5, d.ax + ux * len * 0.9, d.az + uz * len * 0.9]
     } else {
       pts = [
         c.x + nx * 0.2, c.z + nz * 0.2,
@@ -166,6 +271,15 @@ export class FoldView {
     this.guide = new GuideLine({ points: pts, twoWay }, 0.014, d.structure === 'shield' ? 0.26 : 0.32)
     this.group.add(this.guide.mesh)
     this.group.userData.perfTag = `fold.${d.kind}`
+  }
+
+  /**
+   * Winter's dress on the pop-up (roadmap #17): snow on its tops and a thick
+   * cap on a tower's roof — a geometry swap on the same material (no new
+   * draw, no new program). The ghost copy of the pop-up keeps the plain one.
+   */
+  setWinter(on: boolean): void {
+    for (const d of this.dressable) d.mesh.geometry = on ? snowyGeometry(d.geo, d.name) : d.geo
   }
 
   /** The page was repainted in another look (roadmap #6): the flap prints the new art. */
@@ -179,8 +293,9 @@ export class FoldView {
     const s = new Group()
     this.structMat = createPaperMaterial({ vertexColors: true, grain: 0.06 })
     const m = this.structMat
-    const add = (geo: ReturnType<typeof towerGeometry>, x: number, scale = 1): void => {
+    const add = (geo: ReturnType<typeof towerGeometry>, x: number, scale = 1, name = ''): void => {
       const mesh = new Mesh(geo, m)
+      if (name) this.dressable.push({ mesh, geo, name })
       mesh.position.x = x
       mesh.scale.setScalar(scale)
       mesh.castShadow = true
@@ -188,16 +303,18 @@ export class FoldView {
       s.add(mesh)
     }
     if (d.structure === 'tower') {
-      add(towerGeometry(), 0)
+      add(towerGeometry(), 0, 1, 'tower')
       const side = (f.len - 1.45) / 2
       if (side > 0.35) {
-        add(wallGeometry(Number(side.toFixed(2))), -(0.72 + side / 2), 1)
-        add(wallGeometry(Number(side.toFixed(2))), 0.72 + side / 2, 1)
+        const len = side.toFixed(2)
+        add(wallGeometry(Number(len)), -(0.72 + side / 2), 1, `wall:${len}`)
+        add(wallGeometry(Number(len)), 0.72 + side / 2, 1, `wall:${len}`)
       }
     } else if (d.structure === 'wall') {
-      add(wallGeometry(Number((f.len * 0.96).toFixed(2))), 0)
+      const len = (f.len * 0.96).toFixed(2)
+      add(wallGeometry(Number(len)), 0, 1, `wall:${len}`)
     } else if (d.structure === 'shield') {
-      add(shieldGeometry(), 0, Math.min(1.25, f.len / 2.6))
+      add(shieldGeometry(), 0, Math.min(1.25, f.len / 2.6), 'shield')
     }
     // Stand on the hinge, a hair toward the player, facing the player.
     s.position.set(f.cx - f.nx * 0.16, 0, f.cz - f.nz * 0.16)
@@ -221,6 +338,19 @@ export class FoldView {
     mesh.position.z = -0.1
     s.add(mesh)
     s.position.set(this.f.cx, CASTLE.towerTop, CASTLE.towerZ)
+    this.structure = s
+    this.group.add(s)
+  }
+
+  /** The paper boat the dock flap folds into (book 3). */
+  private buildBoat(): void {
+    const s = new Group()
+    this.structMat = createPaperMaterial({ vertexColors: true, grain: 0.05 })
+    const mesh = new Mesh(paperBoatGeometry(), this.structMat)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    s.add(mesh)
+    s.visible = false
     this.structure = s
     this.group.add(s)
   }
@@ -278,9 +408,15 @@ export class FoldView {
 
     const t = f.t
     posePanels(this.panels, k, t, k === 'wall' ? this.wobble * 0.08 : k === 'launch' && f.phase === 'spent' ? this.wobble * 0.05 : 0)
+    if (k === 'pleat') posePleat(this.panels, f, t)
+    else if (k === 'boat') {
+      const sailing = isSailing(f)
+      const along = sailing ? boatAlong(f, f.sail) : grabLength(f) / 2
+      poseBoat(this.panels[0]!, this.structure!, f, t, along, sailing && f.sail > 0.5 ? -1 : 1, time)
+    }
 
     // Pop-up.
-    const s = this.structure
+    const s = k === 'boat' ? null : this.structure
     if (s) {
       let p: number
       if (f.phase === 'snapping' || f.phase === 'up') p = easeOutBack(clamp01((t - 0.35) / 0.65), 2.2)
@@ -351,7 +487,7 @@ export class FoldView {
     // Never quite coplanar with the real flap (flat on the page, or stood up).
     g.position.set(0, 0.018, 0.02)
     const s = this.structure
-    if (s && this.f.def.kind === 'wall') {
+    if (s && (this.f.def.kind === 'wall' || this.f.def.kind === 'boat')) {
       const c = s.clone()
       c.traverse((o) => {
         if (o instanceof Mesh) {
@@ -380,8 +516,15 @@ export class FoldView {
     }
     const g = this.ghostGroup ?? this.buildGhost()
     g.visible = true
-    posePanels(this.ghostPanels, this.f.def.kind, t)
-    const s = this.ghostStruct
+    const k = this.f.def.kind
+    posePanels(this.ghostPanels, k, t)
+    if (k === 'pleat') posePleat(this.ghostPanels, this.f, t)
+    else if (k === 'boat' && this.ghostStruct) {
+      // The ghost folds the boat at the dock, then pushes it off a little along the channel.
+      const dock = grabLength(this.f) / 2
+      poseBoat(this.ghostPanels[0]!, this.ghostStruct, this.f, t, dock + clamp01((t - 0.7) / 0.3) * 0.9, 1, 0)
+    }
+    const s = k === 'boat' ? null : this.ghostStruct
     if (s) {
       const p = ghostRise(t)
       s.visible = p > 0.01

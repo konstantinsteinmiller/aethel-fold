@@ -21,7 +21,7 @@
 import { Box3, Color, Mesh, Scene, SpotLight, Vector3, type WebGLRenderTarget } from 'three'
 import type { FoldGame } from '../logic/game'
 import type { FoldEvent } from '../logic/events'
-import { KILL_BOLT, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from '../logic/events'
+import { KILL_BOLT, KILL_CAPSIZE, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from '../logic/events'
 import { CASTLE, DESK_LAMP, PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME, PAGE_HALF_D, PAGE_HALF_W, SHELF } from '../logic/config'
 import { SECRET_IDS } from '../logic/secrets'
 import { PAGE_COUNT, pageDef } from '../logic/pages'
@@ -46,6 +46,7 @@ import { createSpriteTextures, type SpriteTextures } from './art/spriteArt'
 import { paintPlainSheet } from './art/pageArt'
 import { boatGeometry, disposeModelCache } from './models'
 import { BatsView } from './views/BatsView'
+import { SnowView } from './views/SnowView'
 import { DEFAULT_LOOK, type Look } from '../logic/cosmetics'
 import type { PageLook } from './art/pageArt'
 
@@ -97,12 +98,24 @@ export class GameView {
   private leftPageArt: PageView['textures'] | null = null
   /** Night mode (roadmap #15), eased toward the game's `secrets.night` (real time). */
   private night = 0
-  /** The Ravine's secret: a paper boat sailing down the folded ravine (seconds left, or 0). */
+  /**
+   * The Ravine's secret (and the Harbour's regatta): a paper boat sailing
+   * across the page along `boatZ` (seconds left, or 0), on the page it set
+   * off on.
+   */
   private readonly boat: Mesh
   private readonly boatMat: PaperMaterial
   private boatT = 0
+  private boatZ = -1.3
+  private boatPage: PageDef | null = null
   /** Halloween's bat standees (roadmap #17). */
   readonly bats: BatsView
+  /** Winter's falling paper snow (roadmap #17). */
+  readonly snow: SnowView
+  /** Winter's daylight (roadmap #17): 0 = the warm desk lamp, 1 = crisp and cool; eased (real time). */
+  private winterLight = 0
+  private readonly lampWarmCol = new Color(HEX.lamp)
+  private readonly lampWinterCol = new Color(HEX.lampWinter)
   /** The look new pages are printed in, and the atlas and effects follow (roadmaps #6, #17). */
   private look: Look
   /** Boot telemetry (roadmap #13): ms the standee atlas took at boot, and the deferred/seasonal paints since. */
@@ -142,6 +155,11 @@ export class GameView {
     this.scene.add(this.effects.group)
     this.bats = new BatsView(this.atlas)
     this.scene.add(this.bats.group)
+    this.snow = new SnowView()
+    this.scene.add(this.snow.group)
+    // A page printed for Winter boots straight into Winter's light.
+    this.winterLight = look.season === 'winter' ? 1 : 0
+    this.applyWinterLight()
     this.sheet = new SheetView(paintPlainSheet(99))
     this.scene.add(this.sheet.mesh)
     this.shelf = new ShelfView()
@@ -430,9 +448,25 @@ export class GameView {
         this.units.showCrowd(false)
         this.desk.setZoom(1)
         break
-      case 'rushDone':
-        for (let i = 0; i < 3; i++) fx.burst(-3 + i * 3, 3, -1, { count: 50, palette: 'dragon', speed: 5, up: 7 })
-        this.wordAt('rush', 0, 3, -1, 1.4, 'good')
+      case 'rushDone': {
+        const kraken = g.boss.kind === 'kraken'
+        for (let i = 0; i < 3; i++) fx.burst(-3 + i * 3, 3, -1, { count: 50, palette: kraken ? 'kraken' : 'dragon', speed: 5, up: 7 })
+        this.wordAt(kraken ? 'rushKraken' : 'rush', 0, 3, -1, 1.4, 'good')
+        break
+      }
+      case 'pleat': {
+        // A section of the accordion shuts: a crunch where it closed, a word for a catch.
+        this.desk.shake(e.b > 0 ? 0.1 : 0.04)
+        this.desk.kick(0.35)
+        fx.ring(e.x, e.z, 1.6, 0.3)
+        fx.burst(e.x, 0.3, e.z, { count: 10 + e.b * 8, palette: 'paper', speed: 3, up: 3, size: 0.8 })
+        if (e.b > 0) this.wordAt('crunch', e.x, 1.1, e.z, 0.9 + e.b * 0.1 + e.c * 0.06, 'stamp')
+        break
+      }
+      case 'capsize':
+        fx.burst(e.x, 0.2, e.z, { count: 26, palette: 'water', speed: 3.5, up: 5 })
+        fx.ring(e.x, e.z, 1.4, 0.35, 'waterLight')
+        this.wordAt('splash', e.x, 1.2, e.z, 0.9, 'snap')
         break
       case 'foldSnap': {
         const f = g.folds[e.a]
@@ -444,7 +478,16 @@ export class GameView {
         fx.burst(e.x, 0.2, e.z, { count: 16, palette: 'paper', speed: 3, up: 3, size: 0.9 })
         if (e.b > 0) fx.burst(e.x, 1, e.z - 0.8, { count: 22 + e.b * 10, palette: 'festive', speed: 4.5, up: 6 })
         if (k === 'frog') break
-        this.wordAt(k === 'wall' || k === 'ridge' ? 'snap' : k === 'valley' ? 'fold' : 'fling', e.x, 1.2, e.z, 1 + e.b * 0.08, 'snap')
+        if (k === 'boat') {
+          // The boat pushes off from its dock.
+          fx.burst(e.x, 0.1, e.z, { count: 20, palette: 'water', speed: 3, up: 3 })
+          const d = f.def
+          const dx = d.ax + f.ux * 0.6
+          const dz = d.az + f.uz * 0.6
+          this.wordAt('ahoy', dx, 1.4, dz, 1, 'snap')
+          break
+        }
+        this.wordAt(k === 'wall' || k === 'ridge' ? 'snap' : k === 'valley' || k === 'pleat' ? 'fold' : 'fling', e.x, 1.2, e.z, 1 + e.b * 0.08, 'snap')
         break
       }
       case 'foldStamp': {
@@ -479,10 +522,11 @@ export class GameView {
         else if (e.c === KILL_LAUNCH) fx.burst(e.x, 0.4, e.z, { count: 8, palette: 'festive', speed: 2.5, up: 5 })
         else if (e.c === KILL_BOLT) fx.burst(e.x, 0.6, e.z, { count: 14, palette: 'festive', speed: 4, up: 4 })
         else if (e.c === KILL_SHOT) fx.burst(e.x, 0.5, e.z, { count: 16, palette: 'festive', speed: 3.5, up: 4.5 })
+        else if (e.c === KILL_CAPSIZE) fx.burst(e.x, 0.3, e.z, { count: 12, palette: 'festive', speed: 2.5, up: 4 })
         break
       }
       case 'bossHit': {
-        fx.burst(e.x, 1.6, e.z, { count: 26, palette: 'dragon', speed: 4, up: 4 })
+        fx.burst(e.x, 1.6, e.z, { count: 26, palette: g.boss.kind === 'kraken' ? 'kraken' : 'dragon', speed: 4, up: 4 })
         this.wordAt('thwack', e.x, 2.4, e.z, e.c ? 1.3 : 1, 'stamp')
         this.desk.shake(e.c ? 0.14 : 0.08)
         break
@@ -519,8 +563,10 @@ export class GameView {
         break
       }
       case 'blocked': {
-        fx.burst(e.x, 0.7, e.z, { count: e.c === 3 ? 30 : 8, palette: e.c === 3 ? 'flame' : 'paper', speed: 3, up: 3, size: e.c === 3 ? 1.4 : 0.8 })
-        if (e.c === 3) this.wordAt('blocked', e.x, 1.4, e.z, 1.1, 'good')
+        // c = 3: the dragon's fire on a shield; c = 5: the kraken's ink.
+        const big = e.c === 3 || e.c === 5
+        fx.burst(e.x, 0.7, e.z, { count: big ? 30 : 8, palette: e.c === 3 ? 'flame' : e.c === 5 ? 'inkJet' : 'paper', speed: 3, up: 3, size: big ? 1.4 : 0.8 })
+        if (big) this.wordAt('blocked', e.x, 1.4, e.z, 1.1, 'good')
         break
       }
       case 'impact': {
@@ -570,8 +616,8 @@ export class GameView {
         break
       }
       case 'pageIntro': {
-        // Book 2's runners and leapers: their atlas frames must be painted before they can march on.
-        if (g.book === 2) this.paintDeferred()
+        // Books 2 and 3's runners and leapers: their atlas frames must be painted before they can march on.
+        if (g.book >= 2) this.paintDeferred()
         if (this.transition === 'drop') break
         this.adoptPage()
         if (this.transition !== 'turn' && this.transition !== 'peel') this.transition = 'none'
@@ -598,6 +644,10 @@ export class GameView {
       }
       case 'bossPhase': {
         const b = g.boss
+        if (b.kind === 'kraken') {
+          this.krakenPhase()
+          break
+        }
         if (b.phase === 'rumble') this.desk.shake(0.08)
         if (b.phase === 'unfold') {
           this.desk.setZoom(1.06)
@@ -628,9 +678,9 @@ export class GameView {
       }
       case 'bossHurt': {
         const w = g.boss.weakPoints[e.a]
-        const a = this.page?.dragon?.anchors[e.a]
+        const a = this.page?.boss?.anchors[e.a]
         if (a) {
-          fx.burst(a.x, a.y, a.z, { count: 70, palette: 'dragon', speed: 6, up: 5 })
+          fx.burst(a.x, a.y, a.z, { count: 70, palette: g.boss.kind === 'kraken' ? 'kraken' : 'dragon', speed: 6, up: 5 })
           fx.burst(a.x, a.y, a.z, { count: 30, palette: 'gold', speed: 4, up: 5 })
           fx.glow(a.x, a.y, a.z, 3.5, 0.6, 'star', 'highlightHot', 4)
           this.project(a.x, a.y, a.z, this.sp)
@@ -658,6 +708,35 @@ export class GameView {
     }
   }
 
+  /** The kraken's moves (book 3): splash as it surfaces, its roar, the zoom as it fights, the fold-down. */
+  private krakenPhase(): void {
+    const b = this.game.boss
+    const fx = this.effects
+    if (b.phase === 'surface') {
+      this.desk.setZoom(1.05)
+      this.desk.shake(0.12)
+      fx.burst(0, 0.4, -4.2, { count: 60, palette: 'water', speed: 5, up: 7 })
+      fx.ring(0, -4.2, 4, 0.6, 'waterLight')
+    } else if (b.phase === 'roar') {
+      this.desk.shake(0.3)
+      this.wordAt('blubRoar', 0, 3.8, -3.6, 1.6, 'roar')
+      fx.burst(0, 2.5, -3.8, { count: 40, palette: 'kraken', speed: 5, up: 5 })
+    } else if (b.phase === 'idle') this.desk.setZoom(1.04)
+    else if (b.phase === 'collapse') {
+      this.desk.setZoom(1)
+      fx.burst(0, 1.6, -4, { count: 90, palette: 'kraken', speed: 6, up: 7 })
+      fx.burst(0, 0.3, -4, { count: 50, palette: 'water', speed: 5, up: 6 })
+    }
+  }
+
+  /** Sail the secret's paper boat across the page at `z`. */
+  private launchBoat(z: number): void {
+    this.boatT = 3.4
+    this.boatZ = z
+    this.boatPage = this.game.page
+    this.boat.visible = true
+  }
+
   /**
    * A page secret went off (roadmap #15): a sparkle where it happened, and its
    * own little show. Events only.
@@ -671,9 +750,40 @@ export class GameView {
     fx.burst(e.x, y, e.z, { count: e.b ? 40 : 18, palette: 'gold', speed: 3.5, up: 4 })
     switch (id) {
       case 'boat':
-        this.boatT = 3.4
-        this.boat.visible = true
+        this.launchBoat(-1.3)
         this.wordAt('ahoy', -3, 1.2, -1.3, 1, 'good')
+        break
+      case 'regatta': {
+        // The Harbour: a paper boat sails the length of the channel, and the harbour cheers.
+        const f = this.game.folds.find((o) => o.def.id === 's1-boat')
+        this.launchBoat(f ? f.def.az : -1.5)
+        this.wordAt('regatta', 0, 1.6, f ? f.def.az : -1.5, 1.2, 'good')
+        fx.burst(0, 1, f ? f.def.az : -1.5, { count: 40, palette: 'festive', speed: 4, up: 6 })
+        break
+      }
+      case 'tidepool':
+        fx.burst(e.x, 0.2, e.z, { count: 44, palette: 'water', speed: 4, up: 6 })
+        fx.ring(e.x, e.z, 2.4, 0.6, 'waterLight')
+        this.wordAt('splash', e.x, 1.4, e.z, 1.1, 'snap')
+        break
+      case 'beacon':
+        this.page?.beacon()
+        fx.glow(e.x, 2.4, e.z, 4.5, 1.2, 'star', 'highlightHot', 4)
+        this.wordAt('flash', e.x, 3, e.z, 1.1, 'good')
+        break
+      case 'shipshape':
+        for (let i = 0; i < 4; i++) fx.burst(-3 + i * 2, 3.2 + (i % 2), -3, { count: 36, palette: 'festive', speed: 5, up: 6 })
+        this.wordAt('shipshape', 0, 3, -2.6, 1.2, 'combo')
+        break
+      case 'tickle':
+        fx.burst(e.x, 0.4, e.z, { count: 30, palette: 'water', speed: 2.5, up: 5, size: 0.8 })
+        fx.burst(e.x, 0.6, e.z, { count: 16, palette: 'kraken', speed: 2, up: 3 })
+        this.wordAt('giggle', e.x, 1.8, e.z, 1.1, 'crease')
+        break
+      case 'jump':
+        this.page?.finale?.trick()
+        fx.burst(0, 0.3, 0.6, { count: 40, palette: 'water', speed: 4, up: 6 })
+        this.wordAt('splash', 0, 3, 0.6, 1.2, 'good')
         break
       case 'fling':
         for (let i = 0; i < 4; i++) fx.burst(-3 + i * 2, 3.5 + (i % 2), -5.2, { count: 36, palette: 'festive', speed: 5, up: 6 })
@@ -805,14 +915,14 @@ export class GameView {
     this.units.update(g, this.surface, this.desk.camera, this.time, dt)
     this.projectiles.update(g, this.surface, this.time)
 
-    // Dragon fire stream.
+    // Dragon fire stream (or the kraken's ink jet).
     if (this.breathTimer > 0) {
       this.breathTimer -= dt
-      const d = this.page?.dragon
+      const d = this.page?.boss
       if (d) {
         const m = d.mouth
         const dir = d.mouthDir
-        this.effects.flame(m.x, m.y, m.z, dir.x, dir.y, dir.z, 6)
+        this.effects.flame(m.x, m.y, m.z, dir.x, dir.y, dir.z, 6, g.boss.kind === 'kraken' ? 'inkJet' : 'flame')
       }
     }
     // Finale puff.
@@ -820,7 +930,8 @@ export class GameView {
     if (fin?.popped) {
       this.effects.burst(0, 1.6, 0.6, { count: 80, palette: 'dragon', speed: 5, up: 5 })
       this.effects.glow(0, 1.2, 0.6, 5, 0.8, 'star', 'highlightHot', 3)
-      this.wordAt(this.page?.def.finale === 'crane' ? 'flap' : 'ribbit', 0, 2.4, 0.6, 1.3, 'good')
+      const fin = this.page?.def.finale
+      this.wordAt(fin === 'crane' ? 'flap' : fin === 'fish' ? 'splash' : 'ribbit', 0, 2.4, 0.6, 1.3, 'good')
     }
 
     // The Ravine's paper boat sails down the folded ravine, bobbing.
@@ -828,10 +939,10 @@ export class GameView {
       this.boatT = Math.max(0, this.boatT - dt)
       const k = 1 - this.boatT / 3.4
       const b = this.boat
-      b.position.set(-4.6 + k * 9.2, 0.12 + Math.sin(k * 25) * 0.05, -1.3 + Math.sin(k * 7) * 0.2)
+      b.position.set(-4.6 + k * 9.2, 0.12 + Math.sin(k * 25) * 0.05, this.boatZ + Math.sin(k * 7) * 0.2)
       b.rotation.set(Math.sin(k * 19) * 0.08, Math.PI / 2 + Math.sin(k * 7) * 0.2, Math.sin(k * 23) * 0.1)
       b.scale.setScalar(0.9)
-      if (this.boatT <= 0 || g.pageId !== 2 || g.book !== 1) {
+      if (this.boatT <= 0 || g.page !== this.boatPage) {
         this.boatT = 0
         b.visible = false
       }
@@ -840,6 +951,20 @@ export class GameView {
     this.effects.update(dt)
     this.bats.show(this.look.season === 'halloween' && !g.shelf.open)
     this.bats.update(this.time)
+    this.snow.show(this.look.season === 'winter' && !g.shelf.open)
+    if (this.snow.visible) {
+      // Fewer flakes on the fast graphics setting; a sparse, slow fall with reduced motion (no allocation: two booleans).
+      const lock = this.renderer.scaleLock
+      this.snow.setDensity(lock !== null && lock < 1, this.desk.reducedMotion || g.reducedMotion)
+    }
+    this.snow.update(this.time, dt)
+    // Winter's light eases in and out with the season (the equip happens behind the pause).
+    const wantW = this.look.season === 'winter' ? 1 : 0
+    if (this.winterLight !== wantW) {
+      this.winterLight += (wantW - this.winterLight) * Math.min(1, dt * 3)
+      if (Math.abs(wantW - this.winterLight) < 0.002) this.winterLight = wantW
+      this.applyWinterLight()
+    }
     // Out at the shelf or back at the book (real time, whatever the world's clock).
     this.desk.setShelf(g.shelf.open)
     this.desk.update(dt)
@@ -869,6 +994,11 @@ export class GameView {
     if (g.phase !== this.lastPhase) this.lastPhase = g.phase
   }
 
+  /** The lamp colour every paper material reads, between the warm lamp and Winter's daylight. No allocation. */
+  private applyWinterLight(): void {
+    paperGlobals.uLampColor.value.copy(this.lampWarmCol).lerp(this.lampWinterCol, this.winterLight)
+  }
+
   /** Move interactive anchors to where they *appear* on the page plane. */
   private syncAnchors(): void {
     const g = this.game
@@ -892,12 +1022,13 @@ export class GameView {
         t.pz = this.anchorOut.z
       }
     }
-    if (p.dragon && g.page.exit === 'boss') {
+    const rig = p.boss
+    if (rig && g.page.exit === 'boss') {
       const b = g.boss
       for (let i = 0; i < b.weakPoints.length; i++) {
         const w = b.weakPoints[i]!
         if (w.broken) continue
-        this.groundOf(p.dragon.anchors[i]!, this.anchorOut)
+        this.groundOf(rig.anchors[i]!, this.anchorOut)
         w.x = this.anchorOut.x
         w.z = this.anchorOut.z
       }
@@ -1005,6 +1136,10 @@ export class GameView {
     this.shelf.dispose()
     this.boatMat.dispose()
     this.bats.dispose()
+    this.snow.dispose()
+    // The lamp colour is shared by every paper material: leave it warm for whatever comes next.
+    this.winterLight = 0
+    this.applyWinterLight()
     this.atlas.dispose()
     this.sprites.dispose()
     this.snapshotRT?.dispose()

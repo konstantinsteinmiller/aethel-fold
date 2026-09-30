@@ -46,11 +46,11 @@ const underPar = computed(() => props.time <= props.par)
 <template lang="pug">
   div.rush-result(v-if="open" role="dialog" :aria-label="t('fold.rush.title')" data-testid="rush-result")
     div.rush-result__ribbon
-      PaperRibbon(size="xl") {{ t('fold.rush.title') }}
+      PaperRibbon(size="xl") {{ t(book === 3 ? 'fold.rush.titleKraken' : 'fold.rush.title') }}
     transition(name="card")
       div.rush-result__card(v-if="showCard")
         div.rush-result__icon
-          OrigamiIcon(name="dragon" :tone="book === 2 ? 'blue' : 'red'")
+          OrigamiIcon(:name="book === 3 ? 'kraken' : 'dragon'" :tone="book === 3 ? 'purple' : book === 2 ? 'blue' : 'red'")
         div.rush-result__stats
           div.rush-result__stat.rush-result__stat--main
             OrigamiIcon(name="clock" tone="blue")

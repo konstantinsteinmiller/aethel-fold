@@ -9,7 +9,7 @@
  * mode, highlight, graphics, language, seasonal decorations, and the paper
  * cosmetics picker — roadmap #6: small swatches per kind, locked ones as
  * periwinkle silhouettes with the stars they need),
- * the bookshelf (pick book 1 or, once it has been won, book 2, each with the
+ * the bookshelf (pick book 1 or, once the one before has been won, book 2 or 3, each with the
  * origami stars earned in it) and a confirm.
  *
  * Layout: the card is a flex column — the ribbon sits in its own row, pulled
@@ -41,8 +41,8 @@ const props = defineProps<{
   open: boolean
   /** The book being played. */
   book: BookId
-  /** Has book 2 been unlocked (book 1 won)? */
-  unlocked: boolean
+  /** The books unlocked so far (book 1 always; book n once book n − 1 is won). */
+  unlocked: readonly BookId[]
 }>()
 const emit = defineEmits<{
   (e: 'resume'): void
@@ -54,13 +54,16 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const { userSoundVolume, userMusicVolume, userLanguage, setSettingValue } = useUser()
 const { playSound } = useSounds()
-const BOOK_IDS: readonly BookId[] = [1, 2]
+const BOOK_IDS: readonly BookId[] = [1, 2, 3]
+/** Book covers on the shelf rows. */
+const TONE: Readonly<Record<BookId, 'red' | 'blue' | 'purple'>> = { 1: 'red', 2: 'blue', 3: 'purple' }
+const isOpen = (b: BookId): boolean => props.unlocked.includes(b)
 const face = ref<'menu' | 'settings' | 'confirm' | 'books'>('menu')
 const title = computed(() =>
   face.value === 'settings' ? t('fold.pause.settings') : face.value === 'books' ? t('fold.books.title') : t('fold.pause.title'))
 const folded = ref(false)
 /** Stars per book, for the shelf rows (reactive on the saved stars). */
-const bookStars = computed(() => ({ 1: starsForBook(1), 2: starsForBook(2) }))
+const bookStars = computed(() => ({ 1: starsForBook(1), 2: starsForBook(2), 3: starsForBook(3) }))
 /** Page secrets found over every book (roadmap #15), under the books. */
 const secrets = computed(() => secretCount())
 
@@ -188,7 +191,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               span.flex.items-center.justify-center.gap-2
                 OrigamiIcon(name="gear" tone="yellow")
                 span {{ t('fold.pause.settings') }}
-            FButton(v-if="unlocked" type="secondary" size="md" block data-testid="pause-books" @click="click(() => (face = 'books'))")
+            FButton(v-if="unlocked.length > 1" type="secondary" size="md" block data-testid="pause-books" @click="click(() => (face = 'books'))")
               span.flex.items-center.justify-center.gap-2
                 OrigamiIcon(name="book" tone="white")
                 span {{ t('fold.books.title') }}
@@ -208,16 +211,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               v-for="b in BOOK_IDS"
               :key="b"
               type="button"
-              :class="{ 'cootie__book--current': b === book, 'cootie__book--locked': b === 2 && !unlocked }"
-              :disabled="b === 2 && !unlocked"
+              :class="{ 'cootie__book--current': b === book, 'cootie__book--locked': !isOpen(b) }"
+              :disabled="!isOpen(b)"
               :data-testid="`book-${b}`"
               @click="click(() => emit('pickBook', b))"
             )
-              OrigamiIcon.cootie__book-icon(name="book" :tone="b === 1 ? 'red' : 'blue'")
+              OrigamiIcon.cootie__book-icon(name="book" :tone="TONE[b]")
               span.cootie__book-text.flex.flex-col.min-w-0
                 span.cootie__book-name {{ t(`fold.books.name${b}`) }}
-                span.cootie__book-sub {{ b === 2 && !unlocked ? t('fold.books.locked') : t(`fold.books.blurb${b}`) }}
-              StarTally.cootie__book-stars(v-if="b === 1 || unlocked" :stars="bookStars[b]" compact :data-testid="`book-${b}-stars`")
+                span.cootie__book-sub {{ !isOpen(b) ? t(b === 3 ? 'fold.books.locked3' : 'fold.books.locked') : t(`fold.books.blurb${b}`) }}
+              StarTally.cootie__book-stars(v-if="isOpen(b)" :stars="bookStars[b]" compact :data-testid="`book-${b}-stars`")
             p.cootie__secrets.flex.items-center.justify-center.gap-2(data-testid="pause-secrets")
               OrigamiIcon(name="star" tone="purple")
               span {{ t('fold.books.secrets', { n: secrets.found, total: secrets.total }) }}

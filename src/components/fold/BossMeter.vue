@@ -1,17 +1,17 @@
 <script setup lang="ts">
 /**
- * The dragon's remaining strength: one glowing paper gear per weak point.
+ * The dragon's (or book 3's kraken's) remaining strength: one glowing paper gear per weak point.
  * Broken limbs fold their gear flat and grey it out.
  */
 import { useI18n } from 'vue-i18n'
 
-defineProps<{ total: number; broken: number; exposed: boolean }>()
+withDefaults(defineProps<{ total: number; broken: number; exposed: boolean; kraken?: boolean }>(), { kraken: false })
 const { t } = useI18n()
 </script>
 
 <template lang="pug">
   div.boss.flex.items-center(:aria-label="t('fold.hud.boss', { n: total - broken })" role="img")
-    span.boss__label.uppercase {{ t('fold.hud.dragon') }}
+    span.boss__label.uppercase {{ t(kraken ? 'fold.hud.kraken' : 'fold.hud.dragon') }}
     span.boss__gear(
       v-for="i in total"
       :key="i"

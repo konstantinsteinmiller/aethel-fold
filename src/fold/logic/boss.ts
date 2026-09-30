@@ -8,8 +8,8 @@
  *                                               └─(timeout)─► idle
  */
 
-import { BOSS } from './config'
-import type { Boss, BossLimb, BossPhase, BossWeakPoint } from './types'
+import { BOSS, KRAKEN } from './config'
+import type { Boss, BossKind, BossLimb, BossPhase, BossWeakPoint } from './types'
 
 /**
  * The `BOSS` timings a Dragon Rush speeds up (roadmap #16): the intro, the
@@ -36,7 +36,9 @@ export const bossTiming = (b: Boss, key: BossPacedTiming): number => BOSS[key] *
  */
 export const bossClock = (b: Boss): number => {
   const p = b.phase
-  const paced = p === 'rumble' || p === 'unfold' || p === 'roar' || p === 'idle' || p === 'breathCharge' || p === 'breath' || p === 'stomp'
+  const paced = p === 'rumble' || p === 'unfold' || p === 'roar' || p === 'idle' || p === 'breathCharge' || p === 'breath' || p === 'stomp' ||
+    // The kraken's paced moves (logic/kraken.ts).
+    p === 'surface' || p === 'inkCharge' || p === 'ink' || p === 'slam'
   return paced && b.timing > 0 ? b.phaseTime / b.timing : b.phaseTime
 }
 
@@ -45,33 +47,73 @@ const wp = (limb: BossLimb, mode: 'crease' | 'core', x: number, z: number, sx = 
 })
 
 /**
- * Order matters: legs first (the dragon kneels), then wings (it can no longer
- * rear up), then the neck — which folds the whole thing down.
+ * The dragon's weak points. Order matters: legs first (the dragon kneels),
+ * then wings (it can no longer rear up), then the neck — which folds the
+ * whole thing down.
  */
-export const createBoss = (): Boss => ({
+const dragonWeakPoints = (): BossWeakPoint[] => [
+  wp('legFL', 'crease', -1.75, -1.85, 0, -1),
+  wp('legFR', 'crease', 1.75, -1.85, 0, -1),
+  wp('wingL', 'core', -3.45, -4.05),
+  wp('wingR', 'core', 3.45, -4.05),
+  wp('neck', 'core', 0, -3.2)
+]
+
+/**
+ * The kraken's (book 3): four tentacles laid across the page, each with a
+ * crease to swipe along it (toward the kraken, folding it back), then the
+ * mantle's core to spread. Positions are the headless defaults; the view
+ * moves them to where the tentacles appear, like the dragon's.
+ */
+const krakenWeakPoints = (): BossWeakPoint[] => [
+  // The swipe runs from the tip back toward the mantle (along the arm, which lies straight).
+  wp('tentacleL', 'crease', -2.3, -1.6, 0.64, -0.77),
+  wp('tentacleR', 'crease', 2.3, -1.6, -0.64, -0.77),
+  wp('tentacleL2', 'crease', -3.6, -2.5, 0.88, -0.47),
+  wp('tentacleR2', 'crease', 3.6, -2.5, -0.88, -0.47),
+  wp('mantle', 'core', KRAKEN.bodyX, KRAKEN.bodyZ + 0.6)
+]
+
+export const createBoss = (kind: BossKind = 'dragon'): Boss => ({
+  kind,
   phase: 'dormant',
   timer: 0,
   phaseTime: 0,
-  weakPoints: [
-    wp('legFL', 'crease', -1.75, -1.85, 0, -1),
-    wp('legFR', 'crease', 1.75, -1.85, 0, -1),
-    wp('wingL', 'core', -3.45, -4.05),
-    wp('wingR', 'core', 3.45, -4.05),
-    wp('neck', 'core', 0, -3.2)
-  ],
+  weakPoints: kind === 'kraken' ? krakenWeakPoints() : dragonWeakPoints(),
   exposed: -1,
   aimX: 0,
-  aimZ: 5.4,
+  aimZ: kind === 'kraken' ? KRAKEN.inkZ : 5.4,
   attacks: 0,
   slingHits: 0,
   collapse: 0,
   timing: 1,
+  acted: false,
   rev: 0
 })
 
-/** Back to dormant with every weak point whole. The timing multiplier is the run's, and stays. */
-export const resetBoss = (b: Boss): void => {
-  const fresh = createBoss()
+/**
+ * Back to dormant with every weak point whole. The timing multiplier is the
+ * run's, and stays. A different `kind` (a boss page of another book) swaps
+ * the weak points' layout in place — the array and its objects are kept.
+ */
+export const resetBoss = (b: Boss, kind: BossKind = b.kind): void => {
+  const fresh = createBoss(kind)
+  if (kind !== b.kind) {
+    b.kind = kind
+    for (let i = 0; i < b.weakPoints.length; i++) {
+      const w = b.weakPoints[i]!
+      const f = fresh.weakPoints[i]!
+      w.limb = f.limb
+      w.mode = f.mode
+      w.x = f.x
+      w.z = f.z
+      w.sx = f.sx
+      w.sz = f.sz
+    }
+    b.aimX = fresh.aimX
+    b.aimZ = fresh.aimZ
+  }
+  b.acted = false
   b.phase = fresh.phase
   b.timer = 0
   b.phaseTime = 0
@@ -88,7 +130,9 @@ export const resetBoss = (b: Boss): void => {
 }
 
 export const BOSS_PHASE_CODES: readonly BossPhase[] = [
-  'dormant', 'rumble', 'unfold', 'roar', 'idle', 'breathCharge', 'breath', 'stomp', 'exposed', 'hurt', 'collapse', 'flat'
+  'dormant', 'rumble', 'unfold', 'roar', 'idle', 'breathCharge', 'breath', 'stomp', 'exposed', 'hurt', 'collapse', 'flat',
+  // The kraken's own (appended: the codes are stable).
+  'surface', 'inkCharge', 'ink', 'slam'
 ]
 
 export const bossPhaseCode = (p: BossPhase): number => BOSS_PHASE_CODES.indexOf(p)
@@ -105,7 +149,22 @@ export const brokenCount = (b: Boss): number => {
   return n
 }
 
-/** Is the dragon on the page and able to be hurt / to attack? */
+/** Is the dragon (or the kraken) on the page and able to be hurt / to attack? */
 export const bossAwake = (b: Boss): boolean =>
   b.phase === 'idle' || b.phase === 'breathCharge' || b.phase === 'breath' ||
-  b.phase === 'stomp' || b.phase === 'exposed' || b.phase === 'hurt'
+  b.phase === 'stomp' || b.phase === 'exposed' || b.phase === 'hurt' ||
+  b.phase === 'inkCharge' || b.phase === 'ink' || b.phase === 'slam'
+
+/** Winding up the shot a raised shield stops (the dragon's breath, the kraken's ink): a sling stone chokes it. */
+export const bossCharging = (b: Boss): boolean => b.phase === 'breathCharge' || b.phase === 'inkCharge'
+
+/** Before the boss wakes (a page secret's `asleep`). */
+export const bossAsleep = (b: Boss): boolean =>
+  b.phase === 'dormant' || b.phase === 'rumble' || b.phase === 'unfold' || b.phase === 'surface'
+
+/** Where the boss's body is on the page, and how big (sling hits). */
+export const bossBody = (b: Boss): { x: number; z: number; r: number } =>
+  b.kind === 'kraken' ? KRAKEN_BODY : DRAGON_BODY
+
+const DRAGON_BODY = { x: BOSS.bodyX, z: BOSS.bodyZ, r: BOSS.bodyRadius } as const
+const KRAKEN_BODY = { x: KRAKEN.bodyX, z: KRAKEN.bodyZ, r: KRAKEN.bodyRadius } as const

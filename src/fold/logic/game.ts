@@ -24,23 +24,27 @@ import {
   FOLD_SNAP_THRESHOLD, LEAPER_HOP_EVERY, LEAPER_HOP_TIME, LEAPER_SHOT_CEILING, LEAPER_VAULT_LAND,
   LEAPER_VAULT_TIME, SLING_COOL, SLING_FLIGHT_BASE, SLING_FLIGHT_PER, SLING_GAIN, SLING_GRAB, SLING_MIN_PULL,
   SLING_RADIUS, SLING_RANGE, SLOW_MODE_SCALE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED, ALMOST, DIFFICULTY, SHELF,
-  RUSH, SECRET, DESK_LAMP
+  RUSH, SECRET, DESK_LAMP, BOAT, KRAKEN, PLEAT
 } from './config'
 import {
   type KindMemory, createKindMemory, difficultyFor, extraPerWave, foldSlowmoOn, noteCrumple, notePageWon,
   resetRunMemory, retryPenalty, shouldEaseBoss
 } from './difficulty'
-import { EventQueue, KILL_BOLT, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from './events'
+import { EventQueue, KILL_BOLT, KILL_CAPSIZE, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from './events'
 import {
   FOLD_LOWERED, FOLD_READY, FOLD_SNAPPED, FOLD_SPRUNG, FOLD_STAMPED,
-  abandonFold, acrossHinge, alongHinge, createFold, dragFold, grabFold, isBarrier, isGrabbable, isStampable,
-  isTrap, onFootprint, releaseFold, revealFold, snapFold, stampFold, updateFold, damageFold
+  abandonFold, acrossHinge, alongHinge, boatReaches, createFold, dragFold, flapPoint, grabFold, grabLength, inChannel, isBarrier,
+  isGrabbable, isStampable, isStrip, isTrap, onFootprint, pleatCount, pleatSectionAt, pleatShut, releaseFold, revealFold,
+  snapFold, stampFold, updateFold, damageFold
 } from './folds'
 import {
   MAX_ENEMIES, createEnemyPool, createHero, createProjectilePool, isAlive, resetPools, spawnEnemy,
   spawnProjectile
 } from './entities'
-import { bossAwake, bossPhaseCode, bossTiming, brokenCount, createBoss, nextWeakPoint, resetBoss } from './boss'
+import {
+  bossAsleep, bossAwake, bossBody, bossCharging, bossPhaseCode, bossTiming, brokenCount, createBoss, nextWeakPoint, resetBoss
+} from './boss'
+import { KRAKEN_FLAT, KRAKEN_INK, KRAKEN_PHASE, KRAKEN_SLAM, krakenPace, krakenTiming, slamCount, stepKraken, type KrakenEnv } from './kraken'
 import { bossPageOf, createRushState, rushPar } from './rush'
 import {
   countSecretTap, tapOnSpot, createSecretState, enterSecretPage, markFound, noteSecretSnap, readSecretList, secretById, secretCode,
@@ -92,12 +96,14 @@ export interface GameStats {
   shotKills: number
   /** Origami stars earned on the pages cleared this run (roadmap #1; per-page bests live in the save). */
   stars: number
+  /** Book 3: marchers the boat capsized (pleat crushes count in `crushed`). */
+  capsized: number
 }
 
 export const emptyStats = (): GameStats => ({
   launched: 0, crushed: 0, torn: 0, folds: 0, stamps: 0, blocks: 0,
   knights: 0, brutes: 0, archers: 0, catapults: 0, flung: 0, ridged: 0,
-  runners: 0, leapers: 0, shots: 0, shotKills: 0, bolts: 0, boltKills: 0, stars: 0
+  runners: 0, leapers: 0, shots: 0, shotKills: 0, bolts: 0, boltKills: 0, stars: 0, capsized: 0
 })
 
 export interface GameOptions {
@@ -387,7 +393,7 @@ export class FoldGame {
     this.secretPoints = 0
     for (const f of this.folds) if (f.def.fromWave === 0) revealFold(f)
     const exit = this.page.exit
-    if (exit === 'boss') resetBoss(this.boss)
+    if (exit === 'boss') resetBoss(this.boss, this.page.boss ?? 'dragon')
     if (exit === 'finale') {
       this.boss.phase = 'flat'
       this.boss.collapse = 1
@@ -675,6 +681,10 @@ export class FoldGame {
       const p = f.phase
       const dt = p === 'dragging' || p === 'snapping' || p === 'stamping' || p === 'ready' ? realDt : simDt
       const r = updateFold(f, dt)
+      // Book 3: the accordion shuts section by section; the boat sweeps its channel.
+      const k = f.def.kind
+      if (k === 'pleat') this.updatePleat(i)
+      else if (k === 'boat' && f.phase === 'up') this.sailBoat(i)
       if (r === FOLD_SNAPPED) this.onFoldSnapped(i)
       else if (r === FOLD_STAMPED) this.onFoldStamped(i)
       else if (r === FOLD_LOWERED) this.events.emit('foldLower', i)
@@ -753,6 +763,73 @@ export class FoldGame {
     }
   }
 
+  /**
+   * A pleat's sections shut one after another as its `t` rises (following
+   * the finger while dragged); each newly shut section crushes whoever stands
+   * on it, with a multi-kill bonus that grows along the chain. A section that
+   * springs open again (a drag let go early) crushes nothing.
+   */
+  private updatePleat(i: number): void {
+    const f = this.folds[i]!
+    const shut = pleatShut(f)
+    const closing = f.phase === 'dragging' || f.phase === 'snapping' || f.phase === 'up'
+    if (closing) for (let k = f.sections; k < shut; k++) this.crushSection(i, k)
+    f.sections = shut
+  }
+
+  private readonly sectionAt = { x: 0, z: 0 }
+
+  private crushSection(i: number, k: number): void {
+    const f = this.folds[i]!
+    let crushed = 0
+    let heavy = 0
+    for (let j = 0; j < MAX_ENEMIES; j++) {
+      const e = this.enemies[j]!
+      if (e.state !== 'march' && e.state !== 'blocked' && e.state !== 'trapped') continue
+      if (pleatSectionAt(f, e.x, e.z, PLEAT.margin) !== k) continue
+      if (ENEMY[e.type].hitStop) heavy++
+      e.state = 'crushed'
+      e.age = 0
+      e.y = 0
+      this.kill(j, KILL_CRUSH, f.chain++)
+      crushed++
+      this.stats.crushed++
+    }
+    if (heavy > 0) this.hitStop = HIT_STOP
+    const n = pleatCount(f)
+    const c = flapPoint(f, ((k + 0.5) / n) * f.len, 0, this.sectionAt)
+    this.events.emit('pleat', i, crushed, k, c.x, c.z)
+  }
+
+  /** The boat is out on the channel: whoever wades within reach of its bow capsizes. */
+  private sailBoat(i: number): void {
+    const f = this.folds[i]!
+    for (let j = 0; j < MAX_ENEMIES; j++) {
+      const e = this.enemies[j]!
+      if (e.state !== 'march' && e.state !== 'blocked') continue
+      if (!boatReaches(f, e.x, e.z, ENEMY[e.type].radius * 0.5)) continue
+      e.state = 'swept'
+      e.age = 0
+      // Tipped into the water: a short tumble off the bow.
+      const side = acrossHinge(f, e.x, e.z) >= 0 ? 1 : -1
+      e.vx = f.nx * side * 1.4 + f.ux * 0.8
+      e.vy = 2.2
+      e.vz = f.nz * side * 1.4 + f.uz * 0.8
+      this.kill(j, KILL_CAPSIZE, f.chain++)
+      this.stats.capsized++
+      this.events.emit('capsize', j, i, 0, e.x, e.z)
+    }
+  }
+
+  /** Book 3's channels: a marcher in the water wades at `BOAT.wade` of its pace (1 on dry land). */
+  private wade(x: number, z: number): number {
+    for (let k = 0; k < this.folds.length; k++) {
+      const f = this.folds[k]!
+      if (f.def.kind === 'boat' && inChannel(f, x, z)) return BOAT.wade
+    }
+    return 1
+  }
+
   private onFoldStamped(i: number): void {
     const f = this.folds[i]!
     let crushed = 0
@@ -800,15 +877,16 @@ export class FoldGame {
       if (!isGrabbable(f)) continue
       const s = alongHinge(f, x, z)
       const d = acrossHinge(f, x, z)
-      const k = f.def.kind
-      const dLo = k === 'valley' || k === 'ridge' ? -f.def.depth : -0.35
+      const dLo = isStrip(f) ? -f.def.depth : -0.35
       const dHi = f.def.depth
-      const ds = s < 0 ? -s : s > f.len ? s - f.len : 0
+      // (A boat is taken hold of at its dock only.)
+      const span = grabLength(f)
+      const ds = s < 0 ? -s : s > span ? s - span : 0
       const dd = d < dLo ? dLo - d : d > dHi ? d - dHi : 0
       const dist = Math.sqrt(ds * ds + dd * dd)
       if (dist > reach) continue
       // Prefer the line the finger is *on*, then the closer centre.
-      const cost = dist * 4 + Math.abs(s - f.len / 2) / f.len * 0.2
+      const cost = dist * 4 + Math.abs(s - span / 2) / span * 0.2
       if (cost < bestCost) {
         bestCost = cost
         best = i
@@ -826,9 +904,9 @@ export class FoldGame {
       if (!isGrabbable(f)) continue
       const s = alongHinge(f, x, z)
       const d = acrossHinge(f, x, z)
-      const k = f.def.kind
-      const dLo = k === 'valley' || k === 'ridge' ? -f.def.depth : -0.35
-      const ds = s < 0 ? -s : s > f.len ? s - f.len : 0
+      const dLo = isStrip(f) ? -f.def.depth : -0.35
+      const span = grabLength(f)
+      const ds = s < 0 ? -s : s > span ? s - span : 0
       const dd = d < dLo ? dLo - d : d > f.def.depth ? d - f.def.depth : 0
       if (Math.sqrt(ds * ds + dd * dd) <= reach) out.push(i)
     }
@@ -917,10 +995,7 @@ export class FoldGame {
     if (this.rushing) return false
     const p = this.phase
     if (d.when === 'finale') return p === 'finale' || p === 'victory'
-    if (d.when === 'asleep') {
-      const b = this.boss.phase
-      return p === 'boss' && (b === 'dormant' || b === 'rumble' || b === 'unfold')
-    }
+    if (d.when === 'asleep') return p === 'boss' && bossAsleep(this.boss)
     return p === 'intro' || p === 'play' || p === 'cleared'
   }
 
@@ -1303,19 +1378,20 @@ export class FoldGame {
         return
       }
     }
+    const body = bossBody(b)
     if (this.page.exit === 'boss' && bossAwake(b) && b.phase !== 'exposed' && b.phase !== 'hurt' &&
-      Math.hypot(x - BOSS.bodyX, z - BOSS.bodyZ) < BOSS.bodyRadius) {
-      // A body hit: it flinches. Mid fire-breath charge, it chokes on it;
+      Math.hypot(x - body.x, z - body.z) < body.r) {
+      // A body hit: it flinches. Mid fire-breath (or ink) charge, it chokes on it;
       // every few hits it rears up and bares its next weak point.
       b.slingHits++
       this.award(SCORE.slingBody, x, z, 1)
-      const choked = b.phase === 'breathCharge'
+      const choked = bossCharging(b)
       this.events.emit('bossHit', 0, b.slingHits, choked ? 1 : 0, x, z)
-      if (b.slingHits >= BOSS.slingHitsToExpose) {
+      if (b.slingHits >= (b.kind === 'kraken' ? KRAKEN.slingHitsToExpose : BOSS.slingHitsToExpose)) {
         b.slingHits = 0
         this.exposeWeakPoint()
       } else if (choked) {
-        this.setBossPhase('idle', this.idleBeat())
+        this.setBossPhase('idle', b.kind === 'kraken' ? this.krakenIdleBeat() : this.idleBeat())
       }
     }
   }
@@ -1572,7 +1648,7 @@ export class FoldGame {
       }
     }
     const targetX = clamp(this.laneX(e.lane, e.z) + e.tx, -PAGE_HALF_W + 0.4, PAGE_HALF_W - 0.4)
-    const nz = e.z + e.speed * dt
+    const nz = e.z + e.speed * dt * this.wade(e.x, e.z)
     const nx = damp(e.x, targetX, 2.4, dt)
     // Walls stop the march.
     for (let k = 0; k < this.folds.length; k++) {
@@ -2064,6 +2140,10 @@ export class FoldGame {
 
   private updateBoss(dt: number): void {
     const b = this.boss
+    if (b.kind === 'kraken') {
+      this.updateKraken(dt)
+      return
+    }
     b.phaseTime += dt
     b.timer -= dt
     switch (b.phase) {
@@ -2163,22 +2243,112 @@ export class FoldGame {
         if (b.timer <= 0) {
           b.collapse = 1
           this.setBossPhase('flat', 0)
-          this.pagesCleared = Math.max(this.pagesCleared, this.pageId)
-          if (this.rushing) {
-            this.finishRush()
-            break
-          }
-          this.award(SCORE.boss, 0, -3, 1)
-          if (this.hitsThisPage === 0) this.award(SCORE.perfectPage, 0, 0, 1)
-          const stars = this.ratePage()
-          notePageWon(this.kind, this.book, this.pageId, this.hitsThisPage === 0, true)
-          this.events.emit('pageCleared', this.pageId, this.hitsThisPage === 0 ? 1 : 0, stars)
-          this.loadPage(Math.min(PAGE_COUNT, this.pageId + 1) as PageId)
+          this.bossBeaten()
         }
         break
       case 'flat':
         break
     }
+  }
+
+  /**
+   * The boss lies flat (the dragon, or the kraken): the page is won — or, in
+   * a rush, the clock is final.
+   */
+  private bossBeaten(): void {
+    this.pagesCleared = Math.max(this.pagesCleared, this.pageId)
+    if (this.rushing) {
+      this.finishRush()
+      return
+    }
+    this.award(SCORE.boss, 0, -3, 1)
+    if (this.hitsThisPage === 0) this.award(SCORE.perfectPage, 0, 0, 1)
+    const stars = this.ratePage()
+    notePageWon(this.kind, this.book, this.pageId, this.hitsThisPage === 0, true)
+    this.events.emit('pageCleared', this.pageId, this.hitsThisPage === 0 ? 1 : 0, stars)
+    this.loadPage(Math.min(PAGE_COUNT, this.pageId + 1) as PageId)
+  }
+
+  // ─── The kraken (book 3; its machine is logic/kraken.ts) ─────────────────
+
+  private readonly krakenEnv: KrakenEnv = { rng: createRng(0), introDelay: 0, pace: 1, heroX: 0 }
+
+  private updateKraken(dt: number): void {
+    const b = this.boss
+    const env = this.krakenEnv
+    // The game's own stream (it is created in the constructor, after the field initialisers).
+    env.rng = this.rng
+    env.introDelay = this.page.introDelay
+    env.pace = this.page.bossPace ?? 1
+    env.heroX = this.hero.x
+    const r = stepKraken(b, dt, env)
+    if (r & KRAKEN_PHASE) {
+      // The last weak point is broken: the rush clock stops as it folds down.
+      if (b.phase === 'collapse') this.rush.running = false
+      this.bossActed = false
+      this.events.emit('bossPhase', bossPhaseCode(b.phase))
+    }
+    if (b.phase === 'inkCharge') {
+      const h = this.hero
+      if (h.mood === 'idle') {
+        h.mood = 'cower'
+        h.moodTimer = 0.6
+      }
+    }
+    if (r & KRAKEN_INK) this.krakenInk()
+    if (r & KRAKEN_SLAM) this.krakenSlam()
+    if (r & KRAKEN_FLAT) this.bossBeaten()
+  }
+
+  /** The ink jet lands: a raised shield (or wall) on its path catches it, else the hero is hit. */
+  private krakenInk(): void {
+    const b = this.boss
+    this.events.emit('bossBreath', 0, 1, 0, b.aimX, b.aimZ)
+    const blocker = this.barrierCrossing(KRAKEN.bodyX, KRAKEN.bodyZ + 1.6, b.aimX, b.aimZ)
+    if (blocker >= 0) {
+      const f = this.folds[blocker]!
+      this.stats.blocks++
+      this.award(SCORE.block * 4, f.cx, f.cz, 1)
+      this.events.emit('blocked', -1, blocker, 5, f.cx, f.cz)
+      if (damageFold(f, 2)) this.events.emit('foldBreak', blocker)
+    } else {
+      this.hurtHero(b.aimX, b.aimZ)
+    }
+  }
+
+  /** A tentacle slams a lane column: boarders tumble off it, in front of the kraken. */
+  private krakenSlam(): void {
+    const b = this.boss
+    this.events.emit('bossStomp', 0, 1, 0, b.aimX, KRAKEN.slamZ)
+    const n = slamCount(b) + this.extraPerWave
+    this.column++
+    const mix = this.page.stomp
+    const lanes = this.page.lanes.length
+    // The lane under the slam.
+    let lane = 0
+    let bd = Infinity
+    for (let l = 0; l < lanes; l++) {
+      const d = Math.abs(this.laneX(l, KRAKEN.slamZ) - b.aimX)
+      if (d < bd) {
+        bd = d
+        lane = l
+      }
+    }
+    for (let k = 0; k < n; k++) {
+      const type: EnemyType = mix ? mix[k % mix.length]! : 'knight'
+      const jitter = this.rng.range(-0.3, 0.3)
+      const slot = spawnEnemy(this.enemies, type, b.aimX + (k - (n - 1) / 2) * 0.42, KRAKEN.slamZ + 0.1 + k * 0.12, lane, jitter)
+      if (slot >= 0) {
+        this.primeSpawn(slot)
+        this.events.emit('spawn', slot)
+      }
+    }
+  }
+
+  /** An idle beat for the kraken (a choke on the sling), quickened by lost tentacles. */
+  private krakenIdleBeat(): number {
+    const b = this.boss
+    return this.rng.range(krakenTiming(b, 'idleMin'), krakenTiming(b, 'idleMax')) * krakenPace(b, this.page.bossPace ?? 1)
   }
 
   /** The dragon speeds up as it loses limbs. */
@@ -2225,7 +2395,7 @@ export class FoldGame {
     b.exposed = i
     b.slingHits = 0
     b.weakPoints[i]!.t = 0
-    this.setBossPhase('exposed', BOSS.exposed)
+    this.setBossPhase('exposed', b.kind === 'kraken' ? KRAKEN.exposed : BOSS.exposed)
   }
 
   private breakWeak(): void {
@@ -2240,7 +2410,7 @@ export class FoldGame {
     this.award(SCORE.weakpoint, w.x, w.z, 1)
     this.events.emit('bossHurt', i, 0, 0, w.x, w.z)
     this.hitStop = HIT_STOP
-    this.setBossPhase('hurt', BOSS.hurt)
+    this.setBossPhase('hurt', b.kind === 'kraken' ? KRAKEN.hurt : BOSS.hurt)
     this.lessonEvent(w.mode === 'crease' ? 'crease' : 'core', i)
   }
 
@@ -2279,6 +2449,8 @@ export class FoldGame {
       case 'ridge':
       case 'launch':
       case 'frog':
+      case 'boat':
+      case 'pleat':
         on = 'fold'
         target = l.target
         break
@@ -2371,6 +2543,8 @@ export class FoldGame {
       case 'shield':
       case 'ridge':
       case 'frog':
+      case 'boat':
+      case 'pleat':
         if (what === 'snap' && (index === l.target || l.hint)) this.completeLesson()
         break
       case 'launch':
@@ -2591,6 +2765,21 @@ export class FoldGame {
         }
       }
     }
+    // Book 3: the boat when a column is wading its channel, the pleat when one walks onto it.
+    if (!learned.boat && waveLesson === 'boat') {
+      const i = this.foldIndexWithLesson('boat')
+      if (i >= 0 && this.countOn(this.folds[i]!) >= 1) {
+        this.startLesson('boat', i)
+        return
+      }
+    }
+    if (!learned.pleat && waveLesson === 'pleat') {
+      const i = this.foldIndexWithLesson('pleat')
+      if (i >= 0 && this.countOn(this.folds[i]!) >= 2) {
+        this.startLesson('pleat', i)
+        return
+      }
+    }
     if (!learned.frog && this.page.exit === 'finale' && this.phase === 'play') {
       const i = this.foldIndexWithLesson('frog')
       if (i >= 0) this.startLesson('frog', i)
@@ -2643,7 +2832,9 @@ export class FoldGame {
       case 'shield':
       case 'ridge':
       case 'launch':
-      case 'frog': {
+      case 'frog':
+      case 'boat':
+      case 'pleat': {
         const f = this.folds[l.target]
         if (!f) return this.completeLesson()
         if (f.phase === 'up' || f.phase === 'spent') return this.completeLesson()
@@ -2659,6 +2850,15 @@ export class FoldGame {
           for (const e of this.enemies) {
             if (e.state === 'march' && e.x > f.def.ax - 0.3 && e.x < f.def.bx + 0.3 && f.cz - e.z < f.def.depth + 0.35 && f.cz - e.z > 0) freeze = true
           }
+        } else if (l.id === 'boat') {
+          // Freeze once the column is well into the water: the boat is the answer now.
+          for (const e of this.enemies) {
+            if (e.state === 'march' && inChannel(f, e.x, e.z) && acrossHinge(f, e.x, e.z) > -f.def.depth * 0.2) freeze = true
+          }
+        } else if (l.id === 'pleat') {
+          // Freeze before the head of the column walks off the bottom of the strip.
+          const lead = this.leadOn(f)
+          if (lead >= 0 && alongHinge(f, this.enemies[lead]!.x, this.enemies[lead]!.z) > f.len * 0.55) freeze = true
         } else if (l.id === 'frog') {
           l.timeScale = 1
           return
@@ -2784,6 +2984,19 @@ export class FoldGame {
       az = f.cz + f.def.depth * 0.9
       bx = f.cx
       bz = f.cz - f.def.depth * 0.9
+    } else if (k === 'boat') {
+      // Across the dock flap, along the channel: the way the boat will sail.
+      const dock = grabLength(f)
+      ax = f.def.ax + f.ux * dock * 0.1
+      az = f.def.az + f.uz * dock * 0.1
+      bx = f.def.ax + f.ux * (dock + 1.1)
+      bz = f.def.az + f.uz * (dock + 1.1)
+    } else if (k === 'pleat') {
+      // Down the strip from its top: the sections shut behind the finger.
+      ax = f.def.ax + f.ux * 0.2
+      az = f.def.az + f.uz * 0.2
+      bx = f.def.ax + f.ux * f.len * 0.85
+      bz = f.def.az + f.uz * f.len * 0.85
     } else {
       // Walls/frog: from the hinge up across the flap, the way the arrow points.
       ax = f.cx + f.nx * 0.15
@@ -2889,9 +3102,10 @@ export class FoldGame {
       const f = this.folds[i]!
       if (!isGrabbable(f)) continue
       const k = f.def.kind
-      const urgent = (k === 'frog' && learned.frog) || (learned.swipe && (k === 'wall' || k === 'valley') && this.countOn(f) > 0)
+      const urgent = (k === 'frog' && learned.frog) || (learned.swipe && (k === 'wall' || k === 'valley') && this.countOn(f) > 0) ||
+        (k === 'boat' && learned.boat && this.countOn(f) > 0) || (k === 'pleat' && learned.pleat && this.countOn(f) > 1)
       if (!urgent) continue
-      l.id = k === 'frog' ? 'frog' : 'swipe'
+      l.id = k === 'frog' ? 'frog' : k === 'boat' ? 'boat' : k === 'pleat' ? 'pleat' : 'swipe'
       l.target = i
       l.hint = true
       this.handOnFold(f)

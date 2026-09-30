@@ -3,8 +3,9 @@
  * Page 6 finale (GDD §8): "A beautiful die-cut ribbon drops down saying
  * 'VICTORY' with massive confetti bursts." The ribbon drops with a bounce;
  * under it the run summary is printed on a paper card, then the choice of
- * what to read next: winning book 1 opens book 2 ("The Homefront"); after
- * that, either book can be picked again. Under the stats, the book's best
+ * what to read next: winning a book opens the next one (book 2 "The
+ * Homefront", book 3 "The Sea of Paper"); after the last, any book can be
+ * picked again. Under the stats, the book's best
  * origami stars, page by page (roadmap #1).
  */
 import { computed, ref, watch } from 'vue'
@@ -14,6 +15,7 @@ import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
 import PaperRibbon from '@/components/fold/PaperRibbon.vue'
 import StarTally from '@/components/fold/StarTally.vue'
 import type { BookId } from '@/fold/logic/types'
+import { BOOK_COUNT } from '@/fold/logic/pages'
 import { starsForBook } from '@/use/useFoldProgress'
 
 const props = defineProps<{
@@ -41,6 +43,8 @@ watch(() => props.open, (o) => {
 })
 
 const bookStars = computed(() => starsForBook(props.book))
+/** The book this one unlocks (none after the last). */
+const nextBook = computed((): BookId | null => (props.book < BOOK_COUNT ? ((props.book + 1) as BookId) : null))
 
 const timeText = computed(() => {
   const s = Math.max(0, Math.round(props.time))
@@ -55,9 +59,9 @@ const timeText = computed(() => {
     transition(name="card")
       div.victory__card(v-if="showCard")
         div.victory__frog
-          OrigamiIcon(:name="book === 2 ? 'crane' : 'frog'")
-        p.victory__subtitle {{ hits === 0 ? t('fold.victory.flawless') : t(book === 2 ? 'fold.victory.subtitle2' : 'fold.victory.subtitle') }}
-        p.victory__story {{ t(book === 2 ? 'fold.victory.story2' : 'fold.victory.story1') }}
+          OrigamiIcon(:name="book === 3 ? 'fish' : book === 2 ? 'crane' : 'frog'")
+        p.victory__subtitle {{ hits === 0 ? t('fold.victory.flawless') : t(book === 3 ? 'fold.victory.subtitle3' : book === 2 ? 'fold.victory.subtitle2' : 'fold.victory.subtitle') }}
+        p.victory__story {{ t(`fold.victory.story${book}`) }}
         div.victory__stats
           div.victory__stat
             OrigamiIcon(name="star" tone="yellow")
@@ -79,11 +83,12 @@ const timeText = computed(() => {
           span.victory__stat-label {{ t('fold.victory.stars') }}
           StarTally(:stars="bookStars")
         div.victory__record(v-if="newBest") {{ t('fold.victory.newBest') }}
-        template(v-if="book === 1")
-          FButton(type="success" size="lg" block :attention="true" data-testid="victory-book2" @click="emit('book', 2)")
+        template(v-if="nextBook")
+          //- The next book, just unlocked.
+          FButton(type="success" size="lg" block :attention="true" :data-testid="`victory-book${nextBook}`" @click="emit('book', nextBook)")
             span.flex.items-center.justify-center.gap-2
               OrigamiIcon(name="book" tone="white")
-              span {{ t('fold.victory.nextBook') }}
+              span {{ t(book === 2 ? 'fold.victory.nextBook3' : 'fold.victory.nextBook') }}
           FButton(type="primary" size="sm" block data-testid="victory-again" @click="emit('again')")
             span.flex.items-center.justify-center.gap-2
               OrigamiIcon(name="restart" tone="white")
@@ -99,8 +104,8 @@ const timeText = computed(() => {
               span {{ t('fold.victory.backToBook1') }}
         FButton(type="danger" size="sm" block data-testid="victory-rush" @click="emit('rush', book)")
           span.flex.items-center.justify-center.gap-2
-            OrigamiIcon(name="dragon" tone="yellow")
-            span {{ t('fold.victory.rush') }}
+            OrigamiIcon(:name="book === 3 ? 'kraken' : 'dragon'" tone="yellow")
+            span {{ t(book === 3 ? 'fold.victory.rushKraken' : 'fold.victory.rush') }}
 </template>
 
 <style scoped lang="sass">

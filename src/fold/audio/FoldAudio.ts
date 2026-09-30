@@ -544,7 +544,11 @@ export class FoldAudio {
           this.grind(false)
           this.roar()
           this.music.play('boss')
-        } else if (ph === 'breathCharge') {
+        } else if (ph === 'surface') {
+          // The kraken (book 3) rises out of the sea: the boss drop, a long wash of water.
+          this.music.play('drop')
+          noise(this.sfx, this.now, 2.2, 0.16, 'lowpass', 500, 0.8, 200)
+        } else if (ph === 'breathCharge' || ph === 'inkCharge') {
           noise(this.sfx, this.now, 1.8, 0.14, 'bandpass', 300, 1, 1600)
         } else if (ph === 'collapse') {
           this.crumple()
@@ -555,7 +559,20 @@ export class FoldAudio {
         break
       }
       case 'bossBreath':
-        this.fire()
+        // b = 1: the kraken's ink jet — a wet splat, not fire.
+        if (e.b) {
+          noise(this.sfx, this.now, 0.5, 0.18, 'lowpass', 900, 1, 300)
+          this.thunk()
+        } else this.fire()
+        break
+      case 'pleat':
+        // Book 3: each accordion section shuts with a paper crunch.
+        this.snap(e.b > 0)
+        if (e.b > 0) this.rip(0.4)
+        break
+      case 'capsize':
+        noise(this.sfx, this.now, 0.35, 0.12, 'bandpass', 700, 1.2, 250)
+        this.pop()
         break
       case 'bossStomp':
         this.stomp()

@@ -29,12 +29,16 @@ export const LESSONS_KEY = 'fold_lessons'
 export const STATS_KEY = 'fold_stats'
 /** Game settings: `{ haptics, shake, quality }`. */
 export const SETTINGS_KEY = 'fold_settings'
-/** Book (1 or 2) the resume page belongs to. */
+/** Book (1, 2 or 3) the resume page belongs to. */
 export const BOOK_KEY = 'fold_book'
 /** Book 2 ("The Homefront"): highest page cleared, records `{ score, time }`, victories. */
 export const CLEARED2_KEY = 'fold_cleared2'
 export const BEST2_KEY = 'fold_best2'
 export const WINS2_KEY = 'fold_wins2'
+/** Book 3 ("The Sea of Paper", roadmap #3): highest page cleared, records `{ score, time }`, victories. */
+export const CLEARED3_KEY = 'fold_cleared3'
+export const BEST3_KEY = 'fold_best3'
+export const WINS3_KEY = 'fold_wins3'
 /**
  * Best origami stars per page (roadmap #1): `Record<'b<book>p<page>', 1…3>`,
  * e.g. `{ b1p1: 3, b1p2: 2 }`. Only ever raised; a cloud merge keeps the

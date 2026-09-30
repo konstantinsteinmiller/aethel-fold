@@ -85,8 +85,12 @@ test('a page clear whose stars unlock a cosmetic shows the unlock card after the
   expect(errors).toEqual([])
 })
 
-/** Mean RGB of the middle of the page in a screenshot (decoded in the page). */
-const pageColour = async (page: Page): Promise<[number, number, number]> => {
+/**
+ * Mean RGB of the middle of the page in a screenshot (decoded in the page),
+ * and (4th value) the share of its pixels that read as snow: bright, and as
+ * blue as they are red (parchment under the warm lamp is far redder than blue).
+ */
+const pageColour = async (page: Page): Promise<[number, number, number, number]> => {
   const png = (await page.screenshot()).toString('base64')
   const box = await page.evaluate(() => {
     const f = window.__fold!
@@ -108,19 +112,21 @@ const pageColour = async (page: Page): Promise<[number, number, number]> => {
     let r = 0
     let gg = 0
     let b = 0
+    let snow = 0
     for (let i = 0; i < d.length; i += 4) {
       r += d[i]!
       gg += d[i + 1]!
       b += d[i + 2]!
+      if (d[i + 2]! - d[i]! > -28 && d[i]! + d[i + 1]! + d[i + 2]! > 600) snow++
     }
     const n = d.length / 4
-    return [r / n, gg / n, b / n] as [number, number, number]
+    return [r / n, gg / n, b / n, snow / n] as [number, number, number, number]
   }, { png, box })
 }
 
 test('season override: Halloween and Winter skins print, the bats wait for the first input, screenshots differ', async ({ page }) => {
   const errors = collectErrors(page)
-  const colours: Record<string, [number, number, number]> = {}
+  const colours: Record<string, [number, number, number, number]> = {}
   for (const season of ['none', 'halloween', 'winter'] as const) {
     await page.goto(`/?season=${season}`)
     await waitForGame(page)
@@ -130,6 +136,8 @@ test('season override: Halloween and Winter skins print, the bats wait for the f
     // Seasonal atlas frames are never painted at boot (roadmap #13's budget).
     expect((await page.evaluate(() => window.__fold!.boot().paint)).atlasSeason).toBe(0)
     expect(l.bats).toBe(false)
+    // Winter's falling snow shows at once (it's one instanced draw; nothing to paint).
+    expect(l.snow).toBe(season === 'winter')
     colours[season] = await pageColour(page)
     await page.screenshot({ path: `test-results/season-${season}.png` })
     if (season === 'halloween') {
@@ -143,8 +151,18 @@ test('season override: Halloween and Winter skins print, the bats wait for the f
   // The skins are visible but gentle: the page changes colour, it doesn't turn into another page.
   console.log('page colours', JSON.stringify(colours))
   expect(diff(colours.halloween!, colours.none!)).toBeGreaterThan(3)
-  expect(diff(colours.winter!, colours.none!)).toBeGreaterThan(3)
-  for (const s of ['halloween', 'winter']) expect(diff(colours[s]!, colours.none!), s).toBeLessThan(90)
+  expect(diff(colours.halloween!, colours.none!), 'halloween').toBeLessThan(90)
+  // Winter must read under the desk lamp (the owner found it too subtle: the mean colour moved by
+  // ~33, blue against red by ~20, and no pixel read as snow). Now the lamp turns to a cool winter
+  // daylight and the page is snowed over: a large shift in the mean colour (measured ~120), blue
+  // up against red by far more (~110), and most of the page reading as snow (~0.7, none on plain
+  // parchment) — while it is still the same page (the lanes and folds are left clear).
+  const cool = (c: number[]) => c[2]! - c[0]!
+  expect(diff(colours.winter!, colours.none!), 'winter').toBeGreaterThan(80)
+  expect(diff(colours.winter!, colours.none!), 'winter').toBeLessThan(170)
+  expect(cool(colours.winter!) - cool(colours.none!)).toBeGreaterThan(60)
+  expect(colours.none![3]).toBeLessThan(0.05)
+  expect(colours.winter![3]).toBeGreaterThan(0.5)
   // Winter's snow paper is brighter than plain parchment.
   const lum = (c: number[]) => c[0]! + c[1]! + c[2]!
   expect(lum(colours.winter!)).toBeGreaterThan(lum(colours.none!))

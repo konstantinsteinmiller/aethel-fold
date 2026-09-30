@@ -15,6 +15,9 @@ export const HEX = {
   deskGrain: '#6d4429',
   lamp: '#ffe2b0',
   lampWarm: '#ffc774',
+  // Winter (roadmap #17): the lamp turns to a crisp, cool winter daylight, so
+  // snow reads white instead of cream (the warm lamp multiplies blue by ~0.7).
+  lampWinter: '#e8eeff',
   shadow: '#6c6aa8',          // periwinkle-violet: shadows are never black
   shadowDeep: '#4a4078',
   // Night mode (the desk lamp's secret, roadmap #15): the room falls to a
@@ -121,11 +124,48 @@ export const HEX = {
   bat: '#4b3b66',            // bats are plum paper, never black
   batWing: '#6a5690',
   snowShade: '#dfe6f4',      // Winter: the blue shade on drifts
+  // Winter, made to survive the warm lamp: a cool blue-white paper and snow
+  // banks with a periwinkle-blue edge (never black), so snow reads as snow and
+  // not as more parchment under the desk light.
+  snowPaper: '#dfeaf7',
+  snowBank: '#f6faff',
+  snowEdge: '#9fb8dc',
   iceBlue: '#bcd8f0',
   scarfRed: '#e0473f',       // the hero's knitted scarf
   scarfRedDark: '#a8322e',
   sash: '#8a4fc0',           // the hero's royal sash
   sashDark: '#5e3390',
+
+  // Book 3 — the Sea of Paper (roadmap #3): pastel sea and sand for the
+  // terrain; the kraken below.
+  sea: '#8fc6e8',
+  seaDeep: '#5f9ed3',
+  seaFoam: '#e4f4fb',
+  sand: '#efdcae',
+  sandDark: '#d6bb82',
+  kelp: '#7fb28a',
+  // The kraken is "scary but cute": soft pastel coral with periwinkle brows
+  // and teal spots, big white eyes with deep-sea-blue pupils — menacing by
+  // its size and posture, never by a grim palette.
+  kraken: '#ff9f8e',
+  krakenDark: '#e8796d',
+  krakenLight: '#ffc9bd',
+  krakenSucker: '#fff1e8',
+  krakenEye: '#fffdf8',
+  krakenPupil: '#2f4a6e',
+  krakenBrow: '#6b62b5',
+  krakenBeak: '#ffd479',
+  krakenTeal: '#7fd1c8',
+  inkJet: '#4b3f7a',          // the kraken's ink is plum-violet paper, never black
+  lighthouse: '#e8554a',
+  lighthouseDark: '#a93a34',
+  fish: '#ff8f4a',
+  fishDark: '#d8612a',
+  fishBelly: '#ffe0b0',
+  chartPaper: '#eae6d2',      // sea-chart paper (a cosmetic): a cool cream
+  chartLine: '#86aac4',       // its rhumb lines and soundings
+  sailorNavy: '#2b4a8e',      // the sailor hero's cap and collar
+  sailorWhite: '#f7f9ff',
 
   // Confetti
   c1: '#ff5a5f',

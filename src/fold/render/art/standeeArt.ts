@@ -63,15 +63,17 @@ export interface HeroLook {
 export const CLASSIC_HERO: Readonly<HeroLook> = { variant: 'classic', season: 'none' }
 
 /** Accessories a look puts on the hero (Winter wraps a scarf round any variant). */
-export const heroAccessories = (look: HeroLook): { scarf: boolean; sash: boolean; crown: boolean } => ({
+export const heroAccessories = (look: HeroLook): { scarf: boolean; sash: boolean; crown: boolean; sailor: boolean } => ({
   scarf: look.variant === 'scarf' || look.season === 'winter',
   sash: look.variant === 'sash',
-  crown: look.variant === 'crown'
+  crown: look.variant === 'crown',
+  // Book 3's unlock (roadmap #3): a sailor's cap and collar.
+  sailor: look.variant === 'sailor'
 })
 
 const heroKey = (look: HeroLook): string => {
   const a = heroAccessories(look)
-  return `${a.scarf ? 's' : ''}${a.sash ? 'h' : ''}${a.crown ? 'c' : ''}`
+  return `${a.scarf ? 's' : ''}${a.sash ? 'h' : ''}${a.crown ? 'c' : ''}${a.sailor ? 'n' : ''}`
 }
 
 /** UV rectangle (u0, v0, u1, v1) of a frame, ready for the `aFrame` attribute. */
@@ -177,6 +179,8 @@ interface KnightStyle {
   scarf?: boolean
   sash?: boolean
   crown?: boolean
+  /** Book 3's sailor (roadmap #3): a white cap instead of the plume, a navy collar. */
+  sailor?: boolean
 }
 
 const spring = (ctx: CanvasRenderingContext2D, x: number, y0: number, y1: number): void => {
@@ -364,6 +368,11 @@ const knightFigure = (ctx: CanvasRenderingContext2D, pose: number, s: KnightStyl
       poly(ctx, [44, 44, 44, 24, 53, 34, 58, 16, 64, 30, 70, 16, 75, 34, 84, 24, 84, 44], HEX.gold, 3)
       ellipse(ctx, 58, 38, 3.2, 3.2, HEX.c1, 1.8)
       ellipse(ctx, 70, 38, 3.2, 3.2, HEX.c3, 1.8)
+    } else if (s.sailor) {
+      // A round white sailor's cap with a navy band and a pompom, instead of the plume.
+      ellipse(ctx, 64, 32, 25, 9, HEX.sailorWhite, 3)
+      rrect(ctx, 42, 34, 44, 8, 3, HEX.sailorNavy, 2.4)
+      ellipse(ctx, 64, 22, 5, 5, HEX.c1, 2)
     } else if (s.plume) {
       ctx.beginPath()
       ctx.moveTo(64, 38)
@@ -372,6 +381,12 @@ const knightFigure = (ctx: CanvasRenderingContext2D, pose: number, s: KnightStyl
       ctx.quadraticCurveTo(70, 30, 64, 38)
       fillStroke(ctx, s.plume)
     }
+  }
+  if (s.sailor) {
+    // A navy sailor's collar over the shoulders, a white stripe on its edge, a red knot.
+    poly(ctx, [34, 96, 94, 96, 90, 116, 38, 116], HEX.sailorNavy, 2.6)
+    poly(ctx, [38, 110, 90, 110, 89, 113, 39, 113], HEX.sailorWhite, 0)
+    poly(ctx, [58, 112, 70, 112, 64, 124], HEX.c1, 2)
   }
   if (s.scarf) {
     // A knitted scarf round the neck; its tail blows out to the side.

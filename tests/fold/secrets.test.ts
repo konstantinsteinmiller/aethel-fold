@@ -68,12 +68,15 @@ const snap = (g: FoldGame, id: string, out: { a: number; b: number }[]): void =>
 const code = (id: SecretId): number => secretCode(id)
 
 describe('page secrets: the list (roadmap #15)', () => {
-  it('twelve secrets, one per page of both books, the desk lamp for book 1', () => {
-    expect(SECRET_TOTAL).toBe(12)
-    expect(new Set(SECRET_IDS).size).toBe(12)
+  it('eighteen secrets, one per page of all three books, the desk lamp for book 1', () => {
+    expect(SECRET_TOTAL).toBe(18)
+    expect(new Set(SECRET_IDS).size).toBe(18)
     expect(secretsInBook(1)).toBe(6)
     expect(secretsInBook(2)).toBe(6)
-    for (const b of [1, 2]) {
+    expect(secretsInBook(3)).toBe(6)
+    // Book 3's were appended: the codes of the first twelve never moved.
+    expect(SECRET_IDS.slice(0, 12)).toEqual(['lamp', 'boat', 'fling', 'moat', 'nap', 'hop', 'wave', 'apples', 'whirl', 'campfire', 'bonk', 'flap'])
+    for (const b of [1, 2, 3]) {
       for (let p = 1; p <= 6; p++) {
         const n = SECRETS.filter((s) => s.book === b && s.page === p).length
         expect(n, `b${b}p${p}`).toBe(1)

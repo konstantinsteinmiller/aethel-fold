@@ -1,5 +1,5 @@
 /**
- * The two books of Aethel Fold, six pages each (GDD §8 for book 1), authored
+ * The three books of Aethel Fold, six pages each (GDD §8 for book 1), authored
  * with small builders so the
  * geometry reads as intent ("a tower line across the centre lane") instead of
  * as hinge maths.
@@ -10,7 +10,7 @@
  */
 
 import {
-  BALLISTA_COOLDOWN, BREACH_Z, CASTLE, PAGE_HALF_D, SHIELD_COOLDOWN, SHIELD_HOLD, SHIELD_HP, SPAWN_Z,
+  BALLISTA_COOLDOWN, BOAT, BREACH_Z, CASTLE, PAGE_HALF_D, PLEAT, SHIELD_COOLDOWN, SHIELD_HOLD, SHIELD_HP, SPAWN_Z,
   VALLEY_HOLD, WALL_COOLDOWN, WALL_HOLD, WALL_HP, SCORE
 } from './config'
 import type {
@@ -118,6 +118,50 @@ export const frogLine = (id: string, x0: number, x1: number, z: number, depth: n
   sx: 0, sz: -1,
   fromWave: 0,
   lesson: 'frog'
+})
+
+/**
+ * A boat channel (book 3): a river across the page from x0 (the dock, where
+ * the boat flap lies) to x1 at depth z, `half` wide either side. Swipe the
+ * dock flap along the channel (toward x1) to fold the boat.
+ */
+export const boatLine = (id: string, x0: number, x1: number, z: number, half: number, o: FoldOpts = {}): FoldDef => ({
+  id,
+  kind: 'boat',
+  ax: x0, az: z, bx: x1, bz: z,
+  depth: half,
+  // The positive side (+n) is always the player's side of the channel, whichever bank the dock is on.
+  side: x1 >= x0 ? 1 : -1,
+  structure: 'none',
+  hold: o.hold ?? BOAT.voyage,
+  cooldown: o.cooldown ?? BOAT.cooldown,
+  hp: 99,
+  sx: Math.sign(x1 - x0) || 1, sz: 0,
+  fromWave: o.fromWave ?? 0,
+  lesson: o.lesson
+})
+
+/**
+ * A pleat (book 3): an accordion strip down the page at x, from z0 (top) to
+ * z1 (bottom), `half` wide either side, in `creases` sections. Swipe down it:
+ * the sections shut one after another behind the finger.
+ */
+export const pleatLine = (
+  id: string, x: number, z0: number, z1: number, half: number, o: FoldOpts & { creases?: number } = {}
+): FoldDef => ({
+  id,
+  kind: 'pleat',
+  ax: x, az: z0, bx: x, bz: z1,
+  depth: half,
+  side: 1,
+  structure: 'none',
+  hold: o.hold ?? PLEAT.hold,
+  cooldown: o.cooldown ?? PLEAT.cooldown,
+  hp: 99,
+  sx: 0, sz: 1,
+  fromWave: o.fromWave ?? 0,
+  lesson: o.lesson,
+  creases: o.creases ?? PLEAT.creases
 })
 
 /**
@@ -543,20 +587,199 @@ const home6: PageDef = withPar({
   finale: 'crane'
 })
 
+// ═══ Book 3 — The Sea of Paper ═════════════════════════════════════════════
+//
+// The Paper King fled across the sea and woke the kraken. His marines wade
+// ashore through the harbour to the hero's sea keep (GDD §13). New: the boat
+// (fold the dock flap: it sails the channel and capsizes the waders) and the
+// pleat (an accordion down a lane that crushes a column section by section).
+
+const sea1: PageDef = withPar({
+  id: 1,
+  book: 3,
+  nameKey: 'harbour',
+  theme: 'harbour',
+  exit: 'turn',
+  introDelay: 0.6,
+  sling: SLING,
+  lanes: [lane(0, 0.2, 0.4), lane(-2.8, 0.3, 1.3), lane(2.8, 0.3, 2.2)],
+  folds: [
+    boatLine('s1-boat', -4.7, 4.7, -1.5, 0.75, { lesson: 'boat' }),
+    wallLine('s1-centre', -1.5, 1.5, 1.2, 1.8, { structure: 'tower', fromWave: 1 }),
+    wallLine('s1-left', -4.35, -1.6, 2.7, 1.5, { structure: 'wall', fromWave: 1 }),
+    wallLine('s1-right', 1.6, 4.35, 2.7, 1.5, { structure: 'wall', fromWave: 1 }),
+    ...ballistas()
+  ],
+  tears: [],
+  waves: [
+    // A column wades the harbour channel: the boat sweeps it.
+    wave(column('knight', 0, 0, 4, 0.55), 0, 'boat'),
+    wave([...column('knight', 1, 0, 3, 0.55), ...column('runner', 2, 1.2, 3, 0.45)], 1.3),
+    wave([
+      ...column('knight', 0, 0, 3, 0.5), ...column('runner', 1, 0.8, 3, 0.4), ...column('knight', 2, 1.6, 3, 0.5),
+      s('brute', 0, 2.6)
+    ], 1.2)
+  ]
+})
+
+const sea2: PageDef = withPar({
+  id: 2,
+  book: 3,
+  nameKey: 'marsh',
+  theme: 'marsh',
+  exit: 'turn',
+  introDelay: 0.7,
+  sling: SLING,
+  lanes: [lane(0, 0.12, 0.3), lane(-3.1, 0.3, 1.4), lane(3.1, 0.3, 2.6)],
+  folds: [
+    // The accordion down the middle road: long columns are crushed head to tail.
+    pleatLine('s2-pleat', 0, -4.6, 0.6, 0.95, { lesson: 'pleat' }),
+    wallLine('s2-centre', -1.3, 1.3, 3.0, 1.5, { structure: 'tower', fromWave: 1 }),
+    wallLine('s2-left', -4.4, -1.6, 1.9, 1.6, { structure: 'wall', fromWave: 1 }),
+    wallLine('s2-right', 1.6, 4.4, 1.9, 1.6, { structure: 'wall', fromWave: 1 }),
+    ...ballistas()
+  ],
+  tears: [],
+  waves: [
+    wave(column('knight', 0, 0, 5, 0.5), 0, 'pleat'),
+    wave([...column('knight', 1, 0, 3, 0.6), s('brute', 2, 0.5), ...column('knight', 2, 1.6, 3, 0.55)], 1.3),
+    wave([
+      ...column('knight', 0, 0, 4, 0.45), ...column('runner', 0, 2.4, 3, 0.4),
+      s('brute', 1, 1), s('brute', 2, 2.2), ...column('knight', 1, 3, 2, 0.5)
+    ], 1.2)
+  ]
+})
+
+const sea3: PageDef = withPar({
+  id: 3,
+  book: 3,
+  nameKey: 'lighthouse',
+  theme: 'lighthouse',
+  exit: 'turn',
+  introDelay: 0.6,
+  sling: SLING,
+  lanes: [lane(0, 0.2, 0.3), lane(-3, 0.12, 1.5), lane(2.5, 0.2, 2.8)],
+  folds: [
+    wallLine('s3-shield', -2.3, 2.3, 4.25, 0.8, { structure: 'shield' }),
+    // The catapult on the cliff: flip it back onto the archers.
+    launchFlap('s3-launch', 0.9, 3.3, -4.0, 1.5, { rearm: 5 }),
+    // The pleat down the left road, the boat's dock on the right bank below the lighthouse.
+    pleatLine('s3-pleat', -3, -5.0, -1.5, 0.9, { fromWave: 1 }),
+    boatLine('s3-boat', 4.7, -4.7, -0.6, 0.7),
+    wallLine('s3-centre', -1.4, 1.4, 2.0, 1.6, { structure: 'tower' }),
+    ...ballistas()
+  ],
+  tears: [],
+  waves: [
+    wave([
+      // Both archers stand where the flung catapult comes down.
+      post('archer', 1.3, -6.1), post('archer', 2.9, -6.1), post('catapult', 2.1, -3.2),
+      ...column('knight', 0, 1.5, 3, 0.6)
+    ], 0),
+    wave([...column('knight', 1, 0, 4, 0.5), ...column('runner', 0, 1.2, 3, 0.4)], 1.3),
+    wave([
+      post('catapult', 2.1, -3.2, 0.5), ...column('knight', 1, 0, 3, 0.5), s('brute', 0, 1),
+      ...column('knight', 2, 1.5, 3, 0.5), s('leaper', 0, 3)
+    ], 1.2)
+  ]
+})
+
+const sea4: PageDef = withPar({
+  id: 4,
+  book: 3,
+  nameKey: 'shipyard',
+  theme: 'shipyard',
+  exit: 'turn',
+  introDelay: 0.8,
+  sling: SLING,
+  lanes: [lane(0, 0.15, 0.6), lane(-2.9, 0.3, 1.9), lane(2.9, 0.3, 0.1)],
+  folds: [
+    wallLine('s4-shield', -2.3, 2.3, 4.25, 0.8, { structure: 'shield' }),
+    launchFlap('s4-launch-l', -4.4, -2.0, -5.1, 1.5, { rearm: 5 }),
+    launchFlap('s4-launch-r', 2.0, 4.4, -5.1, 1.5, { rearm: 5 }),
+    pleatLine('s4-pleat', 0, -4.8, -1.2, 0.9),
+    boatLine('s4-boat', -4.7, 4.7, 0.2, 0.7),
+    wallLine('s4-centre', -1.3, 1.3, 2.9, 1.5, { structure: 'tower' }),
+    wallLine('s4-left', -4.4, -1.5, 2.6, 1.3, { structure: 'wall' }),
+    wallLine('s4-right', 1.5, 4.4, 2.6, 1.3, { structure: 'wall' }),
+    ...ballistas()
+  ],
+  tears: [],
+  waves: [
+    wave([
+      post('catapult', -3.2, -4.35), post('catapult', 3.2, -4.35),
+      ...column('knight', 0, 1, 4, 0.5), ...column('leaper', 1, 2.6, 2, 1)
+    ], 0),
+    wave([
+      ...column('runner', 2, 0, 4, 0.38), s('brute', 0, 1), ...column('knight', 0, 1.8, 3, 0.5),
+      post('catapult', -3.2, -4.35, 3), ...column('knight', 1, 3, 3, 0.5)
+    ], 1.4),
+    wave([
+      post('catapult', -3.2, -4.35, 0), post('catapult', 3.2, -4.35, 0.5),
+      s('brute', 1, 0), s('brute', 2, 1.2), ...column('leaper', 0, 0.6, 2, 0.9),
+      ...column('knight', 0, 2.2, 4, 0.45), ...column('runner', 1, 3, 3, 0.36),
+      post('catapult', 3.2, -4.35, 9)
+    ], 1.2)
+  ]
+})
+
+const sea5: PageDef = withPar({
+  id: 5,
+  book: 3,
+  nameKey: 'deep',
+  theme: 'deep',
+  exit: 'boss',
+  boss: 'kraken',
+  introDelay: 0.5,
+  sling: SLING,
+  stomp: ['knight', 'runner', 'knight', 'brute'],
+  lanes: [lane(0, 0.2, 0.5), lane(-2.8, 0.25, 1.4), lane(2.8, 0.25, 2.4)],
+  folds: [
+    wallLine('d5-shield', -2.5, 2.5, 4.2, 0.85, { structure: 'shield', hold: 2.8 }),
+    wallLine('d5-centre', -1.2, 1.2, 1.3, 1.5, { structure: 'tower' }),
+    wallLine('d5-left', -4.4, -1.3, 2.3, 1.6, { structure: 'wall' }),
+    wallLine('d5-right', 1.3, 4.4, 2.3, 1.6, { structure: 'wall' }),
+    ...ballistas()
+  ],
+  tears: [],
+  waves: []
+})
+
+const sea6: PageDef = withPar({
+  id: 6,
+  book: 3,
+  nameKey: 'calm',
+  theme: 'finale',
+  exit: 'finale',
+  introDelay: 0.4,
+  lanes: [],
+  folds: [frogLine('s6-fish', -3.2, 3.2, 0.6, 2.4)],
+  tears: [],
+  waves: [],
+  finale: 'fish'
+})
+
 export const BOOKS: Readonly<Record<BookId, Readonly<Record<PageId, PageDef>>>> = {
   1: { 1: page1, 2: page2, 3: page3, 4: page4, 5: page5, 6: page6 },
-  2: { 1: home1, 2: home2, 3: home3, 4: home4, 5: home5, 6: home6 }
+  2: { 1: home1, 2: home2, 3: home3, 4: home4, 5: home5, 6: home6 },
+  3: { 1: sea1, 2: sea2, 3: sea3, 4: sea4, 5: sea5, 6: sea6 }
 }
 
 /** Book 1's pages (the original six). */
 export const PAGES: Readonly<Record<PageId, PageDef>> = BOOKS[1]
 
 export const PAGE_COUNT = 6
-export const BOOK_COUNT = 2
+export const BOOK_COUNT = 3
 
 export const pageDef = (book: BookId, id: PageId): PageDef => BOOKS[book][id]
 
-export const isBookId = (n: unknown): n is BookId => n === 1 || n === 2
+export const isBookId = (n: unknown): n is BookId => n === 1 || n === 2 || n === 3
+
+/** Clamp anything read back from a save or a URL into a book id (unknown → 1). */
+export const asBookId = (n: unknown): BookId => {
+  const v = typeof n === 'number' ? Math.round(n) : parseFloat(String(n))
+  return v === 2 || v === 3 ? v : 1
+}
 
 export const isPageId = (n: unknown): n is PageId =>
   typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= PAGE_COUNT

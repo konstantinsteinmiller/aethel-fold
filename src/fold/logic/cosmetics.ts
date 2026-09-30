@@ -10,10 +10,14 @@
  * cloud merge keeps the union of both sides, and the winning side's equipped
  * items where they are owned (see `mergeCosmetics`).
  *
- * The thresholds spread over the 30 stars of books 1 and 2 (10 rated pages ×
- * 3): the first unlock comes on the first well-played page, the last asks for
- * every page at ★★★. Book 3 raises the star total; its cosmetics append to
- * `COSMETICS` (ids are stable, order is display order).
+ * The first thresholds spread over the 30 stars of books 1 and 2 (10 rated
+ * pages × 3): the first unlock comes on the first well-played page, the crown
+ * asks for every page of those two books at ★★★. Book 3 (roadmap #3) raises
+ * the total to 45; its three unlocks sit above the old ones (sea-chart paper
+ * at 35, the sailor at 40, fish confetti at 45 — every page at ★★★). The old
+ * thresholds were deliberately not rescaled: a player who finished books 1–2
+ * keeps exactly the unlocks those stars always paid, and `owned` never
+ * shrinks anyway. Ids are stable, order is display order.
  *
  * Pure: no three.js, no Vue. Allocates: save, events and UI paths only.
  */
@@ -21,13 +25,13 @@
 import type { Season } from './seasons'
 
 export type CosmeticKind = 'paper' | 'hero' | 'confetti'
-export type PaperPattern = 'plain' | 'graph' | 'washi' | 'newsprint' | 'map'
-export type HeroVariant = 'classic' | 'scarf' | 'sash' | 'crown'
-export type ConfettiShape = 'squares' | 'stars' | 'hearts' | 'cranes'
+export type PaperPattern = 'plain' | 'graph' | 'washi' | 'newsprint' | 'map' | 'chart'
+export type HeroVariant = 'classic' | 'scarf' | 'sash' | 'crown' | 'sailor'
+export type ConfettiShape = 'squares' | 'stars' | 'hearts' | 'cranes' | 'fish'
 
-export const PAPER_PATTERNS: readonly PaperPattern[] = ['plain', 'graph', 'washi', 'newsprint', 'map']
-export const HERO_VARIANTS: readonly HeroVariant[] = ['classic', 'scarf', 'sash', 'crown']
-export const CONFETTI_SHAPES: readonly ConfettiShape[] = ['squares', 'stars', 'hearts', 'cranes']
+export const PAPER_PATTERNS: readonly PaperPattern[] = ['plain', 'graph', 'washi', 'newsprint', 'map', 'chart']
+export const HERO_VARIANTS: readonly HeroVariant[] = ['classic', 'scarf', 'sash', 'crown', 'sailor']
+export const CONFETTI_SHAPES: readonly ConfettiShape[] = ['squares', 'stars', 'hearts', 'cranes', 'fish']
 
 /** `<kind>.<value>`, e.g. `paper.washi`. */
 export type CosmeticId = `paper.${PaperPattern}` | `hero.${HeroVariant}` | `confetti.${ConfettiShape}`
@@ -50,14 +54,17 @@ export const COSMETICS: readonly CosmeticDef[] = [
   item('paper', 'washi', 11),
   item('paper', 'newsprint', 20),
   item('paper', 'map', 26),
+  item('paper', 'chart', 35),
   item('hero', 'classic', 0),
   item('hero', 'scarf', 8),
   item('hero', 'sash', 17),
   item('hero', 'crown', 30),
+  item('hero', 'sailor', 40),
   item('confetti', 'squares', 0),
   item('confetti', 'stars', 5),
   item('confetti', 'hearts', 14),
-  item('confetti', 'cranes', 23)
+  item('confetti', 'cranes', 23),
+  item('confetti', 'fish', 45)
 ]
 
 export const COSMETIC_IDS: readonly CosmeticId[] = COSMETICS.map((c) => c.id)

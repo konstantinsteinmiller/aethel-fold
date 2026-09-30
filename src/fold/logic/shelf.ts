@@ -2,8 +2,9 @@
  * The bookshelf on the desk (roadmap #2): chapter select without a menu.
  *
  * After the first victory a small cardboard shelf stands on the desk right of
- * the book, one standing book per book of the game plus a silhouette for the
- * book that is still coming. Each spine carries the stars earned in it. Wide
+ * the book, one standing book per book of the game (three since roadmap #3;
+ * a slot past the last playable book would stand as a "coming" silhouette).
+ * Each spine carries the stars earned in it. Wide
  * aspects see the shelf beside the page; portrait zooms the camera out to it.
  * While the camera is out at the shelf the world stands still (sim time); the
  * paper under a finger still settles in real time.

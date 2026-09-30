@@ -62,6 +62,8 @@ export type FoldEventType =
   | 'night'         // the desk lamp was tapped: a = 1 night mode on / 0 off
   | 'rushStart'     // a Dragon Rush dragon drops (roadmap #16): a = book, b = par (s), c = attempt (1 = first)
   | 'rushDone'      // the rush dragon is beaten: a = book, b = time (s), c = par (s)
+  | 'pleat'         // book 3: a pleat section shut: a = fold index, b = crushed on it, c = section (0 = top), x/z = its centre
+  | 'capsize'       // book 3: the boat capsized a wader: a = enemy slot, b = fold index, x/z
 
 export const KILL_LAUNCH = 1
 export const KILL_CRUSH = 2
@@ -70,6 +72,8 @@ export const KILL_FLING = 4
 export const KILL_RIDGE = 5
 export const KILL_SHOT = 6
 export const KILL_BOLT = 7
+/** Book 3: capsized by the boat. */
+export const KILL_CAPSIZE = 8
 
 export interface FoldEvent {
   type: FoldEventType

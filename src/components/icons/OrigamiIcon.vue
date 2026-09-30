@@ -11,6 +11,7 @@ export type OrigamiName =
   | 'gear' | 'speaker' | 'speakerMute' | 'heart' | 'heartEmpty' | 'crane' | 'star' | 'close'
   | 'play' | 'restart' | 'book' | 'hand' | 'trophy' | 'clock' | 'frog' | 'check' | 'pause'
   | 'left' | 'right' | 'plus' | 'minus' | 'vibrate' | 'shake' | 'quality' | 'globe' | 'music' | 'shelf' | 'dragon'
+  | 'fish' | 'kraken'
 
 const props = withDefaults(defineProps<{
   name: OrigamiName
@@ -130,6 +131,22 @@ const dark = computed(() => c.value[1])
       path(:fill="lit" d="M20 20l-2-12 8 9z")
       path(fill="none" d="M34 30l-2 4")
       circle(cx="28" cy="24" r="2" fill="#1c1724" stroke="none")
+    //- ── Kraken (book 3's rush): a chunky coral dome, big eyes under angry brows, stubby curling arms ──
+    template(v-else-if="name === 'kraken'")
+      path(fill="#ff9f8e" d="M9 30V20C9 10 16 4 24 4s15 6 15 16v10z")
+      path(fill="#e8796d" stroke="none" opacity=".6" d="M24 4c8 0 15 6 15 16v10H24z")
+      path(fill="#ff9f8e" d="M10 29c-4 3-6 8-3 12 2-3 4-5 7-6zM19 30c-1 5-1 9 2 12 1-4 2-7 4-9zM29 30c1 5 1 9-2 12-1-4-2-7-4-9zM38 29c4 3 6 8 3 12-2-3-4-5-7-6z")
+      circle(cx="18" cy="19" r="5" fill="#fffdf8")
+      circle(cx="30" cy="19" r="5" fill="#fffdf8")
+      circle(cx="18" cy="20" r="2.6" fill="#2f4a6e" stroke="none")
+      circle(cx="30" cy="20" r="2.6" fill="#2f4a6e" stroke="none")
+      path(fill="#6b62b5" d="M12 12l9 3-1 2-9-3zM36 12l-9 3 1 2 9-3z")
+    //- ── Fish (book 3's finale): a folded diamond with a notched tail ──
+    template(v-else-if="name === 'fish'")
+      path(fill="#ff8f4a" d="M44 24L30 12 14 20 4 10v28l10-10 16 8z")
+      path(fill="#d8612a" stroke="none" opacity=".7" d="M44 24L30 36 14 28z")
+      circle(cx="33" cy="21" r="2.5" fill="#fff")
+      circle(cx="33" cy="21" r="1.2" fill="#1c1724" stroke="none")
     //- ── Clock ──
     template(v-else-if="name === 'clock'")
       path(:fill="lit" d="M24 4l14 6 6 14-6 14-14 6-14-6-6-14 6-14z")

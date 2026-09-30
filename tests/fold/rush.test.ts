@@ -277,7 +277,8 @@ describe('Dragon Rush (roadmap #16)', () => {
     expect(rushRound(12.99)).toBe(12.9)
     expect(formatRushTime(0)).toBe('0:00.0')
     expect(formatRushTime(65.43)).toBe('1:05.4')
-    expect(readRushRecord({ b1: 50.5, b2: 'x', b3: 40, b9: 1, bad: 2, b2x: 3 })).toEqual({ b1: 50.5 })
+    // Book 3 is a playable book (roadmap #3): its Kraken Rush best is kept.
+    expect(readRushRecord({ b1: 50.5, b2: 'x', b3: 40, b9: 1, bad: 2, b2x: 3 })).toEqual({ b1: 50.5, b3: 40 })
     expect(readRushRecord({ b1: -1, b2: NaN, })).toEqual({})
     expect(readRushRecord(null)).toEqual({})
     expect(readRushRecord([1, 2])).toEqual({})

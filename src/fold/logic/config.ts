@@ -50,6 +50,35 @@ export const FOLD_SPRING_RATE = 14
 export const FOLD_BLOCK_T = 0.55
 /** Seconds a stamped valley stays shut before unfolding again. */
 export const VALLEY_SHUT_TIME = 0.55
+/**
+ * Book 3's boat (roadmap #3). The channel slows marchers to `wade` of their
+ * pace; the dock flap (the first `dock` units of the channel from end a) is
+ * what the finger grabs. The boat sails out and back in `voyage` sim seconds
+ * and capsizes anyone wading within `reach` of its bow (along the channel).
+ */
+export const BOAT = {
+  wade: 0.5,
+  dock: 1.3,
+  voyage: 3.2,
+  reach: 0.75,
+  cooldown: 1.6
+} as const
+
+/**
+ * Book 3's pleat: a shut section crushes whoever stands on it. Once released
+ * past the threshold, the rest of the sections close one every `sectionTime`
+ * (real seconds — the player's own fold); a shut accordion waits `hold` sim
+ * seconds, unfolds, and cools down.
+ */
+export const PLEAT = {
+  creases: 4,
+  sectionTime: 0.075,
+  hold: 1.1,
+  cooldown: 1.2,
+  /** Crush margin around a section (enemy feet are not points). */
+  margin: 0.2
+} as const
+
 /** Default wall timings, overridable per fold. */
 export const WALL_HOLD = 5.5
 export const WALL_COOLDOWN = 0.9
@@ -230,6 +259,38 @@ export const BOSS = {
   slingHitsToExpose: 3
 }
 
+/**
+ * The paper kraken (book 3, page 5; logic/kraken.ts). The paced timings (the
+ * intro, idle beats, the ink charge and jet, the slam) scale with
+ * `Boss.timing` like the dragon's; the player's windows (an exposed weak
+ * point, the hurt beat, the collapse) keep their length.
+ */
+export const KRAKEN = {
+  surface: 3.0,
+  roar: 1.5,
+  idleMin: 1.5,
+  idleMax: 2.4,
+  inkCharge: 2.0,
+  ink: 1.2,
+  slam: 1.5,
+  exposed: 6.5,
+  hurt: 1.5,
+  collapse: 3.2,
+  attacksPerExposure: 2,
+  /** Where the ink jet lands (the keep). */
+  inkZ: 5.4,
+  /** Where the kraken's mantle is on the page, and how big (sling hits). */
+  bodyX: 0,
+  bodyZ: -4.4,
+  bodyRadius: 2.2,
+  slingHitsToExpose: 3,
+  /** The slam: where a tentacle lands (in front of the kraken, never inside it), boarders spilled. */
+  slamZ: -1.2,
+  /** Fraction of the ink / slam phase at which it strikes. */
+  inkAt: 0.4,
+  slamAt: 0.5
+} as const
+
 // ─── Waves / pacing ────────────────────────────────────────────────────────
 
 /** Seconds after the last wave before the page counts as cleared. */
@@ -326,7 +387,7 @@ export const SHELF = {
   yaw: -0.3,
   /** Leans back so the spines face the steep desk camera (about x). */
   lean: -0.32,
-  /** Book slots: one per book, the last one the coming book 3. */
+  /** Book slots: one per book of the game (book 3, the Sea of Paper, arrived with roadmap #3). */
   slots: 3,
   spacing: 1.46,
   bookW: 1.2,
@@ -343,10 +404,10 @@ export const SHELF = {
   /** Real seconds the ghost hand points the way to the shelf on a page intro. */
   cueTime: 4,
   /** Dragon Rush figurines on the top board (roadmap #16): shelf-local x per book, and their height. */
-  rushX: [0.3, 1.25] as readonly number[],
+  rushX: [-0.45, 0.5, 1.45] as readonly number[],
   rushH: 0.9,
   /** The secrets counter card on the top board (roadmap #15): shelf-local x. */
-  secretsX: -1.05
+  secretsX: -1.55
 } as const
 
 // ─── Dragon Rush (roadmap #16) ─────────────────────────────────────────────
@@ -365,9 +426,11 @@ export const RUSH = {
    * is a real fight), book 2 44.4–45.2 s (the sling bares weak points
    * sooner). Par is about 1.35× the bot, rounded to 5 s: a clean human run
    * makes it, a scrappy one doesn't. `tests/fold/rush.test.ts` keeps the bot
-   * at least 20 % under par.
+   * at least 20 % under par. Book 3's Kraken Rush (roadmap #3): the bot takes
+   * 43.0–44.1 s over the same eight seeds (one or two hearts lost, never a
+   * crumple) — par 60 s (`tests/fold/book3.test.ts` holds the same margin).
    */
-  par: [65, 60] as readonly number[],
+  par: [65, 60, 60] as readonly number[],
   /**
    * Real seconds after a rush defeat before a fresh dragon drops by itself —
    * quicker than the story's Almost! moment (`ALMOST.autoRetry`); the retry

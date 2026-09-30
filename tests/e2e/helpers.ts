@@ -61,6 +61,9 @@ declare global {
         page: { paper: string; season: string } | null
         bats: boolean
         confetti: string
+        /** Winter's falling snow (roadmap #17): shown, and how many flakes. */
+        snow: boolean
+        snowFlakes: number
       }
       game: any
       engine: any
@@ -70,7 +73,7 @@ declare global {
 
 export const ALL_LESSONS = {
   swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true, crease: true, core: true, frog: true,
-  crush: true, sling: true, leaper: true, ballista: true, shelf: true
+  crush: true, sling: true, leaper: true, ballista: true, shelf: true, boat: true, pleat: true
 }
 
 /** Seed `aethel_state` before the app boots (plain web build). */

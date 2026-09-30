@@ -51,6 +51,12 @@ const paperStyle = computed((): Record<string, string> => {
         backgroundColor: HEX.mapPaper,
         backgroundImage: `repeating-radial-gradient(circle at 30% 60%, transparent 0 0.16em, ${HEX.mapLine} 0.17em 0.2em)`
       }
+    case 'chart':
+      // Sea chart: rhumb lines fanning out of a compass point.
+      return {
+        backgroundColor: HEX.chartPaper,
+        backgroundImage: `repeating-conic-gradient(from 0deg at 25% 75%, ${HEX.chartLine} 0 2deg, transparent 2deg 22.5deg)`
+      }
     default:
       return { backgroundColor: HEX.parchment, backgroundImage: `linear-gradient(135deg, ${HEX.parchmentLight}, ${HEX.parchmentShade})` }
   }
@@ -65,11 +71,15 @@ const chipPath = computed(() => {
       return 'M24 41C12 32 6 25 7 17c1-6 8-9 13-6 2 1 3 3 4 4 1-1 2-3 4-4 5-3 12 0 13 6 1 8-5 15-17 24z'
     case 'cranes':
       return 'M3 22l14 6 6-20 5 20 9-10 8 4-9 2-6 12-12 4-10-2z'
+    case 'fish':
+      return 'M44 24L30 12 14 20 4 10v28l10-10 16 8z'
     default:
       return 'M13 9h22v30H13z'
   }
 })
-const chipTone = computed(() => sil(value.value === 'hearts' ? HEX.c7 : value.value === 'stars' ? HEX.c2 : value.value === 'cranes' ? HEX.c3 : HEX.c1))
+const chipTone = computed(() => sil(
+  value.value === 'hearts' ? HEX.c7 : value.value === 'stars' ? HEX.c2 : value.value === 'cranes' ? HEX.c3 : value.value === 'fish' ? HEX.fish : HEX.c1
+))
 </script>
 
 <template lang="pug">
@@ -83,6 +93,10 @@ const chipTone = computed(() => sil(value.value === 'hearts' ? HEX.c7 : value.va
       rect(x="16" y="16" width="16" height="3.5" rx="1.5" :fill="ink" stroke="none")
       template(v-if="value === 'crown'")
         path(:fill="sil(HEX.gold)" d="M14 11V2l5 5 5-6 5 6 5-5v9z")
+      template(v-else-if="value === 'sailor'")
+        //- A white sailor's cap with a navy band, and the navy collar.
+        path(:fill="sil(HEX.sailorWhite)" d="M11 8c0-4 6-6 13-6s13 2 13 6l-2 3H13z")
+        path(:fill="sil(HEX.sailorNavy)" d="M13 11h22v3H13zM12 28h24l-3 7H15z")
       template(v-else)
         path(:fill="sil(HEX.flagYellow)" d="M24 6c-2-4 2-6 8-5-3 2 0 4 2 6-4 0-7 0-10-1z")
       template(v-if="value === 'scarf'")

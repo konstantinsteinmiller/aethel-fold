@@ -26,12 +26,19 @@ export const botStep = (g: FoldGame): void => {
     const on = g.enemies.filter((e) => (e.state === 'march' || e.state === 'stand') && onFootprint(f, e.x, e.z, 0)).length
     if (k === 'wall' && f.def.structure === 'shield') {
       const incoming = g.projectiles.some((p) => p.alive && !p.stuck) || g.enemies.some((e) => e.state === 'stand' && e.windup > 0.3) ||
-        g.boss.phase === 'breathCharge'
+        g.boss.phase === 'breathCharge' || g.boss.phase === 'inkCharge'
       if (incoming) g.foldNow(i)
     } else if (k === 'wall' || k === 'valley') {
       if (on >= 1) g.foldNow(i)
     } else if (k === 'launch') {
       if (g.enemies.some((e) => e.type === 'catapult' && e.state === 'stand' && onFootprint(f, e.x, e.z, 0.2))) g.foldNow(i)
+    } else if (k === 'boat') {
+      // Book 3: sail when someone is wading the channel.
+      if (on >= 1) g.foldNow(i)
+    } else if (k === 'pleat') {
+      // Book 3: shut the accordion on a column (or on anyone about to walk off its bottom).
+      const late = g.enemies.some((e) => e.state === 'march' && onFootprint(f, e.x, e.z, 0) && e.z > f.def.bz - 1.2)
+      if (on >= 2 || late) g.foldNow(i)
     } else if (k === 'ridge' || k === 'frog') {
       g.foldNow(i)
     } else if (k === 'ballista') {

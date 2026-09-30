@@ -1,7 +1,7 @@
 /**
  * The desk bookshelf (roadmap #2): a small cardboard shelf right of the book
- * with one standing book per book of the game and a silhouette for the one
- * still to come. Chapter select without a menu: the camera goes out to it
+ * with one standing book per book of the game (book 3, the Sea of Paper,
+ * carries a paper boat on its spine). Chapter select without a menu: the camera goes out to it
  * (`DeskCamera.setShelf`), a tap pulls a book out and a little star card
  * rises from it, a second tap opens it (see `logic/shelf.ts`).
  *
@@ -12,7 +12,7 @@
  * `rev` changes; the per-frame update eases a few numbers.
  *
  * On the top board (`extras`): the Dragon Rush figurines (roadmap #16), one
- * little folded dragon per won book — tapped like a book, their card shows
+ * little folded dragon per won book (a kraken for book 3's Kraken Rush) — tapped like a book, their card shows
  * the par and the best time — and the secrets counter (roadmap #15), a
  * standing card with a sparkle and "found/total". Two to four more draws,
  * still none while the shelf is out of view.
@@ -33,7 +33,7 @@ import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
 import {
   SPINE_UV, cardCanvas, paintRushCard, paintSecretsCard, paintSpine, paintStarCard, secretsCanvas, spineCanvas
 } from '../art/shelfArt'
-import { rushDragonGeometry } from '../models'
+import { rushDragonGeometry, rushKrakenGeometry } from '../models'
 import type { PaletteKey } from '../palette'
 import { toTexture } from '../art/canvas'
 
@@ -79,7 +79,7 @@ const shelfGeometry = (): BufferGeometry => {
   return b.build()
 }
 
-/** Figurine colours per book: body, wings, plinth (book 3 gets its own when it arrives). */
+/** Dragon figurine colours per book: body, wings, plinth (book 3's figurine is the kraken, `rushKrakenGeometry`). */
 const FIGURE: Readonly<Record<number, [PaletteKey, PaletteKey, PaletteKey]>> = {
   1: ['dragonRed', 'dragonRedDark', 'bookCover'],
   2: ['dragonBlue', 'dragonBlueDark', 'heroBlue'],
@@ -172,7 +172,7 @@ export class ShelfView {
     for (let book = 1; book <= BOOK_COUNT; book++) {
       const [body, dark, plinth] = FIGURE[book] ?? FIGURE[3]!
       const mat = createPaperMaterial({ vertexColors: true, grain: 0.05, doubleSided: true })
-      const mesh = new Mesh(rushDragonGeometry(body, dark, plinth), mat)
+      const mesh = new Mesh(book === 3 ? rushKrakenGeometry() : rushDragonGeometry(body, dark, plinth), mat)
       mesh.castShadow = true
       const holder = new Group()
       holder.position.set(slotX(rushSlotOf(book)), 0, 0.1)

@@ -1,6 +1,6 @@
 /**
- * Page secrets (roadmap #15): one hidden interaction per page, twelve over the
- * two books. Never required, never hinted — no highlight bit, no lesson, no
+ * Page secrets (roadmap #15): one hidden interaction per page, eighteen over
+ * the three books. Never required, never hinted — no highlight bit, no lesson, no
  * hand — but each pays off on the spot: a sparkle, a chime and, the first time
  * ever, a small score bonus (`SECRET.bonus`, kept out of the page's star
  * rating). Found secrets are kept in the save (`aethel_state.fold_secrets`, a
@@ -21,25 +21,26 @@
  * (`SECRET.heroClear` of the target's reach) doesn't also loose a ballista
  * bolt past him.
  *
- * Adding book 3: append six more `SECRETS` with `book: 3`. Codes are the index
- * in `SECRET_IDS` (append-only); every counter derives from the list.
+ * Book 3 appended its six (roadmap #3). Codes are the index in `SECRET_IDS`
+ * (append-only); every counter derives from the list.
  *
  * Pure: no three.js, no Vue. Nothing here allocates per frame.
  */
 
-import { BOSS, HERO_X, HERO_Z, SECRET } from './config'
+import { BOSS, HERO_X, HERO_Z, KRAKEN, SECRET } from './config'
 import type { PageId } from './types'
 
 export type SecretId =
   | 'lamp' | 'boat' | 'fling' | 'moat' | 'nap' | 'hop'
   | 'wave' | 'apples' | 'whirl' | 'campfire' | 'bonk' | 'flap'
+  | 'regatta' | 'tidepool' | 'beacon' | 'shipshape' | 'tickle' | 'jump'
 
 export type SecretTrigger = 'desk' | 'taps' | 'folds' | 'pair' | 'sling'
 
 /**
  * When it can be set off:
  *   play   — while the page is being played (intro, play, cleared)
- *   asleep — before the dragon wakes (dormant, rumble, unfold)
+ *   asleep — before the boss wakes (the dragon: dormant, rumble, unfold; the kraken: dormant, surface)
  *   finale — once the finale fold is done (finale, victory)
  */
 export type SecretWhen = 'play' | 'asleep' | 'finale'
@@ -83,6 +84,13 @@ const def = (d: Partial<SecretDef> & Pick<SecretDef, 'id' | 'book' | 'page' | 't
  *   campfire the Camp: tap the enemy campfire three times → sparks fly
  *   bonk     the Return: a sling stone on the dragon before it wakes → bonk
  *   flap     the Crane: tap the folded crane three times → it flaps its wings
+ * Book 3:
+ *   regatta   the Harbour: sail the boat three times on one visit → a regatta of paper boats
+ *   tidepool  the Tide Flats: a sling stone into the tide pool → a splash
+ *   beacon    the Lighthouse: tap the lighthouse three times → its beacon flashes
+ *   shipshape the Shipyard: fold the boat and the pleat together → fireworks
+ *   tickle    the Deep: tap the sleeping kraken's eyes three times before it surfaces → it giggles bubbles
+ *   jump      Calm Water: tap the paper fish three times → a big leap
  */
 export const SECRETS: readonly SecretDef[] = [
   def({ id: 'lamp', book: 1, page: 1, trigger: 'desk' }),
@@ -96,7 +104,13 @@ export const SECRETS: readonly SecretDef[] = [
   def({ id: 'whirl', book: 2, page: 3, trigger: 'taps', x: 4.3, y: 1.45, z: -0.83, r: 1.15 }),
   def({ id: 'campfire', book: 2, page: 4, trigger: 'taps', x: -1.2, y: 0, z: -6.2, r: 0.8 }),
   def({ id: 'bonk', book: 2, page: 5, trigger: 'sling', when: 'asleep', x: BOSS.bodyX, z: BOSS.bodyZ, r: BOSS.bodyRadius }),
-  def({ id: 'flap', book: 2, page: 6, trigger: 'taps', when: 'finale', x: 0, y: 1.2, z: 0.6, r: 1.7 })
+  def({ id: 'flap', book: 2, page: 6, trigger: 'taps', when: 'finale', x: 0, y: 1.2, z: 0.6, r: 1.7 }),
+  def({ id: 'regatta', book: 3, page: 1, trigger: 'folds', folds: ['s1-boat'], count: 3 }),
+  def({ id: 'tidepool', book: 3, page: 2, trigger: 'sling', x: -4.2, z: -3.4, r: 0.6 }),
+  def({ id: 'beacon', book: 3, page: 3, trigger: 'taps', x: 4.2, y: 2.2, z: -3.6, r: 1.0 }),
+  def({ id: 'shipshape', book: 3, page: 4, trigger: 'pair', folds: ['s4-boat', 's4-pleat'] }),
+  def({ id: 'tickle', book: 3, page: 5, trigger: 'taps', when: 'asleep', x: KRAKEN.bodyX, y: 0.3, z: KRAKEN.bodyZ + 0.6, r: 1.5 }),
+  def({ id: 'jump', book: 3, page: 6, trigger: 'taps', when: 'finale', x: 0, y: 1, z: 0.6, r: 1.7 })
 ]
 
 export const SECRET_IDS: readonly SecretId[] = SECRETS.map((s) => s.id)

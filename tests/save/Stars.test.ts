@@ -55,7 +55,7 @@ describe('fold_stars through useFoldProgress', () => {
     prog.recordStars(2, 5, 1)
     expect(prog.starsForBook(1)).toEqual({ pages: [3, 0, 2, 0, 0], earned: 5, max: 15 })
     expect(prog.starsForBook(2)).toEqual({ pages: [0, 0, 0, 0, 1], earned: 1, max: 15 })
-    expect(prog.totalStars()).toEqual({ earned: 6, max: 30 })
+    expect(prog.totalStars()).toEqual({ earned: 6, max: 45 })
   })
 
   it('reads a hand-edited or corrupt fold_stars safely', async () => {

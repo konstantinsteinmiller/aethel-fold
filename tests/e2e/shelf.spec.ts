@@ -34,7 +34,8 @@ test.describe('Aethel Fold — the desk bookshelf (chapter select)', () => {
     expect(s.shelf.open).toBe(true)
     expect(s.shelf.camera).toBe(1)
     expect(s.shelf.highlight).toBe(1)
-    expect(s.shelf.slots).toEqual(['open', 'open', 'coming'])
+    // Book 3 (roadmap #3) is a real book now: locked until book 2 is won.
+    expect(s.shelf.slots).toEqual(['open', 'open', 'locked'])
     await expect(page.getByTestId('victory-book2')).toHaveCount(0)
     // The wordless hand points at the glowing book.
     expect(s.lesson).toBe('shelf')
@@ -200,8 +201,8 @@ test.describe('Aethel Fold — the desk bookshelf (chapter select)', () => {
     await waitForGame(page)
     await ff(page, 1)
     let s = await state(page)
-    // One figurine per book: book 1's stands, book 2's waits for its win.
-    expect(s.shelf.rush).toEqual(['open', 'hidden'])
+    // One figurine per book: book 1's stands, book 2's (and book 3's kraken) wait for their wins.
+    expect(s.shelf.rush).toEqual(['open', 'hidden', 'hidden'])
     // First tap pulls it out (its card: par and best), the second starts the rush.
     await tapShelf(page, 3)
     await ff(page, 0.6)

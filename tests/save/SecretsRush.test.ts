@@ -20,12 +20,12 @@ describe('fold_secrets and fold_rush through useFoldProgress', () => {
     try {
       const prog = await import('@/use/useFoldProgress')
       const { getState, flushPersist } = await import('@/use/useAethelState')
-      expect(prog.secretCount()).toEqual({ found: 0, total: 12 })
+      expect(prog.secretCount()).toEqual({ found: 0, total: 18 })
       expect(prog.recordSecret('wave')).toBe(true)
       expect(prog.recordSecret('lamp')).toBe(true)
       expect(prog.recordSecret('wave')).toBe(false)
       expect(getState(SECRETS_KEY)).toEqual(['lamp', 'wave'])
-      expect(prog.secretCount()).toEqual({ found: 2, total: 12 })
+      expect(prog.secretCount()).toEqual({ found: 2, total: 18 })
       expect(prog.secretCount(1)).toEqual({ found: 1, total: 6 })
       expect(prog.secretCount(2)).toEqual({ found: 1, total: 6 })
       flushPersist()
@@ -41,7 +41,7 @@ describe('fold_secrets and fold_rush through useFoldProgress', () => {
     localStorage.setItem(STATE, JSON.stringify({ [SECRETS_KEY]: ['boat', 'boat', 'nope', 7, 'flap'] }))
     const prog = await import('@/use/useFoldProgress')
     expect(prog.secretsFound.value).toEqual(['boat', 'flap'])
-    expect(prog.secretCount()).toEqual({ found: 2, total: 12 })
+    expect(prog.secretCount()).toEqual({ found: 2, total: 18 })
   })
 
   it('keeps the fastest rush per book and reports time vs par and the previous best', async () => {
@@ -59,7 +59,7 @@ describe('fold_secrets and fold_rush through useFoldProgress', () => {
       expect(r).toEqual({ time: 61, par: 65, best: 70.2, underPar: true, newBest: true })
       prog.recordRush(2, 50, 60)
       expect(getState(RUSH_KEY)).toEqual({ b1: 61, b2: 50 })
-      expect(prog.shelfProgress().rush).toEqual([61, 50])
+      expect(prog.shelfProgress().rush).toEqual([61, 50, 0])
       flushPersist()
       const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))
       expect(keys).toEqual([STATE])

@@ -75,7 +75,7 @@ export const asStars = (v: unknown): Stars => {
 export const starKey = (book: BookId, page: PageId): string => `b${book}p${page}`
 
 /**
- * Sanitise a stored `fold_stars` record: only `b<1|2>p<1…6>` keys with 1…3
+ * Sanitise a stored `fold_stars` record: only `b<1|2|3>p<1…6>` keys with 1…3
  * stars survive (junk, zeros and unknown keys are dropped). Allocates: save
  * and UI paths only.
  */
@@ -83,7 +83,7 @@ export const readStarRecord = (v: unknown): Record<string, Stars> => {
   const out: Record<string, Stars> = {}
   if (!v || typeof v !== 'object' || Array.isArray(v)) return out
   for (const [k, raw] of Object.entries(v as Record<string, unknown>)) {
-    if (!/^b[12]p[1-6]$/.test(k)) continue
+    if (!/^b[123]p[1-6]$/.test(k)) continue
     const s = asStars(raw)
     if (s > 0) out[k] = s
   }

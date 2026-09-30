@@ -116,7 +116,9 @@ export const DEMO_HOLD_WAIT = 0.26
 export const DEMO_HOLD_FOLD = 0.65
 
 /** Lessons whose move hold to fold replaces (their demo becomes `hold`); the sling's is a tap, not shown. */
-export const HOLD_DEMO_LESSONS: readonly LessonId[] = ['swipe', 'shield', 'launch', 'ridge', 'frog', 'peel', 'crease', 'spread', 'core']
+export const HOLD_DEMO_LESSONS: readonly LessonId[] = [
+  'swipe', 'shield', 'launch', 'ridge', 'frog', 'peel', 'crease', 'spread', 'core', 'boat', 'pleat'
+]
 /** Seconds the ghost takes to fade once the player acts. */
 export const DEMO_FADE = 0.22
 /** Loops shown with reduced motion before falling back to the plain hand. */
@@ -253,7 +255,9 @@ export const demoShowing = (l: LessonState): boolean => l.demo.phase !== 'off'
 
 export const LESSON_IDS: readonly LessonId[] = [
   'swipe', 'stamp', 'shield', 'launch', 'ridge', 'spread', 'peel', 'crease', 'core', 'frog',
-  'crush', 'sling', 'leaper', 'ballista', 'shelf'
+  'crush', 'sling', 'leaper', 'ballista', 'shelf',
+  // Book 3 (roadmap #3), appended so the codes stay stable.
+  'boat', 'pleat'
 ]
 
 export const lessonCode = (id: LessonId): number => LESSON_IDS.indexOf(id)

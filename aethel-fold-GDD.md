@@ -171,3 +171,50 @@ The entire game takes place over 6 "Pages" (Levels).
   * A page built under a turning or peeling sheet holds every pop-up flat and unfolds it as the sheet clears it.
   * Props keep clear of the landing strip a launch flap flips onto.
 
+
+---
+
+## 13. Book 3 — "The Sea of Paper" (post-launch addendum)
+*Unlocked by winning book 2. Its spine on the desk shelf carries a paper boat.*
+
+**Story.** The crane flew home, but the Paper King fled across the Sea of Paper and woke what sleeps under it. His marines wade ashore through the harbour to the hero's sea keep, and behind them the water begins to fold into tentacles. The keep, its sling and its two ballistas stand along the bottom edge as in book 2; the top of every page is the sea the enemy comes out of.
+
+**New fold: the boat.**
+* A **river channel** crosses the page. Marchers have to wade across it at half pace.
+* A square paper flap lies at the channel's **dock**, on one bank. Swipe it along the channel and it folds into a paper boat.
+* The boat **sails the channel out and back**. Everyone wading in the water within reach of its bow is **capsized** (a kill; a brute too — the water doesn't care how heavy you are).
+* Leapers in mid-hop sail over it. Then the boat comes home, unfolds into the flap at the dock, and needs a moment before it can be folded again.
+* The rule in one line: *the channel slows them, the boat sweeps them.* Timing is the skill — fold it when the column is in the water, not before.
+* (The roadmap sketch had the boat "carry the hero across". The hero never leaves his keep in this game — the keep is what you defend — so the boat carries the player's intent across the channel instead: it is the hero's boat, and it clears the crossing.)
+
+**New fold: the pleat.**
+* A long **accordion strip** lies down a lane, printed with alternating valley and mountain creases (four sections).
+* Swipe down the strip and the creases close **one after another, following the finger**. Each section that closes crushes whoever stands on it (a stamp crush, with a growing multi-kill bonus for each section in the chain).
+* Let go early past the threshold and the rest snap shut in quick sequence. Let go before it and the strip springs back open (whoever it already crushed stays crushed).
+* A shut accordion waits a beat, then unfolds and cools down.
+* The rule in one line: *a column that walks onto the pleat is crushed in sequence, head to tail.*
+
+Both new folds work with hold to fold, get the pulsing highlight while someone stands on them, and have a wordless lesson with a ghost-hand demo: `boat` (the hand sweeps the dock flap along the channel while the ghost boat folds up) and `pleat` (the hand runs down the strip while the ghost accordion closes behind it).
+
+**No new enemy.** The sea brings the existing army — knights, brutes, runners, leapers, archers and catapults. The boat and the pleat already change how a column must be answered; a sea creature would have cost atlas frames and a new rule without adding a new decision.
+
+**Pages.**
+1. The Harbour: boat lesson. Knights and runners wade the harbour channel.
+2. The Tide Flats: pleat lesson. Long knight columns down the middle lane, brutes on the flanks.
+3. The Lighthouse: boat and pleat together; archers and a catapult on the cliffs (launch flap). The lighthouse stands on the right bank.
+4. The Shipyard: everything — two catapult flaps, the boat, the pleat, leapers and brutes.
+5. The Deep: the kraken.
+6. Calm Water: the final fold turns the kraken into a little paper fish that leaps out of the sea.
+
+**The kraken (page 5).** A paper octopus as big as the page's top third — *scary but cute*. Cute by proportions and face: a chunky rounded origami dome of a head in soft pastel coral with teal spots, oversized eyes with glossy deep-sea-blue pupils and a paper highlight, heavy periwinkle brows, a small pouty beak, stubby curling arms with rounded tips and rows of paper suction cups. Menacing by scale, posture and telegraphs: a cheeky idle bob, then a big rear-up with the brows folded down into a glare and the eyes narrowed and glinting before every attack; hurt, the brows lift into a surprised, sad look and the eyes go wide.
+* *Asleep:* only its eyes and a few bubbles show above the water.
+* *Surface:* it rises out of the sea (the page shakes, spray), then *roars* (BLUB-ROAR).
+* *Attacks,* alternating: **ink** — it charges (siphon glows, the hero cowers) and squirts an ink jet at the keep; a raised shield blocks it like the dragon's fire; and **tentacle slam** — a tentacle slams down on a lane in front of the keep and boarders (knights, runners, a brute when it is hurt) tumble off it onto the page, always in front of the kraken, never out of its body.
+* *Weak points:* after two attacks a **tentacle** lies across the page with a glowing crease: swipe along it to fold it back (four tentacles, the crease lesson). The fifth and last weak point is the **mantle**'s core: spread it (the core lesson).
+* Sling stones on its mantle make it flinch; three bare the next weak point, one during the ink charge chokes it. A stone on an exposed weak point breaks it.
+* *Collapse:* it folds down flat into the sea — the sheet the finale folds.
+* It runs its own state machine (`logic/kraken.ts`), with the dragon's timing multiplier: the **Kraken Rush** is book 3's rematch (the third figurine on the shelf's top board), faster and against the clock.
+
+**Secrets (one per page).** Harbour: sail the boat three times on one visit (a regatta). Tide Flats: a sling stone into the tide pool (splash). Lighthouse: tap the lighthouse three times (its beacon flashes). Shipyard: fold the boat and the pleat within a moment of each other (shipshape fireworks). The Deep: tap the sleeping kraken's eyes three times before it surfaces (it giggles bubbles). Calm Water: tap the paper fish three times (a big leap). Eighteen secrets in all.
+
+**Stars and cosmetics.** Five more rated pages make 45 stars. The old thresholds stay (books 1–2 alone still unlock everything they did, and nothing owned is ever taken away); book 3 adds three unlocks above them: **sea chart** paper (35 ★), the **sailor** hero (40 ★) and **fish** confetti (45 ★, every page at ★★★).

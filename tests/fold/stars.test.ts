@@ -55,7 +55,8 @@ describe('star rating rule', () => {
     expect(asStars('3')).toBe(0)
     expect(asStars(Number.NaN)).toBe(0)
     expect(starKey(2, 4)).toBe('b2p4')
-    expect(readStarRecord({ b1p1: 3, b2p6: 1, b3p1: 3, b1p7: 2, b1p2: 0, b1p3: 'x', junk: 1 })).toEqual({ b1p1: 3, b2p6: 1 })
+    // Book 3's pages are real keys now (roadmap #3); book 4's aren't.
+    expect(readStarRecord({ b1p1: 3, b2p6: 1, b3p1: 3, b4p1: 3, b1p7: 2, b1p2: 0, b1p3: 'x', junk: 1 })).toEqual({ b1p1: 3, b2p6: 1, b3p1: 3 })
     expect(readStarRecord(null)).toEqual({})
     expect(readStarRecord([3])).toEqual({})
   })

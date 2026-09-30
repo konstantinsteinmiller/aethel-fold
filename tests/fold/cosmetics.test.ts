@@ -13,8 +13,23 @@ import { isRated } from '@/fold/logic/stars'
 const AVAILABLE = Object.values(BOOKS).reduce((n, b) => n + Object.values(b).filter((p) => isRated(p)).length * 3, 0)
 
 describe('cosmetics: the unlock table', () => {
-  it('30 stars are available over books 1 and 2', () => {
-    expect(AVAILABLE).toBe(30)
+  it('45 stars are available over books 1–3 (30 of them in books 1 and 2)', () => {
+    expect(AVAILABLE).toBe(45)
+    const twoBooks = [BOOKS[1], BOOKS[2]].reduce((n, b) => n + Object.values(b).filter((p) => isRated(p)).length * 3, 0)
+    expect(twoBooks).toBe(30)
+  })
+
+  it('book 3 (roadmap #3) adds its unlocks above the old table without moving it', () => {
+    // The old thresholds stand: books 1–2 alone still unlock everything they did.
+    const old = COSMETICS.filter((c) => c.stars > 0 && c.stars <= 30).map((c) => `${c.id}@${c.stars}`)
+    expect(old).toEqual([
+      'paper.graph@3', 'paper.washi@11', 'paper.newsprint@20', 'paper.map@26',
+      'hero.scarf@8', 'hero.sash@17', 'hero.crown@30',
+      'confetti.stars@5', 'confetti.hearts@14', 'confetti.cranes@23'
+    ])
+    expect(COSMETICS.filter((c) => c.stars > 30).map((c) => `${c.id}@${c.stars}`)).toEqual([
+      'paper.chart@35', 'hero.sailor@40', 'confetti.fish@45'
+    ])
   })
 
   it('ids are unique, well-formed and valid for their kind', () => {
@@ -41,8 +56,8 @@ describe('cosmetics: the unlock table', () => {
     }
   })
 
-  it('the roadmap asks for 4 papers, 3+ hero variants and 3+ confetti shapes to earn', () => {
-    expect(cosmeticsOf('paper').filter((c) => c.stars > 0).map((c) => c.value).sort()).toEqual(['graph', 'map', 'newsprint', 'washi'])
+  it('the roadmap asks for 4 papers, 3+ hero variants and 3+ confetti shapes to earn (book 3 adds the sea chart)', () => {
+    expect(cosmeticsOf('paper').filter((c) => c.stars > 0).map((c) => c.value).sort()).toEqual(['chart', 'graph', 'map', 'newsprint', 'washi'])
     expect(cosmeticsOf('hero').filter((c) => c.stars > 0).length).toBeGreaterThanOrEqual(3)
     expect(cosmeticsOf('confetti').filter((c) => c.stars > 0).length).toBeGreaterThanOrEqual(3)
   })
@@ -70,7 +85,8 @@ describe('cosmetics: the unlock table', () => {
     expect(unlockedBy(5)).toEqual(['paper.graph', 'confetti.stars'])
     expect(unlockedBy(29)).not.toContain('hero.crown')
     expect(unlockedBy(30)).toContain('hero.crown')
-    expect(unlockedBy(30)).toHaveLength(COSMETICS.filter((c) => c.stars > 0).length)
+    expect(unlockedBy(30)).toHaveLength(COSMETICS.filter((c) => c.stars > 0 && c.stars <= 30).length)
+    expect(unlockedBy(45)).toHaveLength(COSMETICS.filter((c) => c.stars > 0).length)
     expect(unlockedBy(Number.NaN)).toEqual([])
     for (const c of COSMETICS) {
       if (c.stars === 0) continue
@@ -82,7 +98,9 @@ describe('cosmetics: the unlock table', () => {
   it('nextUnlock names the next thing to chase, and nothing past the last', () => {
     expect(nextUnlock(0)?.id).toBe('paper.graph')
     expect(nextUnlock(3)?.id).toBe('confetti.stars')
-    expect(nextUnlock(30)).toBeNull()
+    expect(nextUnlock(30)?.id).toBe('paper.chart')
+    expect(nextUnlock(44)?.id).toBe('confetti.fish')
+    expect(nextUnlock(45)).toBeNull()
   })
 })
 

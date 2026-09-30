@@ -140,6 +140,7 @@ export default {
       'settings': 'Pause und Einstellungen',
       'hearts': 'Noch {n} von {max} Herzen',
       'dragon': 'Drache',
+      'kraken': 'Krake',
       'boss': 'Noch {n} Schwachstellen',
       'tryAgain': 'Nochmal!',
       'almost': 'Fast geschafft',
@@ -158,7 +159,13 @@ export default {
       'mill': 'Der Mühlenhügel',
       'camp': 'Das Belagerungslager',
       'return': 'Der Drache kehrt zurück',
-      'homecoming': 'Endlich Frieden'
+      'homecoming': 'Endlich Frieden',
+      'harbour': 'Der Hafen',
+      'marsh': 'Das Watt',
+      'lighthouse': 'Der Leuchtturm',
+      'shipyard': 'Die Werft',
+      'deep': 'Die Tiefe',
+      'calm': 'Stilles Wasser'
     },
     'story': {
       'b1p1': 'Die Ritter des Papierkönigs marschieren auf die Grenze zu …',
@@ -172,7 +179,13 @@ export default {
       'b2p3': 'Katapulte auf dem Mühlenhügel. Schleudere sie zurück, immer wieder!',
       'b2p4': 'Das ganze Belagerungslager stürmt aufs Tor zu.',
       'b2p5': 'Der Drache kehrt zurück!',
-      'b2p6': 'Falte ihn zum Kranich – und lass ihn in Frieden davonfliegen.'
+      'b2p6': 'Falte ihn zum Kranich – und lass ihn in Frieden davonfliegen.',
+      'b3p1': 'Der König floh übers Meer … seine Seesoldaten waten in den Hafen!',
+      'b3p2': 'Lange Kolonnen im Watt. Falte die Ziehharmonika über ihnen zu!',
+      'b3p3': 'Bogenschützen auf den Klippen, ein Boot im Kanal, Falten auf der Straße.',
+      'b3p4': 'Die ganze Werft kommt an Land.',
+      'b3p5': 'In der Tiefe erwacht etwas Riesiges …',
+      'b3p6': 'Die Krake ist nur noch Papier. Falte sie zu einem kleinen Fisch.'
     },
     'books': {
       'title': 'Bücher',
@@ -181,7 +194,10 @@ export default {
       'name2': 'Buch 2: Die Heimatburg',
       'blurb1': 'Marschiere gegen die feindliche Burg.',
       'blurb2': 'Verteidige deine eigene Burg.',
+      'name3': 'Buch 3: Das Papiermeer',
+      'blurb3': 'Halte den Hafen gegen die Krake.',
       'locked': 'Gewinne Buch 1, um es freizuschalten.',
+      'locked3': 'Gewinne Buch 2, um es freizuschalten.',
       'secrets': 'Geheimnisse gefunden: {n}/{total}'
     },
     'fx': {
@@ -214,7 +230,14 @@ export default {
       'whoosh': 'WUSCH!',
       'crackle': 'KNISTER!',
       'bonk': 'BONK!',
-      'rush': 'DRACHE BESIEGT!'
+      'rush': 'DRACHE BESIEGT!',
+      'rushKraken': 'KRAKE BESIEGT!',
+      'crunch': 'KNIRSCH!',
+      'regatta': 'REGATTA!',
+      'flash': 'BLINK!',
+      'shipshape': 'SCHIFF AHOI!',
+      'giggle': 'BLUBB BLUBB!',
+      'blubRoar': 'BLUBBROOOAR!'
     },
     'hint': {
       'swipe': 'Wische entlang des gepunkteten Pfeils, um das Papier zu falten',
@@ -236,7 +259,9 @@ export default {
       'hold': 'Halte die leuchtende Lasche gedrückt, um sie zu falten',
       'holdPeel': 'Halte die Ecke gedrückt, um die Seite abzuziehen',
       'holdCrease': 'Halte den leuchtenden Knick gedrückt',
-      'slingTap': 'Tippe dorthin, wo der Stein landen soll'
+      'slingTap': 'Tippe dorthin, wo der Stein landen soll',
+      'boat': 'Wische das Boot den Fluss entlang, damit es lossegelt',
+      'pleat': 'Wische die Falten hinunter, um sie zuzufalten'
     },
     'pause': {
       'title': 'Pause',
@@ -279,14 +304,17 @@ export default {
         'paper_washi': 'Washi',
         'paper_newsprint': 'Zeitungspapier',
         'paper_map': 'Alte Karte',
+        'paper_chart': 'Seekarte',
         'hero_classic': 'Klassisch',
         'hero_scarf': 'Schal',
         'hero_sash': 'Königsschärpe',
         'hero_crown': 'Krone',
+        'hero_sailor': 'Matrose',
         'confetti_squares': 'Vierecke',
         'confetti_stars': 'Sterne',
         'confetti_hearts': 'Herzen',
-        'confetti_cranes': 'Kraniche'
+        'confetti_cranes': 'Kraniche',
+        'confetti_fish': 'Fische'
       }
     },
     'victory': {
@@ -301,7 +329,11 @@ export default {
       'playAgain': 'Nochmal spielen',
       'subtitle2': 'Der Drache ist jetzt ein Papierkranich!',
       'story1': '… doch der Frosch hüpfte davon, um den Papierkönig zu warnen. Er zieht gegen deine Burg!',
-      'story2': 'Deine Burg steht. Der Kranich fliegt in Frieden heim.',
+      'story2': '… doch der Papierkönig floh übers Meer, und in der Tiefe erwacht etwas.',
+      'subtitle3': 'Die Krake ist jetzt ein kleiner Papierfisch!',
+      'story3': 'Das Meer ist still. Der Fisch schwimmt heim, und der Hafen schläft.',
+      'nextBook3': 'Buch 3: Das Papiermeer',
+      'rushKraken': 'Krakenjagd',
       'nextBook': 'Buch 2: Die Heimatburg',
       'backToBook1': 'Buch 1 nochmal lesen',
       'stars': 'Sterne',
@@ -309,6 +341,7 @@ export default {
     },
     'rush': {
       'title': 'DRACHENJAGD',
+      'titleKraken': 'KRAKENJAGD',
       'time': 'Zeit',
       'par': 'Par',
       'best': 'Bestzeit',

@@ -107,30 +107,41 @@ export const pineGeometry = (): BufferGeometry => cached('pine', () => {
   return b.build()
 })
 
+/** Snow caps for a structure or prop that the facet rule can't cover (steep cones), or null. */
+const snowCaps = (name: string): BufferGeometry | null => {
+  const b = new PaperBuilder()
+  if (name === 'pine') {
+    // A thick cap on each of the pine's three tiers (y0, r, h as in pineGeometry).
+    for (const [y0, r, h] of [[0.22, 0.62, 0.8], [0.6, 0.5, 0.72], [0.98, 0.36, 0.62]] as const) {
+      b.push().translate(0, y0 + h * 0.42, 0).cone(r * 0.7, h * 0.62, 7, 'snowBank', 'snowShade').pop()
+    }
+  } else if (name === 'tower') {
+    // The pop-up tower's cone roof (towerGeometry: the roof sits on the 1.75 drum).
+    b.push().translate(0, 2.2, 0).cone(0.72, 0.84, 10, 'snowBank', 'snowShade').pop()
+  } else return null
+  return b.build()
+}
+
 /**
- * Winter's version of a scenery prop (roadmap #17): every facet that faces the
- * sky turns to snow (alternating with its blue shade, so the facets still
- * read), and the pine gets a snow cap on each tier (its slopes are too steep
- * for the facet rule). Cached per prop; the same material, so no new program.
+ * Winter's version of a scenery prop or pop-up (roadmap #17): every facet
+ * that faces the sky turns to snow (alternating with its blue shade, so the
+ * facets still read), and steep cones — the pine's tiers, the tower's roof —
+ * get thick snow caps the facet rule can't give them. Cached per model; the
+ * same material, so no new program and no new draw.
  */
 export const snowyGeometry = (base: BufferGeometry, name: string): BufferGeometry => cached(`snow:${name}`, () => {
   const out = base.clone()
   const n = out.getAttribute('normal')
   const c = out.getAttribute('color')
-  const snow = col('snow')
+  const snow = col('snowBank')
   const snowShade = col('snowShade')
   for (let i = 0; i + 2 < n.count; i += 3) {
-    if (n.getY(i) < 0.7) continue
+    if (n.getY(i) < 0.55) continue
     const k = (i / 3) % 2 ? snowShade : snow
     for (let j = 0; j < 3; j++) c.setXYZ(i + j, k.r, k.g, k.b)
   }
-  if (name !== 'pine') return out
-  // The pine: a cap on each of its three tiers (y0, r, h as in pineGeometry).
-  const b = new PaperBuilder()
-  for (const [y0, r, h] of [[0.22, 0.62, 0.8], [0.6, 0.5, 0.72], [0.98, 0.36, 0.62]] as const) {
-    b.push().translate(0, y0 + h * 0.5, 0).cone(r * 0.56, h * 0.52, 7, 'snow', 'snowShade').pop()
-  }
-  const caps = b.build()
+  const caps = snowCaps(name)
+  if (!caps) return out
   const merged = new BufferGeometry()
   for (const name of ['position', 'normal', 'color', 'uv'] as const) {
     const a = out.getAttribute(name).array as Float32Array
@@ -433,18 +444,19 @@ export const seasonCastleGeometry = (season: Season, keepZ: number, towerX: numb
         b.pop()
       }
     } else {
+      // Thick caps (made to read under the warm lamp): most of each cone roof, heaped tops.
       for (const [x, y, z, r, h] of CASTLE_CONES) {
-        b.push().translate(x, y + h * 0.42, z).cone(r * 0.64, h * 0.6, 10, 'snow', 'snowShade').pop()
+        b.push().translate(x, y + h * 0.3, z).cone(r * 0.8, h * 0.74, 10, 'snowBank', 'snowShade').pop()
       }
       // Flat tops: the keep's roof (the hero stands in it), the ballista towers, the curtain walls.
-      b.push().translate(0, keepTop, keepZ).box(1.3, 0.035, 0.86, 'snow', 'snow', 'snowShade', 'snowShade').pop()
+      b.push().translate(0, keepTop, keepZ).box(1.34, 0.07, 0.9, 'snowShade', 'snowBank', 'snowShade', 'snowShade').pop()
       for (const s of [-1, 1]) {
-        b.push().translate(s * towerX, towerTop, towerZ).drum(0.43, 0.035, 8, 'snowShade', 'snow').pop()
-        b.push().translate(s * (0.68 + towerX - 0.4) / 2, 0.4, 6.62).box(towerX - 0.4 - 0.68, 0.04, 0.3, 'snow', 'snow', 'snowShade', 'snowShade').pop()
-        // The upper half of each house roof (a pyramid's top half is the same pyramid at half size).
-        b.push().translate(s * 2.75, 0.5 + 0.45 * 0.5, 9.1).pyramid(0.62, 0.47, 0.245, 'snow').pop()
+        b.push().translate(s * towerX, towerTop, towerZ).drum(0.45, 0.07, 8, 'snowShade', 'snowBank').pop()
+        b.push().translate(s * (0.68 + towerX - 0.4) / 2, 0.4, 6.62).box(towerX - 0.4 - 0.68, 0.08, 0.32, 'snowShade', 'snowBank', 'snowShade', 'snowShade').pop()
+        // The upper two-thirds of each house roof (a pyramid's top part is the same pyramid, smaller).
+        b.push().translate(s * 2.75, 0.5 + 0.45 * 0.34, 9.1).pyramid(0.62 * 0.68, 0.47 * 0.68, 0.45 * 0.68, 'snowBank').pop()
       }
-      b.push().translate(0, 1.45 + 0.75 * 0.5, 8.85).pyramid(1.09, 0.68, 0.395, 'snow').pop()
+      b.push().translate(0, 1.45 + 0.75 * 0.34, 8.85).pyramid(1.09 * 0.68, 0.68 * 0.68, 0.75 * 0.68, 'snowBank').pop()
     }
     return b.build()
   })
@@ -599,6 +611,89 @@ export const boatGeometry = (): BufferGeometry => cached('boat', () => {
   b.quad([0.9, 0.28, -0.25], [-0.9, 0.28, -0.25], [-0.55, 0, 0], [0.55, 0, 0], 'parchmentShade')
   b.tri(-0.5, 0.28, 0.22, 0.5, 0.28, 0.22, 0, 0.85, 0, 'paperWhite')
   b.tri(0.5, 0.28, -0.22, -0.5, 0.28, -0.22, 0, 0.85, 0, 'parchmentShade')
+  return b.build()
+})
+
+/**
+ * Book 3's boat fold (roadmap #3): a closed paper boat, bow toward +x, about
+ * 1.3 long — the dock flap folded up. Hull in white paper with a guide-blue
+ * band (it is the player's), a folded sail in the middle.
+ */
+export const paperBoatGeometry = (): BufferGeometry => cached('paperBoat', () => {
+  const b = new PaperBuilder()
+  type P = [number, number, number]
+  // Paper has two faces: every facet is added both ways (own colour each side).
+  const two = (p: P, q: P, r: P, front: Col, back: Col): void => {
+    b.tri(p[0], p[1], p[2], q[0], q[1], q[2], r[0], r[1], r[2], front)
+    b.tri(p[0], p[1], p[2], r[0], r[1], r[2], q[0], q[1], q[2], back)
+  }
+  const L = 0.66
+  const l = 0.4
+  const w = 0.26
+  const h = 0.34
+  // Hull sides down to the keel line (y = 0).
+  for (const z of [w, -w]) {
+    const k = z > 0 ? 0.02 : -0.02
+    two([-L, h, z], [L, h, z], [l, 0, k], 'paperWhite', 'parchmentShade')
+    two([-L, h, z], [l, 0, k], [-l, 0, k], 'paperWhite', 'parchmentShade')
+    // A guide-blue band along the gunwale (it is the player's boat).
+    const zb = z * 1.02
+    two([-L * 0.97, h, zb], [L * 0.97, h, zb], [L * 0.9, h * 0.78, zb * 0.86], 'guide', 'guide')
+    two([-L * 0.97, h, zb], [L * 0.9, h * 0.78, zb * 0.86], [-L * 0.9, h * 0.78, zb * 0.86], 'guide', 'guide')
+  }
+  // Bow and stern: folded points.
+  two([L, h, w], [L, h, -w], [l, 0, 0], 'parchmentShade', 'parchmentShade')
+  two([-L, h, -w], [-L, h, w], [-l, 0, 0], 'parchmentShade', 'parchmentShade')
+  // The sail: a tall folded triangle.
+  two([-0.34, h, 0], [0.34, h, 0], [0, h + 0.62, 0], 'paperWhite', 'parchmentLight')
+  return b.build()
+})
+
+/**
+ * The Lighthouse page's lighthouse (book 3): a tapering tower in red and
+ * white bands on a rock, a gallery, the lamp room (its glass is a separate
+ * mesh, see `lighthouseLampGeometry`) and a cone roof. About 2.6 tall.
+ */
+export const lighthouseGeometry = (): BufferGeometry => cached('lighthouse', () => {
+  const b = new PaperBuilder()
+  b.push().drum(0.62, 0.22, 9, 'rock', 'rockDark').pop()
+  const bands = 5
+  for (let i = 0; i < bands; i++) {
+    const y = 0.22 + i * 0.34
+    const r = 0.46 - i * 0.04
+    b.push().translate(0, y, 0).drum(r, 0.34, 10, i % 2 ? 'paperWhite' : 'lighthouse', i % 2 ? 'paperWhite' : 'lighthouseDark').pop()
+  }
+  const top = 0.22 + bands * 0.34
+  b.push().translate(0, top, 0).drum(0.38, 0.06, 10, 'steelDark', 'stone').pop()
+  b.push().translate(0, top + 0.5, 0).drum(0.3, 0.06, 10, 'lighthouseDark').pop()
+  b.push().translate(0, top + 0.56, 0).cone(0.34, 0.36, 10, 'lighthouse', 'lighthouseDark').pop()
+  return b.build()
+})
+
+/** The lamp room's glass (its own material flashes for the beacon secret). */
+export const lighthouseLampGeometry = (): BufferGeometry => cached('lighthouseLamp', () => {
+  const b = new PaperBuilder()
+  b.drum(0.24, 0.44, 8, 'highlightHot', 'lampWarm')
+  return b.build()
+})
+
+/** The kraken's rush figurine (book 3's reserved rush slot): a little folded kraken on a plinth. */
+export const rushKrakenGeometry = (): BufferGeometry => cached('rushKraken', () => {
+  const b = new PaperBuilder()
+  b.push().box(0.82, 0.1, 0.56, 'seaDeep', 'parchmentLight').pop()
+  b.push().translate(0, 0.1, 0).drum(0.22, 0.34, 8, 'kraken', 'krakenDark').pop()
+  b.push().translate(0, 0.44, 0).cone(0.22, 0.34, 8, 'kraken', 'krakenDark').pop()
+  // Big eyes with deep-sea pupils, under periwinkle brows.
+  for (const s of [-1, 1]) {
+    b.push().translate(s * 0.1, 0.3, 0.2).box(0.12, 0.12, 0.02, 'krakenEye').pop()
+    b.push().translate(s * 0.1, 0.31, 0.212).box(0.06, 0.06, 0.01, 'krakenPupil').pop()
+    b.push().translate(s * 0.1, 0.4, 0.21).rotate(0, 0, s * 0.35).box(0.13, 0.03, 0.02, 'krakenBrow').pop()
+  }
+  // Arms: folded strips fanning out on the plinth, tips curled up.
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.3
+    b.push().translate(Math.sin(a) * 0.24, 0.12, Math.cos(a) * 0.2).rotate(0, a, 0).rotate(1.1, 0, 0).box(0.07, 0.3, 0.05, 'krakenDark').pop()
+  }
   return b.build()
 })
 

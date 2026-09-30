@@ -220,6 +220,58 @@ for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }]) {
   })
 }
 
+// The pause bookshelf with all three books (roadmap #3): every book row inside
+// the card, its text and stars side by side, rows clear of each other, at the
+// smallest phone both ways.
+for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }]) {
+  test(`the pause bookshelf with three books fits at ${vp.width}×${vp.height}`, async ({ page }) => {
+    await page.setViewportSize(vp)
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('__seeded')) return
+      sessionStorage.setItem('__seeded', '1')
+      localStorage.setItem('aethel_state', JSON.stringify({
+        fold_wins: 1, fold_cleared: 6, fold_wins2: 1, fold_cleared2: 6, fold_stars: { b1p1: 3, b2p2: 2, b3p1: 1 }
+      }))
+    })
+    await page.goto('/')
+    await waitForGame(page)
+    await page.getByRole('button', { name: /pause and settings/i }).click()
+    await page.getByTestId('pause-books').click()
+    await expect(page.getByTestId('book-3')).toBeEnabled()
+    await page.waitForFunction(() => {
+      const card = document.querySelector('.cootie__card')
+      return !!card && card.getAnimations({ subtree: true }).length === 0 && getComputedStyle(card).transform === 'none'
+    })
+    const r = await page.evaluate(() => {
+      const box = (e: Element) => {
+        const b = e.getBoundingClientRect()
+        return { x: b.x, y: b.y, w: b.width, h: b.height }
+      }
+      const card = box(document.querySelector('.cootie__scroll')!)
+      const rows = [...document.querySelectorAll('.cootie__book')].map((row) => ({
+        row: box(row),
+        text: box(row.querySelector('.cootie__book-text')!),
+        stars: row.querySelector('.cootie__book-stars') ? box(row.querySelector('.cootie__book-stars')!) : null,
+        scrollW: row.scrollWidth,
+        clientW: row.clientWidth
+      }))
+      return { card, rows }
+    })
+    expect(r.rows.length).toBe(3)
+    const overlap = (a: any, b: any) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5
+    for (const row of r.rows) {
+      expect(row.row.x).toBeGreaterThanOrEqual(r.card.x - 0.5)
+      expect(row.row.x + row.row.w).toBeLessThanOrEqual(r.card.x + r.card.w + 0.5)
+      expect(row.scrollW, 'book row overflows').toBeLessThanOrEqual(row.clientW + 1)
+      if (row.stars) expect(overlap(row.text, row.stars)).toBe(false)
+    }
+    for (let i = 0; i < r.rows.length; i++) {
+      for (let j = i + 1; j < r.rows.length; j++) expect(overlap(r.rows[i]!.row, r.rows[j]!.row), `rows ${i}/${j}`).toBe(false)
+    }
+    await page.screenshot({ path: `test-results/books-${vp.width}x${vp.height}.png` })
+  })
+}
+
 // The paper cosmetics picker (roadmap #6) on the settings face: every swatch
 // (and the star badge under a locked one) inside the card, none on another,
 // the rows clear of each other, at the smallest phone both ways.

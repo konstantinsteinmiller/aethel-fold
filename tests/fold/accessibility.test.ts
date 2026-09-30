@@ -4,7 +4,7 @@ import { GestureRecognizer, HOLD_FOLD_MS, HOLD_MS, type PagePoint } from '@/fold
 import { spawnEnemy } from '@/fold/logic/entities'
 import { HIT_STOP, SLOW_MODE_SCALE } from '@/fold/logic/config'
 import { BOOKS } from '@/fold/logic/pages'
-import { flapPoint } from '@/fold/logic/folds'
+import { flapPoint, grabLength } from '@/fold/logic/folds'
 import type { BookId, FoldKind, FoldState, LessonId, PageId } from '@/fold/logic/types'
 import { highlightUniforms } from '@/fold/render/compositeShader'
 import { HIGHLIGHT_MODES } from '@/fold/logic/types'
@@ -24,7 +24,7 @@ const host = {
 
 const ALL: Partial<Record<LessonId, boolean>> = {
   swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true,
-  crease: true, core: true, frog: true, crush: true, sling: true, leaper: true, ballista: true
+  crease: true, core: true, frog: true, crush: true, sling: true, leaper: true, ballista: true, boat: true, pleat: true
 }
 
 const step = (g: FoldGame, s: number): void => {
@@ -57,11 +57,13 @@ const hold = (r: GestureRecognizer, sx: number, sy: number, ms: number, t0 = 0, 
 
 const FULL = HOLD_MS + HOLD_FOLD_MS + 80
 
-/** A page point on the fold's flap (or its centre line, for valleys and ridges). */
+/** A page point on the fold's flap (or its centre line, for valleys and ridges; a boat's dock, a pleat's top section). */
 const onFlap = (f: FoldState): [number, number] => {
   const k = f.def.kind
   const out = { x: 0, z: 0 }
-  flapPoint(f, f.len / 2, k === 'valley' || k === 'ridge' ? 0 : f.def.depth * 0.5, out)
+  if (k === 'boat') flapPoint(f, grabLength(f) / 2, 0, out)
+  else if (k === 'pleat') flapPoint(f, f.len * 0.15, 0, out)
+  else flapPoint(f, f.len / 2, k === 'valley' || k === 'ridge' ? 0 : f.def.depth * 0.5, out)
   return toScreen(out.x, out.z)
 }
 
@@ -93,9 +95,9 @@ describe('hold to fold (roadmap #14)', () => {
     expect(['snapping', 'up']).toContain(f.phase)
   })
 
-  it('works for every fold kind a swipe folds, in both books', () => {
+  it('works for every fold kind a swipe folds, in all three books', () => {
     const kinds = new Set<FoldKind>()
-    for (const book of [1, 2] as BookId[]) {
+    for (const book of [1, 2, 3] as BookId[]) {
       for (const def of Object.values(BOOKS[book])) {
         for (let i = 0; i < def.folds.length; i++) {
           const { g, r } = setup(def.id, book)
@@ -110,7 +112,7 @@ describe('hold to fold (roadmap #14)', () => {
         }
       }
     }
-    expect([...kinds].sort()).toEqual(['ballista', 'frog', 'launch', 'ridge', 'valley', 'wall'])
+    expect([...kinds].sort()).toEqual(['ballista', 'boat', 'frog', 'launch', 'pleat', 'ridge', 'valley', 'wall'])
   })
 
   it('lifting early lets go exactly like ending a swipe there (springs back)', () => {

@@ -53,13 +53,17 @@ const wonGame = (page: 1 | 2 | 3 | 4 | 5 | 6 = 1, learned = ALL_LESSONS_LEARNED)
 }
 
 describe('bookshelf rules (pure)', () => {
-  it('book 1 is always open; book n opens once book n − 1 is won, or n was played; book 3 is still coming', () => {
+  it('book 1 is always open; book n opens once book n − 1 is won, or n was played; book 3 opens after book 2', () => {
     expect(bookUnlockedBy(1, [0, 0], [0, 0])).toBe(true)
     expect(bookUnlockedBy(2, [0, 0], [3, 0])).toBe(false)
     expect(bookUnlockedBy(2, [1, 0], [6, 0])).toBe(true)
     expect(bookUnlockedBy(2, [0, 0], [0, 2])).toBe(true)
     expect(bookUnlockedBy(2, [0, 1], [0, 0])).toBe(true)
-    expect(bookUnlockedBy(3, [1, 1], [6, 6])).toBe(false)
+    // Book 3 (roadmap #3): opened by a book 2 win, or already played.
+    expect(bookUnlockedBy(3, [1, 0], [6, 2])).toBe(false)
+    expect(bookUnlockedBy(3, [1, 1], [6, 6])).toBe(true)
+    expect(bookUnlockedBy(3, [1, 0, 0], [6, 2, 1])).toBe(true)
+    expect(bookUnlockedBy(4, [1, 1, 1], [6, 6, 6])).toBe(false)
   })
 
   it('the shelf appears only after the first victory', () => {
@@ -68,27 +72,35 @@ describe('bookshelf rules (pure)', () => {
     expect(shelfAvailable([2, 0])).toBe(true)
   })
 
-  it('builds one slot per book plus the coming book, with each book\'s stars', () => {
+  it('builds one slot per book (book 3 a real book now), with each book\'s stars', () => {
     const all = buildSlots(progress([1, 0], [6, 1], [stars(3, 2, 1, 0, 0), stars(1, 0, 0, 0, 0)]), 1, false)
-    // After the books: one Dragon Rush figurine per book, standing once that book is won (roadmap #16).
-    expect(all.slice(3).map((s) => [s.kind, s.book, s.state])).toEqual([['rush', 1, 'open'], ['rush', 2, 'hidden']])
+    // After the books: one Dragon Rush figurine per book, standing once that book is won (roadmap #16);
+    // book 3's is the Kraken Rush (roadmap #3).
+    expect(all.slice(3).map((s) => [s.kind, s.book, s.state])).toEqual([['rush', 1, 'open'], ['rush', 2, 'hidden'], ['rush', 3, 'hidden']])
     const slots = all.slice(0, 3)
-    expect(slots.map((s) => s.state)).toEqual(['current', 'open', 'coming'])
+    expect(slots.map((s) => s.state)).toEqual(['current', 'open', 'locked'])
     expect(slots.map((s) => [s.stars, s.max])).toEqual([[6, 15], [1, 15], [0, 0]])
     expect(slots[0]!.pages).toEqual([3, 2, 1, 0, 0])
     expect(slots[0]!.won).toBe(true)
-    expect(buildSlots(progress([0, 0]), 1, false).map((s) => s.state)).toEqual(['current', 'locked', 'coming', 'hidden', 'hidden'])
+    expect(buildSlots(progress([0, 0]), 1, false).map((s) => s.state)).toEqual(['current', 'locked', 'locked', 'hidden', 'hidden', 'hidden'])
     // A won book isn't "continued": every book starts fresh.
-    expect(buildSlots(progress([1, 0]), 1, true).map((s) => s.state)).toEqual(['open', 'open', 'coming', 'open', 'hidden'])
+    expect(buildSlots(progress([1, 0]), 1, true).map((s) => s.state)).toEqual(['open', 'open', 'locked', 'open', 'hidden', 'hidden'])
+    // Book 2 won: book 3 opens, and its rush figurine waits for its own win.
+    expect(buildSlots(progress([1, 1]), 2, true).map((s) => s.state)).toEqual(['open', 'open', 'open', 'open', 'open', 'hidden'])
+    expect(buildSlots(progress([1, 1, 1]), 3, false).map((s) => s.state)).toEqual(['open', 'open', 'current', 'open', 'open', 'open'])
   })
 
   it('highlights the current book mid-run, and the newly unlocked one after a win', () => {
     expect(shelfTarget(buildSlots(progress([1, 0]), 2, false), 2, false)).toBe(1)
     expect(shelfTarget(buildSlots(progress([1, 0]), 1, true), 1, true)).toBe(1)
-    // Book 2 won too: nothing new (book 3 is still coming), the finished book glows.
-    expect(shelfTarget(buildSlots(progress([1, 1]), 2, true), 2, true)).toBe(1)
-    // Book 2 won first (a save from elsewhere): book 1 is the one not yet won.
-    expect(shelfTarget(buildSlots(progress([0, 1]), 2, true), 2, true)).toBe(0)
+    // Book 2 won too: book 3 is newly open, and glows.
+    expect(shelfTarget(buildSlots(progress([1, 1]), 2, true), 2, true)).toBe(2)
+    // Book 3 won as well: nothing new, the finished book glows.
+    expect(shelfTarget(buildSlots(progress([1, 1, 1]), 3, true), 3, true)).toBe(2)
+    // Book 2 won first (a save from elsewhere): the next in line after it is book 3, just opened…
+    expect(shelfTarget(buildSlots(progress([0, 1]), 2, true), 2, true)).toBe(2)
+    // …and once that is won too, book 1 — the one still not won — wraps round to glow.
+    expect(shelfTarget(buildSlots(progress([0, 1, 1]), 3, true), 3, true)).toBe(0)
   })
 
   it('the anchor slides out with the pull and sits right of the book', () => {
@@ -204,7 +216,7 @@ describe('bookshelf in the game', () => {
     expect(g.shelf.finished).toBe(true)
     expect(g.shelf.selected).toBe(-1)
     expect(g.shelf.highlight).toBe(1)
-    expect(g.shelf.slots.map((s) => s.state)).toEqual(['open', 'open', 'coming', 'open', 'hidden'])
+    expect(g.shelf.slots.map((s) => s.state)).toEqual(['open', 'open', 'locked', 'open', 'hidden', 'hidden'])
     // Closing it doesn't make it come back by itself.
     g.closeShelf()
     step(g, SHELF.afterVictory + 1)
@@ -216,7 +228,7 @@ describe('bookshelf in the game', () => {
     g.openShelf('button')
     g.startRun(1, 0, 2)
     expect(g.shelf.open).toBe(false)
-    expect(g.shelf.slots.map((s) => s.state)).toEqual(['open', 'current', 'coming', 'open', 'hidden'])
+    expect(g.shelf.slots.map((s) => s.state)).toEqual(['open', 'current', 'locked', 'open', 'hidden', 'hidden'])
     expect(g.shelf.highlight).toBe(1)
   })
 })

@@ -19,7 +19,7 @@ export const captionZ = (def: PageDef): number | null => {
   // The player's castle always fills the bottom edge. The page-3 battlement
   // fills the top edge, so its label sits just in front of the wall; the
   // enemy castle (and the dragon inside it) leave no room at all.
-  if (def.theme === 'gates' || def.theme === 'core') return null
+  if (def.theme === 'gates' || def.theme === 'core' || def.theme === 'deep') return null
   if (def.theme === 'siege') return -5.1
   return -PAGE_HALF_D + 0.5
 }

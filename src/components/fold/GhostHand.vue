@@ -35,6 +35,8 @@ const HOLD_HINT: Readonly<Record<string, string>> = {
   launch: 'fold.hint.hold',
   ridge: 'fold.hint.hold',
   frog: 'fold.hint.hold',
+  boat: 'fold.hint.hold',
+  pleat: 'fold.hint.hold',
   peel: 'fold.hint.holdPeel',
   crease: 'fold.hint.holdCrease',
   spread: 'fold.hint.holdCrease',

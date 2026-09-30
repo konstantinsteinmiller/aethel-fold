@@ -85,7 +85,7 @@ describe('paintPage in every look', () => {
         }
       }
     }
-    expect(n).toBe(12 * PAPER_PATTERNS.length * SEASONS.length)
+    expect(n).toBe(18 * PAPER_PATTERNS.length * SEASONS.length)
   })
 
   it('the default look is the plain page (no argument = plain parchment, no season)', async () => {
@@ -117,8 +117,8 @@ describe('standee atlas looks', () => {
       }
     }
     // Winter wraps the scarf round any variant.
-    expect(heroAccessories({ variant: 'crown', season: 'winter' })).toEqual({ scarf: true, sash: false, crown: true })
-    expect(heroAccessories({ variant: 'classic', season: 'none' })).toEqual({ scarf: false, sash: false, crown: false })
+    expect(heroAccessories({ variant: 'crown', season: 'winter' })).toEqual({ scarf: true, sash: false, crown: true, sailor: false })
+    expect(heroAccessories({ variant: 'classic', season: 'none' })).toEqual({ scarf: false, sash: false, crown: false, sailor: false })
     const a = createStandeeAtlas()
     expect(a.setHero({ variant: 'sash', season: 'none' })).toBe(true)
     expect(a.setHero({ variant: 'sash', season: 'none' })).toBe(false)

@@ -23,7 +23,7 @@
  */
 
 import type { CanvasTexture } from 'three'
-import { PAGE_D, PAGE_HALF_D, PAGE_HALF_W, PAGE_W } from '../../logic/config'
+import { BOAT, PAGE_D, PAGE_HALF_D, PAGE_HALF_W, PAGE_W, PLEAT } from '../../logic/config'
 import type { FoldDef, PageDef } from '../../logic/types'
 import type { Rng } from '../../logic/rng'
 import type { PaperPattern } from '../../logic/cosmetics'
@@ -52,22 +52,34 @@ export interface PageTextures {
   dispose(): void
 }
 
-/** Footprint polygon of a fold (page space), as canvas pixel coordinates. */
-const footprint = (f: FoldDef): number[] => {
+/** Hinge frame of a fold definition: unit along (ux, uz), unit toward the flap (nx, nz), length. */
+const frame = (f: FoldDef): { ux: number; uz: number; nx: number; nz: number; len: number } => {
   const dx = f.bx - f.ax
   const dz = f.bz - f.az
   const len = Math.hypot(dx, dz) || 1
   const ux = dx / len
   const uz = dz / len
-  const nx = -uz * f.side
-  const nz = ux * f.side
-  const k = f.kind
-  const d0 = k === 'valley' || k === 'ridge' ? -f.depth : 0
+  return { ux, uz, nx: -uz * f.side, nz: ux * f.side, len }
+}
+
+/** Strips (valley, ridge, and book 3's boat channel and pleat) lie either side of their line. */
+const stripKind = (f: FoldDef): boolean => f.kind === 'valley' || f.kind === 'ridge' || f.kind === 'boat' || f.kind === 'pleat'
+
+/**
+ * Footprint polygon of a fold's cut flap (page space), as canvas pixel
+ * coordinates. A boat's flap is only its dock square — the channel is water.
+ */
+const footprint = (f: FoldDef): number[] => {
+  const { ux, uz, nx, nz, len } = frame(f)
+  const d0 = stripKind(f) ? -f.depth : 0
   const d1 = f.depth
+  const s1 = f.kind === 'boat' ? Math.min(len, BOAT.dock) : len
+  const bx = f.ax + ux * s1
+  const bz = f.az + uz * s1
   const pts = [
     f.ax + nx * d0, f.az + nz * d0,
-    f.bx + nx * d0, f.bz + nz * d0,
-    f.bx + nx * d1, f.bz + nz * d1,
+    bx + nx * d0, bz + nz * d0,
+    bx + nx * d1, bz + nz * d1,
     f.ax + nx * d1, f.az + nz * d1
   ]
   const out: number[] = []
@@ -280,8 +292,83 @@ const creaseLine = (ctx: CanvasRenderingContext2D, x0: number, z0: number, x1: n
   ctx.restore()
 }
 
+/**
+ * The boat's dock flap: cut on all four sides, printed with the paper-boat
+ * crease pattern (diagonals and the mid-line) and a little boat mark.
+ */
+const boatCut = (ctx: CanvasRenderingContext2D, f: FoldDef): void => {
+  const p = footprint(f)
+  ctx.save()
+  ctx.fillStyle = css('paperWhite', 0.9)
+  polyPath(ctx, p)
+  ctx.fill()
+  ctx.strokeStyle = css('ink', 0.6)
+  ctx.lineWidth = 1.8
+  polyPath(ctx, p)
+  ctx.stroke()
+  ctx.strokeStyle = css('inkSoft', 0.55)
+  ctx.lineWidth = 1.6
+  ctx.setLineDash([10, 7])
+  ctx.beginPath()
+  ctx.moveTo(p[0]!, p[1]!)
+  ctx.lineTo(p[4]!, p[5]!)
+  ctx.moveTo(p[2]!, p[3]!)
+  ctx.lineTo(p[6]!, p[7]!)
+  ctx.moveTo((p[0]! + p[2]!) / 2, (p[1]! + p[3]!) / 2)
+  ctx.lineTo((p[4]! + p[6]!) / 2, (p[5]! + p[7]!) / 2)
+  ctx.stroke()
+  ctx.setLineDash([])
+  // A small printed boat in the middle: what the flap becomes.
+  const cx = (p[0]! + p[4]!) / 2
+  const cy = (p[1]! + p[5]!) / 2
+  ctx.fillStyle = css('guide', 0.85)
+  ctx.beginPath()
+  ctx.moveTo(cx - 22, cy + 2)
+  ctx.lineTo(cx + 22, cy + 2)
+  ctx.lineTo(cx + 13, cy + 13)
+  ctx.lineTo(cx - 13, cy + 13)
+  ctx.closePath()
+  ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(cx - 12, cy)
+  ctx.lineTo(cx + 12, cy)
+  ctx.lineTo(cx, cy - 18)
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
+}
+
+/**
+ * The pleat: its two long cut sides, and the accordion's creases across it —
+ * valley folds (dashes) at the section edges, mountain folds (dash-dot) in
+ * each section's middle, the origami way.
+ */
+const pleatCut = (ctx: CanvasRenderingContext2D, f: FoldDef): void => {
+  const p = footprint(f)
+  const { ux, uz, nx, nz, len } = frame(f)
+  ctx.save()
+  ctx.strokeStyle = css('ink', 0.55)
+  ctx.lineWidth = 1.8
+  ctx.beginPath()
+  ctx.moveTo(p[0]!, p[1]!)
+  ctx.lineTo(p[2]!, p[3]!)
+  ctx.moveTo(p[4]!, p[5]!)
+  ctx.lineTo(p[6]!, p[7]!)
+  ctx.stroke()
+  ctx.restore()
+  const n = Math.max(2, f.creases ?? PLEAT.creases)
+  for (let k = 0; k <= n * 2; k++) {
+    const sAt = (k / (n * 2)) * len
+    const x = f.ax + ux * sAt
+    const z = f.az + uz * sAt
+    creaseLine(ctx, x - nx * f.depth, z - nz * f.depth, x + nx * f.depth, z + nz * f.depth, k % 2 === 1)
+  }
+}
+
 /** Die-cut line around a flap: the cut the pop-up folds out of. */
 const cutLine = (ctx: CanvasRenderingContext2D, f: FoldDef): void => {
+  if (f.kind === 'boat') return boatCut(ctx, f)
+  if (f.kind === 'pleat') return pleatCut(ctx, f)
   const p = footprint(f)
   ctx.save()
   ctx.strokeStyle = css('ink', 0.55)
@@ -651,6 +738,359 @@ const paintCamp = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void
   flowers(ctx, rng, 30)
 }
 
+// ─── Book 3 themes: the Sea of Paper ───────────────────────────────────────
+
+/** Wave marks (little double arcs) scattered over a band of sea. */
+const waveMarks = (ctx: CanvasRenderingContext2D, rng: Rng, y0: number, y1: number, count: number, alpha = 0.9): void => {
+  ctx.save()
+  ctx.strokeStyle = css('seaFoam', alpha)
+  ctx.lineWidth = 2.2
+  for (let i = 0; i < count; i++) {
+    const x = 40 + rng.next() * (PAGE_TEX_W - 80)
+    const y = y0 + rng.next() * Math.max(1, y1 - y0)
+    ctx.beginPath()
+    ctx.arc(x - 7, y, 7, Math.PI * 1.1, Math.PI * 1.9)
+    ctx.arc(x + 7, y, 7, Math.PI * 1.1, Math.PI * 1.9)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+/**
+ * The sea along the top of the page down to a wavy shoreline at `shoreZ`,
+ * with a foam line and a strip of beach below it. The enemy wades out of it.
+ */
+const seaTop = (ctx: CanvasRenderingContext2D, rng: Rng, shoreZ: number): void => {
+  const shore = (x: number): number => py(shoreZ + Math.sin(x * 1.3 + 0.7) * 0.18 + Math.sin(x * 3.1) * 0.06)
+  ctx.save()
+  // Beach first, a little below the waterline.
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  for (let x = -PAGE_HALF_W; x <= PAGE_HALF_W + 0.01; x += 0.25) ctx.lineTo(px(x), shore(x) + 44)
+  ctx.lineTo(PAGE_TEX_W, 0)
+  ctx.closePath()
+  ctx.fillStyle = HEX.sand
+  ctx.fill()
+  // The sea, deep at the top.
+  const g = ctx.createLinearGradient(0, 0, 0, py(shoreZ))
+  g.addColorStop(0, HEX.seaDeep)
+  g.addColorStop(1, HEX.sea)
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  for (let x = -PAGE_HALF_W; x <= PAGE_HALF_W + 0.01; x += 0.25) ctx.lineTo(px(x), shore(x))
+  ctx.lineTo(PAGE_TEX_W, 0)
+  ctx.closePath()
+  ctx.fillStyle = g
+  ctx.fill()
+  // Foam along the shore.
+  ctx.strokeStyle = css('seaFoam', 0.95)
+  ctx.lineWidth = 6
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  for (let x = -PAGE_HALF_W; x <= PAGE_HALF_W + 0.01; x += 0.25) {
+    if (x === -PAGE_HALF_W) ctx.moveTo(px(x), shore(x))
+    else ctx.lineTo(px(x), shore(x))
+  }
+  ctx.stroke()
+  ctx.strokeStyle = css('ink', 0.35)
+  ctx.lineWidth = 1.6
+  ctx.stroke()
+  ctx.restore()
+  waveMarks(ctx, rng, 30, py(shoreZ) - 30, 26)
+  // Pebbles on the beach.
+  for (let i = 0; i < 18; i++) {
+    const x = -4.7 + rng.next() * 9.4
+    const y = shore(x) + 10 + rng.next() * 28
+    ctx.fillStyle = rng.next() < 0.5 ? HEX.sandDark : HEX.rock
+    ctx.beginPath()
+    ctx.arc(px(x), y, 2.5 + rng.next() * 3, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+/**
+ * A boat's channel: water along the fold's line, `depth` either side, with
+ * foamy banks, and stepping stones where each road fords it. Drawn over the
+ * roads (they wade).
+ */
+const channel = (ctx: CanvasRenderingContext2D, page: PageDef, f: FoldDef, rng: Rng): void => {
+  const { ux, uz, nx, nz, len } = frame(f)
+  const a0 = [f.ax - ux * 0.4, f.az - uz * 0.4]
+  const a1 = [f.ax + ux * (len + 0.4), f.az + uz * (len + 0.4)]
+  ctx.save()
+  const band = (half: number, fill: string): void => {
+    ctx.beginPath()
+    ctx.moveTo(px(a0[0]! + nx * half), py(a0[1]! + nz * half))
+    ctx.lineTo(px(a1[0]! + nx * half), py(a1[1]! + nz * half))
+    ctx.lineTo(px(a1[0]! - nx * half), py(a1[1]! - nz * half))
+    ctx.lineTo(px(a0[0]! - nx * half), py(a0[1]! - nz * half))
+    ctx.closePath()
+    ctx.fillStyle = fill
+    ctx.fill()
+  }
+  band(f.depth + 0.12, HEX.sandDark)
+  band(f.depth, HEX.sea)
+  band(f.depth * 0.45, css('seaDeep', 0.55))
+  // Ink banks.
+  ctx.strokeStyle = css('ink', 0.45)
+  ctx.lineWidth = 2
+  for (const sgn of [-1, 1]) {
+    ctx.beginPath()
+    ctx.moveTo(px(a0[0]! + nx * f.depth * sgn), py(a0[1]! + nz * f.depth * sgn))
+    ctx.lineTo(px(a1[0]! + nx * f.depth * sgn), py(a1[1]! + nz * f.depth * sgn))
+    ctx.stroke()
+  }
+  ctx.restore()
+  // Current marks along the channel.
+  ctx.save()
+  ctx.strokeStyle = css('seaFoam', 0.9)
+  ctx.lineWidth = 2
+  for (let i = 0; i < 16; i++) {
+    const s = rng.next() * len
+    const d = (rng.next() - 0.5) * f.depth * 1.2
+    const x = f.ax + ux * s + nx * d
+    const z = f.az + uz * s + nz * d
+    ctx.beginPath()
+    ctx.moveTo(px(x - ux * 0.25), py(z - uz * 0.25))
+    ctx.quadraticCurveTo(px(x) + nx * 5, py(z) + nz * 5, px(x + ux * 0.25), py(z + uz * 0.25))
+    ctx.stroke()
+  }
+  ctx.restore()
+  // Stepping stones where the roads ford the channel.
+  for (const l of page.lanes) {
+    const x = laneX(l.points, f.az)
+    for (let k = -2; k <= 2; k++) {
+      const z = f.az + (k / 2.5) * f.depth
+      ctx.fillStyle = HEX.rock
+      blob(ctx, px(x + (rng.next() - 0.5) * 0.3), py(z), 8, 6, rng, 6, 0.2)
+      ctx.fill()
+      ctx.strokeStyle = css('ink', 0.4)
+      ctx.lineWidth = 1
+      ctx.stroke()
+    }
+  }
+}
+
+/** Wooden pier planks beside the boat's dock (outside the flap). */
+const pier = (ctx: CanvasRenderingContext2D, f: FoldDef): void => {
+  const { ux, uz } = frame(f)
+  const x = f.ax - ux * 0.25
+  const z = f.az - uz * 0.25
+  ctx.save()
+  ctx.translate(px(x), py(z))
+  ctx.rotate(Math.atan2(uz, ux))
+  const w = 0.4 * PX
+  const h = (f.depth * 2 + 0.6) * PX
+  ctx.fillStyle = HEX.wood
+  ctx.fillRect(-w / 2, -h / 2, w, h)
+  ctx.strokeStyle = HEX.woodDark
+  ctx.lineWidth = 1.6
+  for (let y = -h / 2 + 7; y < h / 2; y += 9) {
+    ctx.beginPath()
+    ctx.moveTo(-w / 2, y)
+    ctx.lineTo(w / 2, y)
+    ctx.stroke()
+  }
+  ctx.strokeStyle = css('ink', 0.6)
+  ctx.strokeRect(-w / 2, -h / 2, w, h)
+  ctx.restore()
+}
+
+/** Reed tufts in the salt marsh. */
+const reeds = (ctx: CanvasRenderingContext2D, rng: Rng, page: PageDef, count: number): void => {
+  ctx.save()
+  ctx.lineCap = 'round'
+  for (let i = 0; i < count; i++) {
+    const x = -4.7 + rng.next() * 9.4
+    const z = -5 + rng.next() * 10
+    if (!offLane(page, x, z, 0.7)) continue
+    ctx.strokeStyle = rng.next() < 0.5 ? HEX.kelp : HEX.forestDark
+    ctx.lineWidth = 1.6
+    for (let k = -2; k <= 2; k++) {
+      ctx.beginPath()
+      ctx.moveTo(px(x) + k * 2, py(z))
+      ctx.lineTo(px(x) + k * 4, py(z) - 10 - rng.next() * 8)
+      ctx.stroke()
+    }
+  }
+  ctx.restore()
+}
+
+const pool = (ctx: CanvasRenderingContext2D, rng: Rng, x: number, z: number, r: number): void => {
+  blob(ctx, px(x), py(z), r * PX, r * PX * 0.8, rng, 10, 0.18)
+  ctx.fillStyle = HEX.sea
+  ctx.fill()
+  ctx.strokeStyle = css('ink', 0.45)
+  ctx.lineWidth = 2
+  ctx.stroke()
+  for (let k = 0; k < 9; k++) {
+    const a = (k / 9) * Math.PI * 2
+    ctx.fillStyle = k % 2 ? HEX.rock : HEX.rockDark
+    ctx.beginPath()
+    ctx.arc(px(x) + Math.cos(a) * r * PX * 1.05, py(z) + Math.sin(a) * r * PX * 0.85, 4 + rng.next() * 3, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+/**
+ * Book 3: where each sea page's printed shoreline is. `PageView` keeps its
+ * props out of the water with the same numbers.
+ */
+export const SEA_SHORE: Readonly<Partial<Record<PageDef['theme'], number>>> = {
+  harbour: -4.9, marsh: -5.7, lighthouse: -5.2, shipyard: -5.6, deep: -1.9
+}
+
+/** The page's roads from the beach down (the marchers wade out of the sea to them). */
+const roadsAshore = (ctx: CanvasRenderingContext2D, page: PageDef, shoreZ: number, width: number): void => {
+  for (const l of page.lanes) {
+    const pts: number[] = []
+    for (let i = 0; i < l.points.length; i += 2) if (l.points[i + 1]! > shoreZ + 0.1) pts.push(l.points[i]!, l.points[i + 1]!)
+    // Start right at the waterline.
+    if (pts.length >= 2) pts.unshift(laneX(l.points, shoreZ + 0.1), shoreZ + 0.1)
+    if (pts.length >= 4) road(ctx, pts, width)
+  }
+}
+
+/** The boat channels and piers of a page, and its pleats' ground print. */
+const seaFolds = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
+  for (const f of page.folds) {
+    if (f.kind !== 'boat') continue
+    channel(ctx, page, f, rng)
+    pier(ctx, f)
+  }
+}
+
+const paintHarbour = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
+  meadows(ctx, rng, 7)
+  seaTop(ctx, rng, SEA_SHORE.harbour!)
+  roadsAshore(ctx, page, SEA_SHORE.harbour!, 44)
+  seaFolds(ctx, page, rng)
+  // Little boats moored in the harbour, printed on the sea.
+  for (const [x, z] of [[-3.8, -5.9], [-1.6, -6.3], [2.2, -6.0], [4.1, -5.6]] as const) {
+    if (!offLane(page, x, z, 0.8)) continue
+    ctx.save()
+    ctx.translate(px(x), py(z))
+    ctx.fillStyle = HEX.paperWhite
+    ctx.strokeStyle = css('ink', 0.55)
+    ctx.lineWidth = 1.6
+    ctx.beginPath()
+    ctx.moveTo(-18, 0)
+    ctx.lineTo(18, 0)
+    ctx.lineTo(11, 9)
+    ctx.lineTo(-11, 9)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
+  }
+  flowers(ctx, rng, 30)
+  compass(ctx, px(3.9), py(5.4), 38)
+}
+
+const paintMarsh = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
+  // Wet sand flats with shallow pools, reeds and a thin sea along the top.
+  ctx.fillStyle = css('sand', 0.8)
+  ctx.fillRect(0, 0, PAGE_TEX_W, PAGE_TEX_H)
+  meadows(ctx, rng, 4)
+  seaTop(ctx, rng, -5.7)
+  for (let i = 0; i < 9; i++) {
+    const x = -4.6 + rng.next() * 9.2
+    const z = -4.6 + rng.next() * 9
+    if (!offLane(page, x, z, 1.1)) continue
+    blob(ctx, px(x), py(z), 30 + rng.next() * 40, 18 + rng.next() * 20, rng, 9, 0.2)
+    ctx.fillStyle = css('sea', 0.6)
+    ctx.fill()
+  }
+  roadsAshore(ctx, page, -5.7, 42)
+  reeds(ctx, rng, page, 60)
+  // The tide pool (the page's secret: a sling stone into it).
+  pool(ctx, rng, -4.2, -3.4, 0.55)
+}
+
+const paintLighthouse = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
+  meadows(ctx, rng, 9)
+  seaTop(ctx, rng, -5.2)
+  // Cliffs and the lighthouse's rock on the right bank.
+  for (let i = 0; i < 22; i++) {
+    const x = -4.8 + rng.next() * 9.6
+    const z = -5.3 + (rng.next() - 0.5) * 0.5
+    ctx.fillStyle = rng.next() < 0.5 ? HEX.rock : HEX.rockDark
+    blob(ctx, px(x), py(z), 10 + rng.next() * 10, 7 + rng.next() * 6, rng, 6, 0.25)
+    ctx.fill()
+    ctx.strokeStyle = css('ink', 0.45)
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+  }
+  ctx.save()
+  blob(ctx, px(4.2), py(-3.6), 70, 56, rng, 10, 0.15)
+  ctx.fillStyle = HEX.rock
+  ctx.fill()
+  ctx.strokeStyle = css('ink', 0.5)
+  ctx.lineWidth = 2
+  ctx.stroke()
+  ctx.restore()
+  roadsAshore(ctx, page, -5.2, 42)
+  seaFolds(ctx, page, rng)
+  flowers(ctx, rng, 25)
+}
+
+const paintShipyard = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
+  meadows(ctx, rng, 5)
+  seaTop(ctx, rng, -5.6)
+  // Slipways running from the beach down into the sea (beside the catapult flaps' landing), and stacks of timber.
+  for (const x of [-1.6, 1.6]) {
+    ctx.save()
+    ctx.translate(px(x), py(-6.3))
+    ctx.fillStyle = HEX.wood
+    ctx.fillRect(-22, -50, 44, 120)
+    ctx.strokeStyle = HEX.woodDark
+    ctx.lineWidth = 2
+    for (let y = -46; y < 70; y += 12) {
+      ctx.beginPath()
+      ctx.moveTo(-22, y)
+      ctx.lineTo(22, y)
+      ctx.stroke()
+    }
+    ctx.strokeStyle = css('ink', 0.55)
+    ctx.strokeRect(-22, -50, 44, 120)
+    ctx.restore()
+  }
+  for (let i = 0; i < 6; i++) {
+    const x = -4.5 + rng.next() * 9
+    const z = -2 + rng.next() * 6
+    if (!offLane(page, x, z, 1)) continue
+    ctx.save()
+    ctx.translate(px(x), py(z))
+    ctx.rotate((rng.next() - 0.5) * 0.6)
+    for (let k = 0; k < 3; k++) {
+      ctx.fillStyle = k % 2 ? HEX.woodDark : HEX.wood
+      ctx.fillRect(-24, -9 + k * 6, 48, 5)
+    }
+    ctx.restore()
+  }
+  roadsAshore(ctx, page, -5.6, 44)
+  seaFolds(ctx, page, rng)
+  flowers(ctx, rng, 15)
+}
+
+const paintDeep = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
+  meadows(ctx, rng, 5)
+  // The kraken's sea fills the top half; a swirl of current where it sleeps.
+  seaTop(ctx, rng, -1.9)
+  ctx.save()
+  ctx.strokeStyle = css('seaDeep', 0.7)
+  ctx.lineWidth = 3
+  for (let k = 1; k <= 5; k++) {
+    ctx.beginPath()
+    ctx.ellipse(px(0), py(-4.6), 70 * k, 34 * k, 0, 0.2 * k, Math.PI * 1.6 + 0.2 * k)
+    ctx.stroke()
+  }
+  ctx.restore()
+  // Roads start at the shore: the boarders come off the tentacles.
+  roadsAshore(ctx, page, -1.9, 42)
+  flowers(ctx, rng, 20)
+}
+
 const PAINTERS: Record<PageDef['theme'], (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng) => void> = {
   border: paintBorder,
   ravine: paintRavine,
@@ -661,7 +1101,12 @@ const PAINTERS: Record<PageDef['theme'], (ctx: CanvasRenderingContext2D, page: P
   home: paintHome,
   orchard: paintOrchard,
   mill: paintMill,
-  camp: paintCamp
+  camp: paintCamp,
+  harbour: paintHarbour,
+  marsh: paintMarsh,
+  lighthouse: paintLighthouse,
+  shipyard: paintShipyard,
+  deep: paintDeep
 }
 
 /** The player's castle grounds: a cobbled bailey along the bottom edge. */
@@ -691,7 +1136,8 @@ const PAPER_TINT: Record<PaperPattern, PaletteKey> = {
   graph: 'graphPaper',
   washi: 'washi',
   newsprint: 'newsprint',
-  map: 'mapPaper'
+  map: 'mapPaper',
+  chart: 'chartPaper'
 }
 
 /** A small repeating tile as a canvas pattern (one fill for the whole sheet). */
@@ -857,6 +1303,59 @@ const graticule = (ctx: CanvasRenderingContext2D, alpha: number, key: PaletteKey
   ctx.restore()
 }
 
+/**
+ * Sea chart (book 3's paper): rhumb lines fanning out of two compass points,
+ * dashed depth lines, and sounding marks (little crosses and dots).
+ */
+const rhumbs = (ctx: CanvasRenderingContext2D, rng: Rng, alpha: number, key: PaletteKey = 'chartLine'): void => {
+  ctx.save()
+  ctx.strokeStyle = css(key, alpha)
+  ctx.lineWidth = 1.1
+  for (const [cx, cy] of [[PAGE_TEX_W * 0.28, PAGE_TEX_H * 0.3], [PAGE_TEX_W * 0.74, PAGE_TEX_H * 0.72]] as const) {
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2
+      ctx.beginPath()
+      ctx.moveTo(cx, cy)
+      ctx.lineTo(cx + Math.cos(a) * 1600, cy + Math.sin(a) * 1600)
+      ctx.stroke()
+    }
+    ctx.beginPath()
+    ctx.arc(cx, cy, 34, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+const soundings = (ctx: CanvasRenderingContext2D, rng: Rng, alpha: number, key: PaletteKey = 'chartLine'): void => {
+  ctx.save()
+  ctx.strokeStyle = css(key, alpha)
+  ctx.fillStyle = css(key, alpha)
+  ctx.lineWidth = 1.2
+  ctx.setLineDash([8, 6])
+  for (let i = 0; i < 4; i++) {
+    blob(ctx, rng.next() * PAGE_TEX_W, rng.next() * PAGE_TEX_H, 120 + rng.next() * 120, 80 + rng.next() * 90, rng, 10, 0.15)
+    ctx.stroke()
+  }
+  ctx.setLineDash([])
+  for (let i = 0; i < 90; i++) {
+    const x = rng.next() * PAGE_TEX_W
+    const y = rng.next() * PAGE_TEX_H
+    if (i % 3 === 0) {
+      ctx.beginPath()
+      ctx.moveTo(x - 3, y - 3)
+      ctx.lineTo(x + 3, y + 3)
+      ctx.moveTo(x + 3, y - 3)
+      ctx.lineTo(x - 3, y + 3)
+      ctx.stroke()
+    } else {
+      ctx.beginPath()
+      ctx.arc(x, y, 1.4, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+}
+
 /** The paper's own print, under the illustration (full strength, but pale). */
 const paperUnder = (ctx: CanvasRenderingContext2D, paper: PaperPattern, rng: Rng): void => {
   switch (paper) {
@@ -873,6 +1372,10 @@ const paperUnder = (ctx: CanvasRenderingContext2D, paper: PaperPattern, rng: Rng
     case 'map':
       contours(ctx, rng, 0.38)
       graticule(ctx, 0.32)
+      break
+    case 'chart':
+      rhumbs(ctx, rng, 0.34)
+      soundings(ctx, rng, 0.4)
       break
   }
 }
@@ -895,6 +1398,9 @@ const paperOver = (ctx: CanvasRenderingContext2D, paper: PaperPattern, rng: Rng)
       break
     case 'map':
       graticule(ctx, 0.1)
+      break
+    case 'chart':
+      rhumbs(ctx, rng, 0.1)
       break
   }
 }
@@ -1002,8 +1508,8 @@ const cobweb = (ctx: CanvasRenderingContext2D, cx: number, cy: number, sx: numbe
 const snowflake = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void => {
   ctx.save()
   ctx.translate(x, y)
-  ctx.strokeStyle = css('iceBlue', 0.85)
-  ctx.lineWidth = 1.6
+  ctx.strokeStyle = css('snowEdge', 0.95)
+  ctx.lineWidth = 2
   ctx.lineCap = 'round'
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2
@@ -1019,6 +1525,99 @@ const snowflake = (ctx: CanvasRenderingContext2D, x: number, y: number, r: numbe
     ctx.stroke()
   }
   ctx.restore()
+}
+
+/** A snow bank: a bright blob with a cool shaded underside and a periwinkle-blue edge (never black). */
+const snowBank = (ctx: CanvasRenderingContext2D, rng: Rng, x: number, y: number, rx: number, ry: number): void => {
+  blob(ctx, x, y + ry * 0.18, rx * 1.02, ry * 0.95, rng, 10, 0.2)
+  ctx.fillStyle = css('snowEdge', 0.55)
+  ctx.fill()
+  blob(ctx, x, y, rx, ry, rng, 10, 0.22)
+  ctx.fillStyle = HEX.snowBank
+  ctx.fill()
+  ctx.strokeStyle = css('snowEdge', 0.9)
+  ctx.lineWidth = 2.4
+  ctx.stroke()
+  // A soft blue crescent along its lower edge: the lamp can't wash that out.
+  ctx.save()
+  ctx.beginPath()
+  ctx.ellipse(x, y + ry * 0.35, rx * 0.8, ry * 0.45, 0, 0.15, Math.PI - 0.15)
+  ctx.strokeStyle = css('iceBlue', 0.9)
+  ctx.lineWidth = 3
+  ctx.stroke()
+  ctx.restore()
+}
+
+/**
+ * Winter's print (roadmap #17, made visible under the lamp): a cool snow veil
+ * over the page, the roads and channels printed back on top of it (lanes stay
+ * as readable as ever), deep snow banks along both long edges and drifts all
+ * over the meadows — every one of them off the lanes — and printed flakes.
+ */
+const winterPrint = (ctx: CanvasRenderingContext2D, page: PageDef, rng: Rng): void => {
+  // The veil is painted on its own sheet with the roads and channels cut out
+  // of it, so lanes, bridges and water keep exactly the contrast they had.
+  const [vc, v] = makeCanvas(PAGE_TEX_W, PAGE_TEX_H)
+  v.fillStyle = css('snowPaper', 0.6)
+  v.fillRect(0, 0, PAGE_TEX_W, PAGE_TEX_H)
+  v.globalCompositeOperation = 'destination-out'
+  v.lineCap = 'round'
+  v.lineJoin = 'round'
+  // (The castle core's blueprint prints no roads: nothing to keep clear there.)
+  if (page.theme !== 'core') {
+    v.lineWidth = 58
+    for (const l of page.lanes) {
+      const pts: number[] = []
+      for (let i = 0; i < l.points.length; i += 2) pts.push(px(l.points[i]!), py(l.points[i + 1]!))
+      smoothPath(v, pts)
+      v.stroke()
+    }
+  }
+  for (const f of page.folds) {
+    if (f.kind !== 'boat') continue
+    const { ux, uz, nx, nz, len } = frame(f)
+    const h = f.depth + 0.1
+    v.beginPath()
+    v.moveTo(px(f.ax - ux * 0.5 + nx * h), py(f.az - uz * 0.5 + nz * h))
+    v.lineTo(px(f.ax + ux * (len + 0.5) + nx * h), py(f.az + uz * (len + 0.5) + nz * h))
+    v.lineTo(px(f.ax + ux * (len + 0.5) - nx * h), py(f.az + uz * (len + 0.5) - nz * h))
+    v.lineTo(px(f.ax - ux * 0.5 - nx * h), py(f.az - uz * 0.5 - nz * h))
+    v.closePath()
+    v.fill()
+  }
+  v.globalCompositeOperation = 'source-over'
+  ctx.drawImage(vc, 0, 0)
+  // Snow lies on land: not in a boat channel, not out on the sea (book 3).
+  const shore = SEA_SHORE[page.theme]
+  const dry = (x: number, z: number): boolean => {
+    if (shore !== undefined && z < shore + 0.4) return false
+    for (const f of page.folds) {
+      if (f.kind !== 'boat') continue
+      const { ux, uz, nx, nz, len } = frame(f)
+      const s = (x - f.ax) * ux + (z - f.az) * uz
+      const d = (x - f.ax) * nx + (z - f.az) * nz
+      if (s > -0.8 && s < len + 0.8 && Math.abs(d) < f.depth + 0.55) return false
+    }
+    return true
+  }
+  // Deep banks along both long edges.
+  for (const side of [-1, 1]) {
+    for (let z = -6.6; z < 5.4; z += 0.55) {
+      const x = side * (PAGE_HALF_W - 0.35 - rng.next() * 0.3)
+      if (!offLane(page, x, z, 0.95) || !dry(x, z)) continue
+      snowBank(ctx, rng, px(x), py(z), 52 + rng.next() * 40, 32 + rng.next() * 20)
+    }
+  }
+  // Drifts over the meadows.
+  for (let i = 0; i < 56; i++) {
+    const p = spotOffLane(page, rng, 1.1)
+    if (!p || !dry(p[0], p[1])) continue
+    snowBank(ctx, rng, px(p[0]), py(p[1]), 38 + rng.next() * 50, 22 + rng.next() * 24)
+  }
+  for (let i = 0; i < 70; i++) {
+    const p = spotOffLane(page, rng, 0.75)
+    if (p) snowflake(ctx, px(p[0]), py(p[1]), 6 + rng.next() * 8)
+  }
 }
 
 /** The season's print over the illustration (under the frame and the cut lines). */
@@ -1042,23 +1641,7 @@ const seasonOver = (ctx: CanvasRenderingContext2D, page: PageDef, season: Season
     cobweb(ctx, 28, 28, 1, 1)
     cobweb(ctx, PAGE_TEX_W - 28, 28, -1, 1)
   } else if (season === 'winter') {
-    // Snow paper: a white veil, drifts off the lanes, and printed flakes.
-    ctx.fillStyle = css('snow', 0.3)
-    ctx.fillRect(0, 0, PAGE_TEX_W, PAGE_TEX_H)
-    for (let i = 0; i < 24; i++) {
-      const p = spotOffLane(page, rng, 1.05)
-      if (!p) continue
-      blob(ctx, px(p[0]), py(p[1]), 40 + rng.next() * 46, 24 + rng.next() * 26, rng, 9, 0.25)
-      ctx.fillStyle = css('snow', 0.88)
-      ctx.fill()
-      ctx.strokeStyle = css('snowShade', 0.95)
-      ctx.lineWidth = 2
-      ctx.stroke()
-    }
-    for (let i = 0; i < 36; i++) {
-      const p = spotOffLane(page, rng, 0.8)
-      if (p) snowflake(ctx, px(p[0]), py(p[1]), 5 + rng.next() * 6)
-    }
+    winterPrint(ctx, page, rng)
   }
 }
 
@@ -1091,6 +1674,9 @@ const underlayerPattern = (ctx: CanvasRenderingContext2D, rng: Rng, dark: boolea
     case 'map':
       contours(ctx, motif, alpha, dark ? 'ink' : seasonKey ?? 'underlayerInk')
       break
+    case 'chart':
+      rhumbs(ctx, motif, alpha, dark ? 'ink' : seasonKey ?? 'underlayerInk')
+      break
     default: {
       // Plain and graph: the blueprint grid (graph paper's back is a finer one).
       const step = look.paper === 'graph' ? 16 : 24
@@ -1116,7 +1702,7 @@ const underlayerPattern = (ctx: CanvasRenderingContext2D, rng: Rng, dark: boolea
 // ─── Entry point ───────────────────────────────────────────────────────────
 
 /** Paper ids `paintPage` can print on (tests: every one paints). */
-export const PAGE_PAPERS: readonly PaperPattern[] = ['plain', 'graph', 'washi', 'newsprint', 'map']
+export const PAGE_PAPERS: readonly PaperPattern[] = ['plain', 'graph', 'washi', 'newsprint', 'map', 'chart']
 
 export const paintPage = (page: PageDef, look: PageLook = PLAIN_LOOK): PageTextures => {
   const rng = seeded(page.book * 104729 + page.id * 7919 + 17)
@@ -1124,7 +1710,7 @@ export const paintPage = (page: PageDef, look: PageLook = PLAIN_LOOK): PageTextu
   const motif = seeded(page.book * 104729 + page.id * 7919 + 31337)
   const paper: PaperPattern = PAPER_TINT[look.paper] ? look.paper : 'plain'
   const [artC, art] = makeCanvas(PAGE_TEX_W, PAGE_TEX_H)
-  const tint = paper === 'plain' && look.season === 'winter' ? HEX.snow : HEX[PAPER_TINT[paper]]
+  const tint = paper === 'plain' && look.season === 'winter' ? HEX.snowPaper : HEX[PAPER_TINT[paper]]
   parchmentBase(art, rng, tint)
   paperUnder(art, paper, motif)
   paperGrain(art, PAGE_TEX_W, PAGE_TEX_H, rng)

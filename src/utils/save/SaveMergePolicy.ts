@@ -10,18 +10,19 @@
 // remote and pick a winner deterministically without prompting.
 //
 // Score formula (Aethel Fold):
-//   pagesCleared  × 1000   (book 1 + book 2)
-// + wins          × 5000   (book 1 + book 2)
+//   pagesCleared  × 1000   (book 1 + book 2 + book 3)
+// + wins          × 5000   (book 1 + book 2 + book 3)
 // + lessons       ×   50
 // + resumePage    ×  100
 // + runs          ×   10
-// + stars         ×   25   (origami stars over every page, at most 10 × 3)
+// + stars         ×   25   (origami stars over every page, at most 15 × 3)
 //
 // `pagesCleared` is the headline progress number (highest page ever cleared),
 // wins are completed runs, and lessons / the resume page / the run counter
-// break ties between two saves at the same milestone. Stars (≤ 30 × 25 = 750)
-// never outrank a cleared page; they only prefer the better-played save of two
-// at the same milestone.
+// break ties between two saves at the same milestone. Stars (≤ 45 × 25 = 1125
+// in all) never outrank a cleared page: a page's stars need the page cleared,
+// and its three are worth 75 against the page's 1000. They only prefer the
+// better-played save of two at the same milestone.
 //
 // Stars are also merged field-level: whichever side wins, `carryStars` folds
 // the loser's per-page best stars into the winner's blob (per-page maximum),
@@ -37,7 +38,8 @@
 //   - Aethel Fold has no currency, so a remote win never pays a bonus.
 
 import {
-  CLEARED2_KEY, CLEARED_KEY, COSMETICS_KEY, LESSONS_KEY, PAGE_KEY, RUNS_KEY, RUSH_KEY, SECRETS_KEY, STARS_KEY, WINS2_KEY, WINS_KEY
+  CLEARED2_KEY, CLEARED3_KEY, CLEARED_KEY, COSMETICS_KEY, LESSONS_KEY, PAGE_KEY, RUNS_KEY, RUSH_KEY, SECRETS_KEY, STARS_KEY, WINS2_KEY,
+  WINS3_KEY, WINS_KEY
 } from '@/keys'
 import { STATE_KEY } from '@/use/useAethelState'
 import { countStars, mergeStarRecords, readStarRecord } from '@/fold/logic/stars'
@@ -164,6 +166,9 @@ export const computeMeta = (
   // book must never lose to a stale one that only finished the first.
   const cleared2 = Math.max(0, Math.min(6, safeInt(readField(read, CLEARED2_KEY), 0)))
   const wins2 = Math.max(0, safeInt(readField(read, WINS2_KEY), 0))
+  // …and book 3's (roadmap #3) the same.
+  const cleared3 = Math.max(0, Math.min(6, safeInt(readField(read, CLEARED3_KEY), 0)))
+  const wins3 = Math.max(0, safeInt(readField(read, WINS3_KEY), 0))
   const runs = Math.max(0, safeInt(readField(read, RUNS_KEY), 0))
   const page = Math.max(1, Math.min(6, safeInt(readField(read, PAGE_KEY), 1)))
   const lessons = safeJson<Record<string, unknown>>(readField(read, LESSONS_KEY), {})
@@ -174,14 +179,14 @@ export const computeMeta = (
   const stars = countStars(safeJson<unknown>(readField(read, STARS_KEY), {}))
 
   const progressScore =
-    (cleared + cleared2) * 1000
-    + (wins + wins2) * 5000
+    (cleared + cleared2 + cleared3) * 1000
+    + (wins + wins2 + wins3) * 5000
     + learned * 50
     + (page - 1) * 100
     + runs * 10
     + stars * 25
 
-  return { savedAt, progressScore, schemaVersion: SCHEMA_VERSION, maxStage: cleared + cleared2 }
+  return { savedAt, progressScore, schemaVersion: SCHEMA_VERSION, maxStage: cleared + cleared2 + cleared3 }
 }
 
 /**
