@@ -19,14 +19,13 @@ import { BufferGeometry, Group, Mesh, PlaneGeometry, type CanvasTexture } from '
 import { SHELF } from '../../logic/config'
 import type { FoldEvent } from '../../logic/events'
 import type { FoldGame } from '../../logic/game'
-import { shelfHalfWidth, slotAnchor, slotX, type ShelfPoint, type ShelfState } from '../../logic/shelf'
+import {
+  SHELF_CARD_H, SHELF_CARD_W, shelfCardPose, shelfHalfWidth, slotAnchor, slotX, type ShelfCardPose, type ShelfPoint, type ShelfState
+} from '../../logic/shelf'
 import { PaperBuilder } from '../paperGeometry'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
 import { SPINE_UV, cardCanvas, paintSpine, paintStarCard, spineCanvas } from '../art/shelfArt'
 import { toTexture } from '../art/canvas'
-
-const CARD_W = 2.1
-const CARD_H = (CARD_W * 320) / 256
 
 /** One standing book: a box whose faces sample the spine texture (spine art, cover and page swatches). */
 const bookGeometry = (): BufferGeometry => {
@@ -100,6 +99,7 @@ export class ShelfView {
   private rev = -1
   private time = 0
   private readonly pt: ShelfPoint = { x: 0, y: 0, z: 0 }
+  private readonly cardPose: ShelfCardPose = { x: 0, y: 0, z: 0, tilt: 0, scale: 1 }
 
   constructor() {
     this.group.position.set(SHELF.x, SHELF.y, SHELF.z)
@@ -135,8 +135,8 @@ export class ShelfView {
     this.cardCtx = cctx
     this.cardTex = toTexture(cc)
     this.cardMat = createPaperMaterial({ map: this.cardTex, grain: 0.04, doubleSided: true })
-    const cg = new PlaneGeometry(CARD_W, CARD_H)
-    cg.translate(0, CARD_H / 2, 0)
+    const cg = new PlaneGeometry(SHELF_CARD_W, SHELF_CARD_H)
+    cg.translate(0, SHELF_CARD_H / 2, 0)
     this.card = new Mesh(cg, this.cardMat)
     this.card.castShadow = true
     this.card.visible = false
@@ -207,11 +207,11 @@ export class ShelfView {
     const on = this.cardK > 0.01 && this.cardSlot >= 0
     if (this.card.visible !== on) this.card.visible = on
     if (on) {
-      const k = this.cardK
-      const b = this.books[this.cardSlot]!
-      this.card.position.set(slotX(this.cardSlot), SHELF.board + SHELF.bookH * (0.55 + 0.45 * k) + 0.1, SHELF.bookD / 2 + b.pull * SHELF.pull - 0.25)
-      this.card.rotation.x = 0.35 * k
-      this.card.scale.setScalar(0.25 + 0.75 * k)
+      // Portrait phones frame the shelf alone (no room beside the book): the card grows and faces the camera.
+      const c = shelfCardPose(this.cardSlot, this.books[this.cardSlot]!.pull, this.cardK, !s.inView, this.cardPose)
+      this.card.position.set(c.x, c.y, c.z)
+      this.card.rotation.x = c.tilt
+      this.card.scale.setScalar(c.scale)
     }
   }
 

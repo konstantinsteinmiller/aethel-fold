@@ -15,7 +15,7 @@
 
 import { MathUtils, PerspectiveCamera, Vector3 } from 'three'
 import { PAGE_HALF_D, PAGE_HALF_W, SHELF } from '../logic/config'
-import { shelfHalfWidth, shelfToWorld, type ShelfPoint } from '../logic/shelf'
+import { shelfCardPoint, shelfCardPose, shelfHalfWidth, shelfToWorld, type ShelfCardPose, type ShelfPoint } from '../logic/shelf'
 
 /** Pitch below the horizon: steep in portrait, lower in landscape (height-limited). */
 const PITCH_PORTRAIT = MathUtils.degToRad(67)
@@ -41,14 +41,31 @@ interface Pose {
 /** The HUD frame the "is the shelf already on screen" test uses — fixed, so the answer depends on the aspect only. */
 const REFERENCE_FRAME: CameraFrame = { top: 0.1, bottom: 0.02, side: 0.015 }
 
-/** The shelf's outer corners in page space (flat xyz), with room for a pulled-out book and its star card. */
-const shelfCorners = (): number[] => {
+/**
+ * The shelf's outer corners in page space (flat xyz), with room for a pulled-out
+ * book and its star card. `close`: the portrait close-up — the shelf's own top
+ * plus the real corners of the (larger) card over either end book.
+ */
+const shelfCorners = (close = false): number[] => {
   const out: number[] = []
   const p: ShelfPoint = { x: 0, y: 0, z: 0 }
   const hw = shelfHalfWidth()
-  const top = SHELF.board * 2 + SHELF.bookH + 1.9
+  const top = SHELF.board * 2 + SHELF.bookH + (close ? 0.3 : 1.9)
+  // The close-up hugs the boards (the back board is at −(bookD + 0.3) / 2); every pixel of width is book size.
+  const front = SHELF.bookD / 2 + SHELF.pull + (close ? 0.08 : 0.2)
+  const back = close ? -(SHELF.bookD + 0.3) / 2 : -SHELF.bookD / 2 - 0.2
+  if (close) {
+    const c: ShelfCardPose = { x: 0, y: 0, z: 0, tilt: 0, scale: 1 }
+    for (const slot of [0, SHELF.slots - 1]) {
+      shelfCardPose(slot, 1, 1, true, c)
+      for (const [u, v] of [[-0.5, 0], [0.5, 0], [-0.5, 1], [0.5, 1]] as const) {
+        shelfCardPoint(c, u, v, p)
+        out.push(p.x, p.y, p.z)
+      }
+    }
+  }
   for (const lx of [-hw, hw]) {
-    for (const [ly, lz] of [[0, SHELF.bookD / 2 + SHELF.pull + 0.2], [0, -SHELF.bookD / 2 - 0.2], [top, SHELF.bookD / 2], [top, -SHELF.bookD / 2]] as const) {
+    for (const [ly, lz] of [[0, front], [0, back], [top, SHELF.bookD / 2], [top, -SHELF.bookD / 2]] as const) {
       shelfToWorld(lx, ly, lz, p)
       out.push(p.x, p.y, p.z)
     }
@@ -84,7 +101,13 @@ export class DeskCamera {
   shelfK = 0
   /** The book pose already shows the whole shelf (wide aspects): no zoom button needed. */
   shelfInView = false
+  /**
+   * The shelf pose frames the shelf alone (wherever it isn't in view — portrait
+   * phones and tablets): beside the book there, its books were ~30 px wide.
+   */
+  shelfClose = false
   private readonly shelfPts = shelfCorners()
+  private readonly closePts = shelfCorners(true)
 
   constructor() {
     this.camera = new PerspectiveCamera(FOV, 1, 1, 120)
@@ -117,6 +140,13 @@ export class DeskCamera {
     this.solve(page, REFERENCE_FRAME, false, ref)
     this.shelfInView = this.inside(this.shelfPts, ref, REFERENCE_FRAME)
     this.solve(page, frame, false, this.bookPose)
+    this.shelfClose = !this.shelfInView
+    if (this.shelfClose) {
+      // Portrait: only the shelf, centred under the HUD, as big as the width allows (the book goes off to the left).
+      this.solve(this.closePts, frame, true, this.shelfPose)
+      this.pose()
+      return
+    }
     // The shelf pose: the shelf and the upper right-hand part of the book beside it.
     const x0 = 1.2
     const zMid = 1.5

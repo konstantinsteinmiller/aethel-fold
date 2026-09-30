@@ -221,3 +221,47 @@ export const slotAnchor = (i: number, out: ShelfPoint, pull = 0, up = 0.5): Shel
 
 /** Half the shelf's outer width (shelf-local x). */
 export const shelfHalfWidth = (): number => ((SHELF.slots - 1) / 2) * SHELF.spacing + SHELF.bookW / 2 + SHELF.board + 0.12
+
+// ─── The star card ───────────────────────────────────────────────────────────
+
+/** The inspect card's size in shelf units (its canvas is 256 × 320). */
+export const SHELF_CARD_W = 2.1
+export const SHELF_CARD_H = (SHELF_CARD_W * 320) / 256
+/**
+ * Close-up (portrait phones, where the camera frames the shelf alone): the
+ * card grows, leans back to face the camera (pitch 49°, lean −0.32 → about
+ * −0.53) and stays inside the shelf's width so it can't widen the framing.
+ */
+const CLOSE_CARD_SCALE = 1.4
+const CLOSE_CARD_TILT = -0.5
+
+/** Where the star card stands in the (leaned) rack: centre x, foot y and z, tilt about x, scale. */
+export interface ShelfCardPose {
+  x: number
+  y: number
+  z: number
+  tilt: number
+  scale: number
+}
+
+/**
+ * The star card's pose for a slot, `k` of the way risen out of a book pulled
+ * `pull` of the way out. `close`: the portrait close-up. Pure, allocation-free.
+ */
+export const shelfCardPose = (slot: number, pull: number, k: number, close: boolean, out: ShelfCardPose): ShelfCardPose => {
+  const s = close ? CLOSE_CARD_SCALE : 1
+  const room = shelfHalfWidth() - (SHELF_CARD_W * s) / 2
+  const x = slotX(slot)
+  out.x = close ? Math.max(-room, Math.min(room, x)) : x
+  out.y = SHELF.board + SHELF.bookH * (0.55 + 0.45 * k) + (close ? 0.2 : 0.1)
+  out.z = SHELF.bookD / 2 + pull * SHELF.pull - 0.25
+  out.tilt = (close ? CLOSE_CARD_TILT : 0.35) * k
+  out.scale = (0.25 + 0.75 * k) * s
+  return out
+}
+
+/** Page-space point on the card: `u` −0.5 … 0.5 across, `v` 0 (foot) … 1 (top). */
+export const shelfCardPoint = (c: ShelfCardPose, u: number, v: number, out: ShelfPoint): ShelfPoint => {
+  const ly = v * SHELF_CARD_H * c.scale
+  return shelfToWorld(c.x + u * SHELF_CARD_W * c.scale, c.y + ly * Math.cos(c.tilt), c.z + ly * Math.sin(c.tilt), out)
+}
