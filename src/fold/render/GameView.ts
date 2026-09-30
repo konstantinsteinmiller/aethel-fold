@@ -499,7 +499,10 @@ export class GameView {
         this.prebuild(Math.min(PAGE_COUNT, g.pageId + 1) as PageId)
         this.transition = 'peel'
       }
-      this.sheet.set(easeInOutCubic(clamp01(g.peel)) * 1.02)
+      // The peel lesson's demonstration lifts the corner a little with the ghost hand.
+      const demo = g.lesson.demo
+      const ghostPeel = demo.phase !== 'off' && demo.on === 'peel' ? demo.fold * 0.3 : 0
+      this.sheet.set(easeInOutCubic(clamp01(Math.max(g.peel, ghostPeel))) * 1.02)
       // The layer below unfolds as the corner comes away.
       this.incoming?.setRise(smoothstep(0.3, 0.95, g.peel))
     }

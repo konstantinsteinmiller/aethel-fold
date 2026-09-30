@@ -285,7 +285,10 @@ export class CastleView {
   update(game: FoldGame, time: number, dt: number): void {
     const tears = game.tears
     if (this.mode === 'gates') {
-      for (const t of tears) this.updateTear(t, time, dt)
+      // A spread lesson's demonstration cracks its tear open with the ghost hands.
+      const demo = game.lesson.demo
+      const demoTear = demo.phase !== 'off' && demo.on === 'tear' ? demo.target : -1
+      for (let i = 0; i < tears.length; i++) this.updateTear(tears[i]!, time, dt, i === demoTear ? demo.fold * 0.6 : 0)
       for (const p of this.pieces) p.fall(0)
       for (const g of this.seamGears) g.set(0, 0, 0, 0, 0)
       this.coreGear.set(0, 0, 0, 0, 0)
@@ -320,13 +323,13 @@ export class CastleView {
     void dt
   }
 
-  private updateTear(t: TearState, time: number, dt: number): void {
+  private updateTear(t: TearState, time: number, dt: number, ghostOpen = 0): void {
     const v = this.tearables.get(t.def.id)
     if (!v) return
     // Keep the pick point on the visible crease.
     if (t.torn) v.fallT = Math.min(1, v.fallT + dt * 1.6)
     else v.fallT = 0
-    const open = t.torn ? 1 : t.t
+    const open = t.torn ? 1 : Math.max(t.t, ghostOpen)
     const bounce = t.torn ? easeOutBounce(v.fallT) : 0
     for (const h of v.halves) {
       if (v.halves.length === 1) h.fall(t.torn ? bounce : open * 0.12)

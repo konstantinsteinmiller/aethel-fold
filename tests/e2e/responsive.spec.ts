@@ -77,7 +77,7 @@ for (const width of [320, 360, 390, 412]) {
 
 // The star ribbon (roadmap #1) drops in under the HUD strip on a cleared page:
 // it must stay inside the screen and never cover the HUD.
-for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }]) {
+for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }, { width: 844, height: 390 }]) {
   test(`the star ribbon stays clear of the HUD at ${vp.width}×${vp.height}`, async ({ page }) => {
     await page.setViewportSize(vp)
     await page.addInitScript(() => {
@@ -109,6 +109,16 @@ for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }]) {
     expect(b.band.x + b.band.w).toBeLessThanOrEqual(vp.width + 1)
     expect(b.band.y, 'ribbon top vs HUD bottom').toBeGreaterThanOrEqual(b.hudBottom - 0.5)
     expect(b.band.y + b.band.h).toBeLessThan(vp.height * 0.45)
+    // …and never over the book: clear of its cover (page ± a cover margin) on one side or above it.
+    const book = await page.evaluate(() => {
+      const f = window.__fold!
+      const pts = [[-5.4, -7.4], [5.4, -7.4], [-5.4, 7.4], [5.4, 7.4]].map(([x, z]) => f.screenOf(x!, z!))
+      return {
+        left: Math.min(...pts.map((p) => p.x)), right: Math.max(...pts.map((p) => p.x)), top: Math.min(...pts.map((p) => p.y))
+      }
+    })
+    const clear = b.band.y + b.band.h <= book.top || b.band.x >= book.right || b.band.x + b.band.w <= book.left
+    expect(clear, `ribbon ${JSON.stringify(b.band)} vs book ${JSON.stringify(book)}`).toBe(true)
     await page.screenshot({ path: `test-results/star-ribbon-${vp.width}x${vp.height}.png` })
   })
 }

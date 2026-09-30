@@ -170,12 +170,29 @@ export class SlingView {
       // Snap-back wobble after a shot.
       cup.copy(this.rest)
       cup.z -= Math.sin(this.recoil * Math.PI * 3) * this.recoil * 0.35
-      // The tease: every 2.4 s the stone tugs back toward the player and
-      // snaps home, showing the gesture without a word.
-      const ph = (time % 2.4) / 2.4
-      const tug = ph < 0.3 ? Math.sin((ph / 0.3) * Math.PI * 0.5) : ph < 0.4 ? 1 - (ph - 0.3) / 0.1 : 0
-      cup.z += tug * 0.55 * this.cue
-      cup.y -= tug * 0.12 * this.cue
+      const l = game.lesson
+      const demo = l.demo
+      if (demo.phase !== 'off' && demo.on === 'sling') {
+        // The lesson's demonstration: the cup follows the ghost hand's pull
+        // exactly, is held at full draw, and springs home when it lets go.
+        let px = (l.hand.bx - l.hand.ax) * demo.fold
+        let pz = (l.hand.bz - l.hand.az) * demo.fold
+        const len = Math.hypot(px, pz)
+        if (len > MAX_DRAW) {
+          px *= MAX_DRAW / len
+          pz *= MAX_DRAW / len
+        }
+        cup.x += px
+        cup.z += pz
+        cup.y -= Math.min(0.45, len * 0.18)
+      } else {
+        // The tease: every 2.4 s the stone tugs back toward the player and
+        // snaps home, showing the gesture without a word.
+        const ph = (time % 2.4) / 2.4
+        const tug = ph < 0.3 ? Math.sin((ph / 0.3) * Math.PI * 0.5) : ph < 0.4 ? 1 - (ph - 0.3) / 0.1 : 0
+        cup.z += tug * 0.55 * this.cue
+        cup.y -= tug * 0.12 * this.cue
+      }
     }
     this.cup.visible = loaded || s.aiming
     const ps = loaded ? Math.max(0.01, easeOutBack(this.pop, 2.6)) : 0.01

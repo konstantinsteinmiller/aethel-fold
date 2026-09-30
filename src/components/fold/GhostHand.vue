@@ -7,6 +7,11 @@
  *
  * Driven imperatively once per frame by the scene (`update`), so following a
  * shaking camera costs a few style writes, not a Vue render.
+ *
+ * On a lesson's first encounter (roadmap #4) the logic runs a demonstration
+ * (`lesson.demo`): the hand then drops its CSS loop and is posed from the
+ * demo's progress instead, so it moves in lockstep with the ghost flap the 3D
+ * view draws from the same numbers — sweep, glide, press — and fades with it.
  */
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -22,8 +27,10 @@ const visible = ref(false)
 const gesture = ref<'swipe' | 'tap' | 'spread' | 'drag'>('swipe')
 const lessonId = ref<string | null>(null)
 const hint = ref(false)
+const demo = ref(false)
 const a: ScreenPoint = { x: 0, y: 0, visible: false }
 const b: ScreenPoint = { x: 0, y: 0, visible: false }
+const tp: ScreenPoint = { x: 0, y: 0, visible: false }
 let lastRev = -1
 
 const hintText = computed(() => {
@@ -36,6 +43,9 @@ const hintText = computed(() => {
 const update = (lesson: LessonState, project: (x: number, y: number, z: number, out: ScreenPoint) => ScreenPoint): void => {
   const show = !!lesson.id && lesson.showHand
   if (show !== visible.value) visible.value = show
+  const d = lesson.demo
+  const on = show && d.phase !== 'off'
+  if (on !== demo.value) demo.value = on
   if (!show || !root.value) return
   if (lesson.rev !== lastRev) {
     lastRev = lesson.rev
@@ -54,17 +64,38 @@ const update = (lesson: LessonState, project: (x: number, y: number, z: number, 
   const len = Math.hypot(b.x - a.x, b.y - a.y)
   s.setProperty('--len', `${len}px`)
   s.setProperty('--ang', `${Math.atan2(b.y - a.y, b.x - a.x)}rad`)
+
+  if (!on) return
+  // Where the demo's finger is: taps and spreads stay on A; swipes and drags
+  // travel A → B, then (stamp) glide on to the tap point.
+  let hx = a.x
+  let hy = a.y
+  if (h.gesture === 'swipe' || h.gesture === 'drag') {
+    hx += (b.x - a.x) * d.hand
+    hy += (b.y - a.y) * d.hand
+    if (d.glide > 0) {
+      project(d.tx, 0, d.tz, tp)
+      hx += (tp.x - hx) * d.glide
+      hy += (tp.y - hy) * d.glide
+    }
+  }
+  s.setProperty('--hx', `${hx}px`)
+  s.setProperty('--hy', `${hy}px`)
+  s.setProperty('--p', `${d.hand}`)
+  s.setProperty('--press', `${d.press}`)
+  s.setProperty('--alpha', `${Math.max(0, d.alpha)}`)
 }
 
 defineExpose({ update })
 </script>
 
 <template lang="pug">
-  div.ghost(ref="root" v-show="visible" :class="[`ghost--${gesture}`, { 'ghost--hint': hint }]" aria-hidden="true")
+  div.ghost(ref="root" v-show="visible" :class="[`ghost--${gesture}`, { 'ghost--hint': hint, 'ghost--demo': demo }]" aria-hidden="true")
     //- Trail: a soft dotted track from A to B.
     div.ghost__trail(v-if="gesture === 'swipe' || gesture === 'drag'")
-    //- Tap ripple.
-    div.ghost__ripple(v-if="gesture === 'tap'")
+    //- Tap ripple (looping), or the demo's press ring (posed by the logic).
+    div.ghost__ripple(v-if="gesture === 'tap' && !demo")
+    div.ghost__press(v-if="demo")
     //- The hand(s).
     div.ghost__hand.ghost__hand--one
       OrigamiIcon(name="hand")
@@ -221,6 +252,39 @@ defineExpose({ update })
   to
     transform: translate(-50%, 0)
     opacity: 1
+
+// Demonstration: no CSS loop, the logic poses everything (--hx/--hy, --p, --press, --alpha).
+.ghost--demo
+  --hx: 50vw
+  --hy: 50vh
+  --p: 0
+  --press: 0
+  --alpha: 0
+  --reach: clamp(3rem, 14vw, 5rem)
+  .ghost__hand, .ghost__trail
+    animation: none
+  .ghost__hand--one
+    opacity: var(--alpha)
+    transform: translate(var(--hx), var(--hy)) scale(calc(1 - var(--press) * 0.14))
+  .ghost__trail
+    opacity: calc(var(--alpha) * 0.7)
+  &.ghost--spread .ghost__hand--one
+    transform: translate(calc(var(--hx) - 0.4rem - var(--p) * var(--reach)), calc(var(--hy) + var(--p) * 0.6rem)) rotate(-25deg) scale(0.9)
+  &.ghost--spread .ghost__hand--two
+    opacity: var(--alpha)
+    transform: translate(calc(var(--hx) + 0.4rem + var(--p) * var(--reach)), calc(var(--hy) + var(--p) * 0.6rem)) rotate(25deg) scaleX(-1) scale(0.9)
+
+.ghost__press
+  position: absolute
+  left: var(--hx)
+  top: var(--hy)
+  width: var(--reach)
+  height: var(--reach)
+  margin: calc(var(--reach) / -2) 0 0 calc(var(--reach) / -2)
+  border: 0.3rem solid rgba(255, 210, 63, 0.95)
+  border-radius: 50%
+  opacity: calc(var(--press) * var(--alpha))
+  transform: scale(calc(0.4 + var(--press) * 0.9))
 
 @media (prefers-reduced-motion: reduce)
   .ghost__hand, .ghost__trail, .ghost__ripple

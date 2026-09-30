@@ -9,9 +9,14 @@
  *   ridge  — two panels rise into a ∧ mountain.
  *   ballista — no panel: a ballista lies folded on a castle tower and flips
  *            upright (t → 1), turning toward each bolt's aim point.
+ *
+ * A lesson's first-encounter demonstration (roadmap #4) draws a *ghost* of the
+ * flap — a translucent, ink-free copy sharing the real geometry — posed by the
+ * demo's progress, so the paper shows the move in sync with the ghost hand
+ * while the real flap stays exactly where the game has it.
  */
 
-import { Group, Mesh, type Texture } from 'three'
+import { Group, Mesh, type BufferGeometry, type Texture } from 'three'
 import type { FoldState } from '../../logic/types'
 import { clamp01, easeOutBack } from '../../logic/math'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
@@ -19,6 +24,7 @@ import { ballistaGeometry, shieldGeometry, towerGeometry, wallGeometry } from '.
 import { CASTLE } from '../../logic/config'
 import { buildFlapGeometry } from './flapGeometry'
 import { GuideLine } from './GuideLine'
+import { HEX } from '../palette'
 
 const VALLEY_MAX = (24 * Math.PI) / 180
 const RIDGE_MAX = (52 * Math.PI) / 180
@@ -29,11 +35,14 @@ class Panel {
   readonly mesh: Mesh
   private readonly sgn: number
 
-  constructor(ax: number, az: number, ux: number, uz: number, len: number, w: number, mats: PaperMaterial[]) {
+  constructor(
+    private readonly ax: number, private readonly az: number, private readonly ux: number, private readonly uz: number,
+    len: number, private readonly w: number, mats: PaperMaterial[] | PaperMaterial, geometry?: BufferGeometry
+  ) {
     this.sgn = Math.sign(w) || 1
     this.pivot.position.set(ax, 0.002, az)
     this.pivot.rotation.y = Math.atan2(-uz, ux)
-    this.mesh = new Mesh(buildFlapGeometry(len, w, ax, az, ux, uz), mats)
+    this.mesh = new Mesh(geometry ?? buildFlapGeometry(len, w, ax, az, ux, uz), mats)
     this.mesh.castShadow = true
     this.mesh.receiveShadow = true
     this.hinge.add(this.mesh)
@@ -46,10 +55,35 @@ class Panel {
     this.mesh.scale.z = stretch
   }
 
+  /** A panel on the same hinge sharing this one's geometry (the demo ghost; never disposed on its own). */
+  twin(mat: PaperMaterial): Panel {
+    return new Panel(this.ax, this.az, this.ux, this.uz, 0, this.w, mat, this.mesh.geometry)
+  }
+
   dispose(): void {
     this.mesh.geometry.dispose()
   }
 }
+
+/** Pose a flap's panels for fold progress `t` (`extra` adds a wobble, radians). */
+const posePanels = (panels: readonly Panel[], kind: string, t: number, extra = 0): void => {
+  if (kind === 'wall') panels[0]!.set(t * (Math.PI / 2) + extra)
+  else if (kind === 'launch') panels[0]!.set(t * Math.PI + extra)
+  else if (kind === 'valley') {
+    const a = t * VALLEY_MAX
+    const st = 1 / Math.cos(a)
+    panels[0]!.set(-a, st)
+    panels[1]!.set(-a, st)
+  } else if (kind === 'ridge') {
+    const a = t * RIDGE_MAX
+    const st = 1 / Math.cos(a)
+    panels[0]!.set(a, st)
+    panels[1]!.set(a, st)
+  }
+}
+
+/** Pop-up rise for fold progress `t` when nothing snapped it (the demo's ghost). */
+const ghostRise = (t: number): number => clamp01((t - 0.2) / 0.6)
 
 export class FoldView {
   readonly group = new Group()
@@ -238,22 +272,7 @@ export class FoldView {
     this.jolt = Math.max(0, this.jolt - dt * 5)
 
     const t = f.t
-    if (k === 'wall') {
-      const ang = t * (Math.PI / 2) + this.wobble * 0.08
-      this.panels[0]!.set(ang)
-    } else if (k === 'launch') {
-      this.panels[0]!.set(t * Math.PI + (f.phase === 'spent' ? this.wobble * 0.05 : 0))
-    } else if (k === 'valley') {
-      const a = t * VALLEY_MAX
-      const st = 1 / Math.cos(a)
-      this.panels[0]!.set(-a, st)
-      this.panels[1]!.set(-a, st)
-    } else if (k === 'ridge') {
-      const a = t * RIDGE_MAX
-      const st = 1 / Math.cos(a)
-      this.panels[0]!.set(a, st)
-      this.panels[1]!.set(a, st)
-    }
+    posePanels(this.panels, k, t, k === 'wall' ? this.wobble * 0.08 : k === 'launch' && f.phase === 'spent' ? this.wobble * 0.05 : 0)
 
     // Pop-up.
     const s = this.structure
@@ -304,6 +323,70 @@ export class FoldView {
     }
   }
 
+  // ─── Lesson demonstration ghost (roadmap #4) ───────────────────────────────
+
+  private ghostGroup: Group | null = null
+  private ghostPanels: Panel[] = []
+  private ghostMat: PaperMaterial | null = null
+  private ghostStruct: Group | null = null
+
+  /** Built on the first demo that needs it (once per flap, never per frame). */
+  private buildGhost(): Group {
+    const g = new Group()
+    // Ink-free (id 127) guide-blue paper, dithered translucent.
+    const m = createPaperMaterial({ unlit: true, color: HEX.guideGlow, grain: 0, id: 127, opacity: 0.55, doubleSided: true })
+    this.ghostMat = m
+    for (const p of this.panels) {
+      const gp = p.twin(m)
+      gp.mesh.castShadow = false
+      gp.mesh.receiveShadow = false
+      this.ghostPanels.push(gp)
+      g.add(gp.pivot)
+    }
+    // Never quite coplanar with the real flap (flat on the page, or stood up).
+    g.position.set(0, 0.018, 0.02)
+    const s = this.structure
+    if (s && this.f.def.kind === 'wall') {
+      const c = s.clone()
+      c.traverse((o) => {
+        if (o instanceof Mesh) {
+          o.material = m
+          o.castShadow = false
+          o.receiveShadow = false
+        }
+      })
+      this.ghostStruct = c
+      g.add(c)
+    }
+    g.userData.perfTag = 'fold.ghost'
+    this.group.add(g)
+    this.ghostGroup = g
+    return g
+  }
+
+  /**
+   * Pose the ghost at demo progress `t` with visibility `alpha` (0 hides it).
+   * The real flap is untouched: this is choreography, not gameplay.
+   */
+  ghost(t: number, alpha: number): void {
+    if (alpha <= 0.01 || this.panels.length === 0) {
+      if (this.ghostGroup) this.ghostGroup.visible = false
+      return
+    }
+    const g = this.ghostGroup ?? this.buildGhost()
+    g.visible = true
+    posePanels(this.ghostPanels, this.f.def.kind, t)
+    const s = this.ghostStruct
+    if (s) {
+      const p = ghostRise(t)
+      s.visible = p > 0.01
+      const squash = 1 + (1 - p) * 0.35
+      s.scale.set(squash, Math.max(0.001, p), squash)
+      s.rotation.x = 0
+    }
+    this.ghostMat!.uniforms.uOpacity.value = 0.6 * Math.min(1, alpha)
+  }
+
   private updateBallista(time: number, dt: number, highlight: boolean, rise: number): void {
     const f = this.f
     const s = this.structure!
@@ -346,5 +429,6 @@ export class FoldView {
     this.artMat.dispose()
     this.paperMat.dispose()
     this.structMat?.dispose()
+    this.ghostMat?.dispose()
   }
 }

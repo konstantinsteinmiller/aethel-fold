@@ -139,6 +139,21 @@ defineExpose({ play, clear })
     opacity: 1
     transform: none
 
+// Short landscape (a phone on its side): the strip between the HUD and the
+// page is thinner than the band, and the turning sheet rises through it. The
+// desk right of the book is empty (the book spans ~±34vh around the centre and
+// turns leftward), so the ribbon hangs in the middle of that column instead.
+@media (orientation: landscape) and (max-height: 500px) and (min-aspect-ratio: 3/2)
+  .star-ribbon
+    left: calc(75% + 17vh)
+    top: calc(var(--hud-h, 3.5rem) + clamp(0.4rem, 3vh, 1rem))
+  .star-ribbon__band
+    gap: clamp(0.25rem, 1.2vw, 0.5rem)
+    padding: clamp(0.2rem, 0.9vh, 0.4rem) clamp(0.9rem, 2.4vw, 1.2rem)
+  .star-ribbon__slot
+    width: clamp(1.5rem, 9vh, 2.4rem)
+    height: clamp(1.5rem, 9vh, 2.4rem)
+
 @media (prefers-reduced-motion: reduce)
   .star-ribbon.is-on
     animation-timing-function: linear

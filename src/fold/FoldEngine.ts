@@ -138,6 +138,9 @@ export class FoldEngine {
 
   setShake(on: boolean): void {
     this.view.desk.reducedMotion = !on
+    // Lesson demonstrations play once instead of looping (roadmap #4).
+    const prefers = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    this.game.reducedMotion = !on || prefers
   }
 
   setHaptics(on: boolean): void {

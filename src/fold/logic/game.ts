@@ -40,7 +40,10 @@ import {
   spawnProjectile
 } from './entities'
 import { bossAwake, bossPhaseCode, brokenCount, createBoss, nextWeakPoint, resetBoss } from './boss'
-import { LESSON_IDS, clearLesson, createLessonState, lessonCode, setHand } from './lessons'
+import {
+  LESSON_IDS, cancelDemo, clearLesson, createLessonState, lessonCode, setHand, startDemo, stepDemo,
+  type DemoKind, type DemoOn
+} from './lessons'
 import { PAGE_COUNT, pageDef } from './pages'
 import { starsFor } from './stars'
 import { createRng, type Rng } from './rng'
@@ -95,6 +98,8 @@ export interface GameOptions {
   book?: BookId
   /** "The book is kind" memory (persisted); the game mutates this object in place. */
   kind?: KindMemory
+  /** Demonstrate each lesson on its first encounter (roadmap #4). Default true. */
+  demos?: boolean
 }
 
 const createTear = (def: PageDef['tears'][number]): TearState => ({
@@ -110,6 +115,15 @@ export class FoldGame {
   readonly boss = createBoss()
   readonly lesson = createLessonState()
   readonly learned: Record<LessonId, boolean>
+  /**
+   * Lesson steps whose demonstration the player has seen through (bit per
+   * step). Only for this session: across sessions `learned` is what persists,
+   * and a learned lesson never starts, so never demonstrates, again.
+   */
+  private readonly demoSeen: Record<LessonId, number>
+  private readonly demos: boolean
+  /** Reduced motion: demonstrations play once, then leave the plain hand. */
+  reducedMotion = false
   stats: GameStats = emptyStats()
 
   book: BookId = 1
@@ -193,6 +207,10 @@ export class FoldGame {
     const learned = {} as Record<LessonId, boolean>
     for (const id of LESSON_IDS) learned[id] = !!opts.learned?.[id]
     this.learned = learned
+    const seen = {} as Record<LessonId, number>
+    for (const id of LESSON_IDS) seen[id] = 0
+    this.demoSeen = seen
+    this.demos = opts.demos ?? true
     if (opts.book) this.book = opts.book
   }
 
@@ -622,7 +640,14 @@ export class FoldGame {
 
   private touched(): void {
     this.idle = 0
+    this.actDuringDemo()
     if (this.lesson.hint) clearLesson(this.lesson)
+  }
+
+  /** Any input ends a running demonstration at once (the ghost fades, the paper is the player's). */
+  private actDuringDemo(): void {
+    const l = this.lesson
+    if (l.id && cancelDemo(l)) this.demoSeen[l.id] |= 1 << l.step
   }
 
   /** Best ready fold near a page-space point, or -1. */
@@ -856,6 +881,7 @@ export class FoldGame {
     const b = this.boss
     if (b.exposed < 0) return
     this.idle = 0
+    this.actDuringDemo()
     const w = b.weakPoints[b.exposed]!
     w.t = clamp01(progress)
     if (w.mode === 'core' && w.t >= 1) this.breakWeak()
@@ -1938,6 +1964,72 @@ export class FoldGame {
     l.timeScale = LESSON_TIME_SCALE
     l.rev++
     this.events.emit('lesson', lessonCode(id), 1)
+    this.beginDemo()
+  }
+
+  /**
+   * First encounter of this lesson step: demonstrate it (roadmap #4). Picks
+   * the choreography and what the ghost copies; the view draws it.
+   */
+  private beginDemo(): void {
+    const l = this.lesson
+    const id = l.id
+    if (!id || l.hint || !this.demos) return
+    if (this.demoSeen[id] & (1 << l.step)) return
+    let kind: DemoKind = 'swipe'
+    let on: DemoOn = 'none'
+    let target = -1
+    let tx = 0
+    let tz = 0
+    switch (id) {
+      case 'swipe':
+      case 'shield':
+      case 'ridge':
+      case 'launch':
+      case 'frog':
+        on = 'fold'
+        target = l.target
+        break
+      case 'stamp': {
+        const f = this.folds[l.target]
+        if (!f) return
+        on = 'fold'
+        target = l.target
+        if (l.step === 0) {
+          kind = 'swipeTap'
+          tx = f.cx
+          tz = f.cz
+        } else kind = 'tap'
+        break
+      }
+      case 'crush':
+        kind = 'tap'
+        on = 'fold'
+        target = l.target
+        break
+      case 'ballista':
+        kind = l.step === 0 ? 'swipe' : 'tap'
+        break
+      case 'spread':
+        kind = 'pull'
+        on = 'tear'
+        target = l.target
+        break
+      case 'core':
+      case 'peel':
+        kind = 'pull'
+        on = id === 'peel' ? 'peel' : 'none'
+        break
+      case 'crease':
+        kind = 'swipe'
+        break
+      case 'sling':
+      case 'leaper':
+        kind = 'pull'
+        on = 'sling'
+        break
+    }
+    startDemo(l, kind, on, target, this.reducedMotion, tx, tz)
   }
 
   private completeLesson(): void {
@@ -1968,6 +2060,7 @@ export class FoldGame {
           l.step = 1
           l.age = 0
           l.rev++
+          this.beginDemo()
         } else if (what === 'bolt') this.completeLesson()
         break
       case 'crush':
@@ -1991,6 +2084,7 @@ export class FoldGame {
           l.step = 1
           l.age = 0
           l.rev++
+          this.beginDemo()
         } else if (what === 'stamp') this.completeLesson()
         break
       case 'spread':
@@ -2013,6 +2107,8 @@ export class FoldGame {
     if (l.id && !l.hint) {
       l.age += realDt
       this.driveLesson()
+      // The demonstration runs in real time, like the player's own fold.
+      if (l.id && stepDemo(l, realDt)) this.demoSeen[l.id] |= 1 << l.step
     } else if (this.acceptsInput() || this.phase === 'peel') {
       // A real lesson always wins over a reminder.
       const hinting = l.hint
@@ -2307,6 +2403,7 @@ export class FoldGame {
           if (f.phase === 'up') {
             l.step = 1
             l.age = 0
+            this.beginDemo()
           } else if (f.phase !== 'ready' && f.phase !== 'dragging' && f.phase !== 'snapping') return this.abortLesson()
           else {
             this.handOnFold(f)

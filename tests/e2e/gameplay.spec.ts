@@ -24,6 +24,9 @@ test.describe('Aethel Fold — gameplay', () => {
     await ff(page, 1)
     expect((await state(page)).timeScale).toBeLessThan(0.3)
     await expect(page.locator('.ghost-hint')).toContainText('Swipe')
+    // First encounter: the hand demonstrates the fold (roadmap #4) until the player acts.
+    await expect(page.locator('.ghost.ghost--demo')).toBeAttached()
+    await page.screenshot({ path: 'test-results/lesson-demo.png' })
     const f = (await state(page)).folds[0]!
     expect(f.phase).toBe('ready')
     await swipe(page, [0, -0.75], [0, -2.5])
@@ -33,6 +36,7 @@ test.describe('Aethel Fold — gameplay', () => {
     expect(['up', 'snapping']).toContain(after.folds[0]!.phase)
     expect(after.score).toBeGreaterThan(0)
     expect(after.lesson).toBe(null)
+    await expect(page.locator('.ghost--demo')).toHaveCount(0)
   })
 
   test('tap to stamp: a tap on a raised wall slams it flat', async ({ page }) => {

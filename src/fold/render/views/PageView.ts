@@ -347,6 +347,13 @@ export class PageView {
       }
       this.folds[i]!.update(time, dt, hl && Math.floor(time * 2.5) % 2 === 0 ? true : hl, this.rise)
     }
+    // A lesson's first-encounter demo: the ghost of its flap moves with the hand.
+    const demo = lesson.demo
+    const live = game.page === this.def && demo.phase !== 'off' && demo.on === 'fold'
+    for (let i = 0; i < this.folds.length; i++) {
+      const on = live && demo.target === i
+      this.folds[i]!.ghost(on ? demo.fold : 0, on ? demo.alpha * Math.min(1, this.rise) : 0)
+    }
     // The castle flashes and shudders while it recovers from a hit.
     const inv = game.page === this.def ? Math.max(0, game.hero.invuln) / HERO_INVULN : 0
     this.castleMat.uniforms.uFlash.value = inv * 0.45
