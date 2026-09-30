@@ -892,12 +892,13 @@ src/world/
   assets/                   tree.ts, stone.ts, boulder.ts (procedural, 4 LODs)
   terrain/                  heightfield, chunked terrain with 4 tiers
   perf/                     profiler, GPU timer, ablation
-src/views/WorldScene.vue    the Vue shell + perf panel  →  route /  (default)
+src/views/WorldScene.vue    the Vue shell + perf panel  →  route /world  (lazy bench)
 ```
 
-The 2D tower-siege game this repo started as still lives at `/tower`, intact.
-It owns `tower_state` and the save / ads / platform pipeline that the 3D world
-inherits, so it stays until Phase D reuses that layer.
+The route `/` now belongs to Aethel Fold (`aethel-fold-GDD.md`); Meadowfall is a
+lazy-loaded bench at `/world`. The 2D tower-siege game this repo started as, and
+the `/water` and `/characters` benches, have been removed; the save / platform
+pipeline lives on under `aethel_state`.
 
 ---
 

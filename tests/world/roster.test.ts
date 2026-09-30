@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { appearanceEquals, copyAppearance, sanitiseAppearance } from '@/world/characters/CreatorScene'
+import { appearanceEquals, copyAppearance, sanitiseAppearance } from '@/world/characters/appearance'
 import { DEFAULT_APPEARANCE, EMPTY_LOADOUT, type EquipmentLoadout } from '@/world/characters/equipment'
 import { MAX_NAME_LENGTH, emptyProfile, makeCharacterId } from '@/world/characters/profile'
 import {
