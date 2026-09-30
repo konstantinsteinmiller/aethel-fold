@@ -300,6 +300,12 @@ export const PAGE_TURN_TIME = 1.35
 export const CRUMPLE_TIME = 1.25
 export const PAGE_DROP_TIME = 0.8
 export const PEEL_COMPLETE = 0.55
+/**
+ * Real seconds the cleared page 4 waits for the player to peel its corner
+ * before it peels (and turns) by itself, exactly as a finished manual peel.
+ * Held while paused or while the shelf is open, like every phase timer.
+ */
+export const PEEL_AUTO_AFTER = 5
 
 // ─── "Almost!" moment on failure (roadmap #9) ─────────────────────────────
 

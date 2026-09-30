@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FoldGame } from '@/fold/logic/game'
 import { PAGES, PAGE_COUNT, isPageId, pageEnemyCount } from '@/fold/logic/pages'
-import { ALMOST, ENEMY, HERO_HP, PAGE_DROP_TIME } from '@/fold/logic/config'
+import { ALMOST, ENEMY, HERO_HP, PAGE_DROP_TIME, PEEL_AUTO_AFTER } from '@/fold/logic/config'
 import { spawnEnemy } from '@/fold/logic/entities'
 import type { FoldEventType } from '@/fold/logic/events'
 
@@ -202,6 +202,67 @@ describe('FoldGame mechanics', () => {
     g.peelRelease()
     step(g, 1)
     expect(g.pageId).toBe(5)
+  })
+
+  describe('the optional peel (page 4 → 5)', () => {
+    const toPeel = (learned?: typeof ALL_LEARNED): FoldGame => {
+      const g = new FoldGame(learned ? { learned } : {})
+      g.startRun(4)
+      step(g, 1)
+      g.debugClearPage()
+      for (let i = 0; i < 600 && g.phase !== 'peel'; i++) { g.update(1 / 60); g.events.clear() }
+      expect(g.phase).toBe('peel')
+      return g
+    }
+
+    it('peels and turns by itself after PEEL_AUTO_AFTER seconds, once', () => {
+      expect(PEEL_AUTO_AFTER).toBe(5)
+      const g = toPeel(ALL_LEARNED)
+      step(g, PEEL_AUTO_AFTER - 0.2)
+      expect(g.phase).toBe('peel')
+      expect(g.pageId).toBe(4)
+      const seen: FoldEventType[] = []
+      step(g, 1.5, seen)
+      expect(g.pageId).toBe(5)
+      expect(seen.filter(t => t === 'peelDone').length).toBe(1)
+      step(g, PEEL_AUTO_AFTER + 1, seen)
+      expect(g.pageId).toBe(5)
+      expect(seen.filter(t => t === 'peelDone').length).toBe(1)
+    })
+
+    it('a manual peel before the deadline turns once and is not repeated by the timer', () => {
+      const g = toPeel(ALL_LEARNED)
+      step(g, 1)
+      const seen: FoldEventType[] = []
+      g.peelDrag(0.8)
+      g.peelRelease()
+      step(g, 1, seen)
+      expect(g.pageId).toBe(5)
+      step(g, PEEL_AUTO_AFTER, seen)
+      expect(g.pageId).toBe(5)
+      expect(seen.filter(t => t === 'peelDone').length).toBe(1)
+    })
+
+    it('the auto-peel timer holds while paused', () => {
+      const g = toPeel(ALL_LEARNED)
+      g.paused = true
+      step(g, PEEL_AUTO_AFTER + 2)
+      expect(g.phase).toBe('peel')
+      g.paused = false
+      step(g, PEEL_AUTO_AFTER + 1)
+      expect(g.pageId).toBe(5)
+    })
+
+    it('an auto-peel settles the peel lesson instead of leaving it hanging', () => {
+      const learned = { ...ALL_LEARNED, peel: false }
+      const g = toPeel(learned)
+      step(g, 0.5)
+      expect(g.lesson.id).toBe('peel')
+      step(g, PEEL_AUTO_AFTER + 1)
+      expect(g.pageId).toBe(5)
+      expect(g.lesson.id).not.toBe('peel')
+      expect(g.learned.peel).toBe(true)
+    })
   })
 
   it('hit-stop freezes the whole simulation for 0.1 s', () => {

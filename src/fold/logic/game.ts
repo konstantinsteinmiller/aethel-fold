@@ -20,7 +20,7 @@ import {
   CATAPULT_FIRST_SHOT, CATAPULT_RATE, CATAPULT_WINDUP, CRUMPLE_TIME, CRUSH_LINGER, ENEMY,
   FLING_RADIUS, FLING_TIME, HERO_HP, HERO_INVULN, HERO_X, HERO_Z, HIT_STOP, LAUNCH_LIFE,
   LAUNCH_SPEED_Y, LAUNCH_SPEED_Z, LESSON_TIME_SCALE, PAGE_CLEAR_DELAY, PAGE_DROP_TIME,
-  PAGE_HALF_D, PAGE_HALF_W, PAGE_TURN_TIME, PEEL_COMPLETE, SCORE, SPAWN_Z, TIME_SCALE_RATE, TORN_LINGER,
+  PAGE_HALF_D, PAGE_HALF_W, PAGE_TURN_TIME, PEEL_AUTO_AFTER, PEEL_COMPLETE, SCORE, SPAWN_Z, TIME_SCALE_RATE, TORN_LINGER,
   FOLD_SNAP_THRESHOLD, LEAPER_HOP_EVERY, LEAPER_HOP_TIME, LEAPER_SHOT_CEILING, LEAPER_VAULT_LAND,
   LEAPER_VAULT_TIME, SLING_COOL, SLING_FLIGHT_BASE, SLING_FLIGHT_PER, SLING_GAIN, SLING_GRAB, SLING_MIN_PULL,
   SLING_RADIUS, SLING_RANGE, SLOW_MODE_SCALE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED, ALMOST, DIFFICULTY, SHELF, SECOND_CHANCE,
@@ -645,8 +645,12 @@ export class FoldGame {
             this.events.emit('peelDone')
             this.loadPage(Math.min(PAGE_COUNT, this.pageId + 1) as PageId)
           }
-        } else if (!this.peeling && this.peel > 0) {
-          this.peel = damp(this.peel, 0, 9, realDt)
+        } else {
+          // The peel is optional: left alone (or not finished) for
+          // PEEL_AUTO_AFTER real seconds, the corner peels itself.
+          if (!atShelf) this.phaseTimer -= realDt
+          if (this.phaseTimer <= 0) this.finishPeel()
+          else if (!this.peeling && this.peel > 0) this.peel = damp(this.peel, 0, 9, realDt)
         }
         break
       case 'crumple':
@@ -1635,7 +1639,7 @@ export class FoldGame {
 
   private exitPage(): void {
     if (this.page.exit === 'peel') {
-      this.setPhase('peel')
+      this.setPhase('peel', PEEL_AUTO_AFTER)
       return
     }
     this.turnFrom = this.pageId
