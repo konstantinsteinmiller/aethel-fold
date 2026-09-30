@@ -196,7 +196,13 @@ The entire game takes place over 6 "Pages" (Levels).
 
 Both new folds work with hold to fold, get the pulsing highlight while someone stands on them, and have a wordless lesson with a ghost-hand demo: `boat` (the hand sweeps the dock flap along the channel while the ghost boat folds up) and `pleat` (the hand runs down the strip while the ghost accordion closes behind it).
 
-**No new enemy.** The sea brings the existing army — knights, brutes, runners, leapers, archers and catapults. The boat and the pleat already change how a column must be answered; a sea creature would have cost atlas frames and a new rule without adding a new decision.
+**The army.** The sea brings the existing army — knights, brutes, runners, leapers, archers and catapults — and, since C12, the **shield-bearer** (below), who heads a column on every fighting page of the book.
+
+**Shield-bearer (C12, books 2 and 3).** A chibi soldier in the look of the victory crowd and the kraken — *scary but cute*: a big round helm with a red crest, big glossy eyes, stubby legs, and a large round paper shield (gold rim, red face, a paper star) held square in front.
+* It marches at **half a knight's pace** (the kind book's pace and slow mode scale it like everyone else), so the column behind it bunches up at its back.
+* **Ballista bolts glance off the shield.** No damage; the bolt is spent on it (it never pierces on into the column behind), with a bright *tink*, gold sparks and a glint, and a small TINK! — BLOCKED! the first time on a page. The ballista alone can't clear its lane: that is the point of an escort.
+* **Everything else takes it like a knight** (one hit): a sling stone (it drops from above), a wall snap, a stamp, a valley, the pleat, the boat, a launch flap, a tear, a flung catapult.
+* No lesson: the tink, the sparks and the word teach it. Book 1 has none; book 2 fields one each on Windmill Hill and the Siege Camp; in book 3 it leads columns on pages 1–4 (onto the boat's channel and the pleat's road) and tumbles off the kraken's slams once it is hurt.
 
 **Pages.**
 1. The Harbour: boat lesson. Knights and runners wade the harbour channel.

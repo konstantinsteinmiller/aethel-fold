@@ -507,7 +507,9 @@ const home3: PageDef = withPar({
     wave([
       post('catapult', -3.1, -3.5, 0.5), post('catapult', 3.1, -3.5, 0.5),
       post('archer', -1.6, -6.1), post('archer', 1.6, -6.1),
-      s('leaper', 0, 1), ...column('runner', 1, 1.6, 3, 0.4), s('brute', 2, 2.2), ...column('knight', 0, 3.4, 3, 0.5),
+      s('leaper', 0, 1), ...column('runner', 1, 1.6, 3, 0.4), s('brute', 2, 2.2),
+      // C12: the first shield-bearer, heading the last column — the ballista's bolts glance off it.
+      s('shieldBearer', 0, 2.8), ...column('knight', 0, 3.4, 3, 0.5),
       post('catapult', -3.1, -3.5, 8), post('catapult', 3.1, -3.5, 9)
     ], 1.2)
   ]
@@ -545,7 +547,7 @@ const home4: PageDef = withPar({
     wave([
       post('catapult', -3.2, -4.15, 0), post('catapult', 3.2, -4.15, 0.5),
       s('brute', 1, 0), s('brute', 2, 1.2), ...column('leaper', 0, 0.6, 3, 0.9),
-      ...column('runner', 1, 2.2, 4, 0.36), ...column('knight', 2, 3, 3, 0.5),
+      ...column('runner', 1, 2.2, 4, 0.36), s('shieldBearer', 2, 2.4), ...column('knight', 2, 3, 3, 0.5),
       post('catapult', 3.2, -4.15, 9)
     ], 1.2)
   ]
@@ -616,8 +618,8 @@ const sea1: PageDef = withPar({
     wave(column('knight', 0, 0, 4, 0.55), 0, 'boat'),
     wave([...column('knight', 1, 0, 3, 0.55), ...column('runner', 2, 1.2, 3, 0.45)], 1.3),
     wave([
-      ...column('knight', 0, 0, 3, 0.5), ...column('runner', 1, 0.8, 3, 0.4), ...column('knight', 2, 1.6, 3, 0.5),
-      s('brute', 0, 2.6)
+      s('shieldBearer', 0, 0), ...column('knight', 0, 0.6, 3, 0.5), ...column('runner', 1, 0.8, 3, 0.4),
+      ...column('knight', 2, 1.6, 3, 0.5), s('brute', 0, 2.6)
     ], 1.2)
   ]
 })
@@ -642,9 +644,11 @@ const sea2: PageDef = withPar({
   tears: [],
   waves: [
     wave(column('knight', 0, 0, 5, 0.5), 0, 'pleat'),
-    wave([...column('knight', 1, 0, 3, 0.6), s('brute', 2, 0.5), ...column('knight', 2, 1.6, 3, 0.55)], 1.3),
     wave([
-      ...column('knight', 0, 0, 4, 0.45), ...column('runner', 0, 2.4, 3, 0.4),
+      s('shieldBearer', 1, 0), ...column('knight', 1, 0.6, 3, 0.6), s('brute', 2, 0.5), ...column('knight', 2, 1.6, 3, 0.55)
+    ], 1.3),
+    wave([
+      s('shieldBearer', 0, 0), ...column('knight', 0, 0.6, 4, 0.45), ...column('runner', 0, 2.4, 3, 0.4),
       s('brute', 1, 1), s('brute', 2, 2.2), ...column('knight', 1, 3, 2, 0.5)
     ], 1.2)
   ]
@@ -676,10 +680,10 @@ const sea3: PageDef = withPar({
       post('archer', 1.3, -6.1), post('archer', 2.9, -6.1), post('catapult', 2.1, -3.2),
       ...column('knight', 0, 1.5, 3, 0.6)
     ], 0),
-    wave([...column('knight', 1, 0, 4, 0.5), ...column('runner', 0, 1.2, 3, 0.4)], 1.3),
+    wave([s('shieldBearer', 1, 0), ...column('knight', 1, 0.6, 4, 0.5), ...column('runner', 0, 1.2, 3, 0.4)], 1.3),
     wave([
       post('catapult', 2.1, -3.2, 0.5), ...column('knight', 1, 0, 3, 0.5), s('brute', 0, 1),
-      ...column('knight', 2, 1.5, 3, 0.5), s('leaper', 0, 3)
+      s('shieldBearer', 2, 0.9), ...column('knight', 2, 1.5, 3, 0.5), s('leaper', 0, 3)
     ], 1.2)
   ]
 })
@@ -711,13 +715,13 @@ const sea4: PageDef = withPar({
       ...column('knight', 0, 1, 4, 0.5), ...column('leaper', 1, 2.6, 2, 1)
     ], 0),
     wave([
-      ...column('runner', 2, 0, 4, 0.38), s('brute', 0, 1), ...column('knight', 0, 1.8, 3, 0.5),
-      post('catapult', -3.2, -4.35, 3), ...column('knight', 1, 3, 3, 0.5)
+      ...column('runner', 2, 0, 4, 0.38), s('brute', 0, 1), s('shieldBearer', 0, 1.3), ...column('knight', 0, 1.8, 3, 0.5),
+      post('catapult', -3.2, -4.35, 3), s('shieldBearer', 1, 2.4), ...column('knight', 1, 3, 3, 0.5)
     ], 1.4),
     wave([
       post('catapult', -3.2, -4.35, 0), post('catapult', 3.2, -4.35, 0.5),
       s('brute', 1, 0), s('brute', 2, 1.2), ...column('leaper', 0, 0.6, 2, 0.9),
-      ...column('knight', 0, 2.2, 4, 0.45), ...column('runner', 1, 3, 3, 0.36),
+      ...column('knight', 0, 2.2, 4, 0.45), s('shieldBearer', 1, 2.4), ...column('runner', 1, 3, 3, 0.36),
       post('catapult', 3.2, -4.35, 9)
     ], 1.2)
   ]
@@ -732,7 +736,7 @@ const sea5: PageDef = withPar({
   boss: 'kraken',
   introDelay: 0.5,
   sling: SLING,
-  stomp: ['knight', 'runner', 'knight', 'brute'],
+  stomp: ['knight', 'runner', 'shieldBearer', 'brute'],
   lanes: [lane(0, 0.2, 0.5), lane(-2.8, 0.25, 1.4), lane(2.8, 0.25, 2.4)],
   folds: [
     wallLine('d5-shield', -2.5, 2.5, 4.2, 0.85, { structure: 'shield', hold: 2.8 }),

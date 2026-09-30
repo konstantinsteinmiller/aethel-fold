@@ -220,6 +220,7 @@ export default {
       'thwack': 'THWACK!',
       'boing': 'BOING!',
       'twang': 'TWANG!',
+      'tink': 'TINK!',
       'flap': 'FLAP!',
       'almostTitle': 'ALMOST!',
       'almost': '{n} soldier from a clear! | {n} soldiers from a clear!',

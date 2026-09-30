@@ -216,6 +216,7 @@ export default {
       'thwack': 'ZACK!',
       'boing': 'BOING!',
       'twang': 'SCHWIRR!',
+      'tink': 'PLING!',
       'flap': 'FLATTER!',
       'almostTitle': 'FAST!',
       'almost': 'Nur noch {n} Soldat bis zum Sieg! | Nur noch {n} Soldaten bis zum Sieg!',

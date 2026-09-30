@@ -75,6 +75,14 @@ export const KILL_BOLT = 7
 /** Book 3: capsized by the boat. */
 export const KILL_CAPSIZE = 8
 
+/**
+ * `blocked` with c = BLOCK_BEARER (C12): a ballista bolt glanced off a
+ * shield-bearer's shield and was spent. a = projectile slot, b = 1 on the
+ * first such block of the page (the view's big word), x/z = the shield.
+ * (c = 1 arrow, 2 boulder on a raised wall; 3 the dragon's fire, 5 the kraken's ink.)
+ */
+export const BLOCK_BEARER = 6
+
 export interface FoldEvent {
   type: FoldEventType
   a: number

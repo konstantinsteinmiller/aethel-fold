@@ -107,15 +107,32 @@ export interface EnemyTuning {
   radius: number
 }
 
-export const ENEMY: Record<'knight' | 'brute' | 'archer' | 'catapult' | 'runner' | 'leaper', EnemyTuning> = {
-  knight: { speed: 0.95, hp: 1, size: 1, score: 100, launchable: true, bash: 1, bashRate: 1.1, hitStop: false, radius: 0.34 },
+/**
+ * Shield-bearers (C12) march at this share of a knight's pace. Their speed is
+ * `ENEMY.knight.speed × SHIELD_BEARER_PACE`, and like every marcher it is then
+ * scaled by the book's adaptive pace (`FoldGame.difficulty`) and the slow-mode
+ * clock, never by its own rule.
+ */
+export const SHIELD_BEARER_PACE = 0.5
+const KNIGHT_SPEED = 0.95
+
+export const ENEMY: Record<'knight' | 'brute' | 'archer' | 'catapult' | 'runner' | 'leaper' | 'shieldBearer', EnemyTuning> = {
+  knight: { speed: KNIGHT_SPEED, hp: 1, size: 1, score: 100, launchable: true, bash: 1, bashRate: 1.1, hitStop: false, radius: 0.34 },
   brute: { speed: 0.6, hp: 3, size: 1.55, score: 250, launchable: false, bash: 2, bashRate: 1.4, hitStop: true, radius: 0.55 },
   archer: { speed: 0, hp: 1, size: 1, score: 150, launchable: true, bash: 0, bashRate: 0, hitStop: false, radius: 0.34 },
   catapult: { speed: 0, hp: 1, size: 1.3, score: 300, launchable: true, bash: 0, bashRate: 0, hitStop: true, radius: 0.6 },
   // Twice a knight's pace: the wall has to be up *before* it arrives.
   runner: { speed: 1.95, hp: 1, size: 0.86, score: 120, launchable: true, bash: 1, bashRate: 0.8, hitStop: false, radius: 0.3 },
   // Walls don't hold it (it vaults them) — the sling, a valley or a launch flap do.
-  leaper: { speed: 0.8, hp: 1, size: 1, score: 200, launchable: true, bash: 0, bashRate: 0, hitStop: false, radius: 0.34 }
+  leaper: { speed: 0.8, hp: 1, size: 1, score: 200, launchable: true, bash: 0, bashRate: 0, hitStop: false, radius: 0.34 },
+  // C12: bolts glance off its shield (and are spent on it); one sling stone or
+  // any fold takes it like a knight. Its base points (150, an archer's) are the
+  // par rule's input like every other enemy's: slow, but the ballista can't
+  // answer it, so a fold, the boat or the sling has to.
+  shieldBearer: {
+    speed: KNIGHT_SPEED * SHIELD_BEARER_PACE, hp: 1, size: 1.1, score: 150, launchable: true, bash: 1, bashRate: 1.1,
+    hitStop: false, radius: 0.4
+  }
 }
 
 /** Leapers: seconds between zig-zag hops, hop and vault flight times. */

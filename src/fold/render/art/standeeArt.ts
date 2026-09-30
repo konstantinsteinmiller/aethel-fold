@@ -39,13 +39,16 @@ export type FrameName =
   | 'personGreen0' | 'personGreen1' | 'personYellow0' | 'personYellow1'
   | 'crushed' | 'scrap'
   | 'bat0' | 'bat1'
+  // C12: the shield-bearer (books 2 and 3), appended so the older cells keep their places.
+  | 'bearer0' | 'bearer1' | 'bearerBlock' | 'bearerFlail'
 
 const ORDER: FrameName[] = [
   'knight0', 'knight1', 'knightFlail', 'brute0', 'brute1', 'bruteFlail', 'archer0', 'archerDraw',
   'hero0', 'heroCheer', 'heroCower', 'heroHit', 'heroWalk', 'crushed', 'scrap',
   'personRed0', 'personRed1', 'personBlue0', 'personBlue1', 'personGreen0', 'personGreen1', 'personYellow0', 'personYellow1',
   'runner0', 'runner1', 'runnerFlail', 'leaper0', 'leaper1', 'leaperJump', 'leaperFlail',
-  'bat0', 'bat1'
+  'bat0', 'bat1',
+  'bearer0', 'bearer1', 'bearerBlock', 'bearerFlail'
 ]
 
 /** The hero's cells: repainted together when the look changes. */
@@ -86,14 +89,16 @@ export interface FrameUV {
 
 /**
  * Frames no book-1 page shows until its victory: the cheering crowd and book 2's
- * runners and leapers. `createStandeeAtlas` leaves their cells blank so the
+ * runners, leapers and shield-bearers (the bearers march in books 2 and 3 only). `createStandeeAtlas` leaves their cells blank so the
  * boot only paints what page 1 can show (roadmap #13); `paintDeferred` fills
  * them in later (idle after the first input, or at once when a book-2 page or
  * the victory crowd needs them). Blank cells are never on screen before then.
  */
 const DEFERRED: ReadonlySet<FrameName> = new Set<FrameName>([
   'personRed0', 'personRed1', 'personBlue0', 'personBlue1', 'personGreen0', 'personGreen1', 'personYellow0', 'personYellow1',
-  'runner0', 'runner1', 'runnerFlail', 'leaper0', 'leaper1', 'leaperJump', 'leaperFlail'
+  'runner0', 'runner1', 'runnerFlail', 'leaper0', 'leaper1', 'leaperJump', 'leaperFlail',
+  // C12: shield-bearers march only in books 2 and 3.
+  'bearer0', 'bearer1', 'bearerBlock', 'bearerFlail'
 ])
 
 export interface StandeeAtlas {
@@ -499,6 +504,134 @@ const person = (ctx: CanvasRenderingContext2D, body: string, armsUp: boolean): v
   ctx.restore()
 }
 
+/** A five-pointed star of radius `r` (the shield's emblem). */
+const star = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, w: number): void => {
+  const pts: number[] = []
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i / 10) * Math.PI * 2
+    const k = i % 2 ? r * 0.45 : r
+    pts.push(x + Math.cos(a) * k, y + Math.sin(a) * k)
+  }
+  poly(ctx, pts, fill, w)
+}
+
+/**
+ * The shield-bearer (C12), in the chibi look of the victory crowd and the
+ * kraken — "scary but cute": a big round helm with a red crest, big glossy
+ * eyes, stubby legs, and a large round paper shield held square in front
+ * (gold rim, red face, a paper star, a gold boss). `pose` 0/1 are the two
+ * walk steps; 'block' raises the shield with the eyes squeezed shut and a
+ * glint on the rim (a bolt just glanced off); 'flail' flings it askew.
+ */
+const bearer = (ctx: CanvasRenderingContext2D, pose: 0 | 1 | 'block' | 'flail'): void => {
+  const block = pose === 'block'
+  const flail = pose === 'flail'
+  const step = pose === 1 ? 1 : 0
+  ctx.save()
+  ctx.translate(64, 182)
+  ctx.scale(0.94, 0.94)
+  ctx.translate(-64, -182)
+  // Stubby legs and round boots.
+  const spread = step ? 8 : flail ? 13 : 2
+  const lift = step ? -6 : flail ? -12 : 0
+  rrect(ctx, 64 - 17 - spread, 150, 13, 24, 5, HEX.enemySteel)
+  rrect(ctx, 64 + 4 + spread, 150 + lift, 13, 24, 5, HEX.enemySteel)
+  ellipse(ctx, 64 - 11 - spread, 176, 11, 6, HEX.woodDark)
+  ellipse(ctx, 64 + 11 + spread, 176 + lift, 11, 6, HEX.woodDark)
+  // A round little body in the enemy's red tabard.
+  ellipse(ctx, 64, 132, 27, 25, HEX.enemyRed)
+  ellipse(ctx, 64, 147, 22, 5, HEX.enemyRedDark, 0)
+  // A short spear over the shoulder (viewer's left), behind the shield.
+  ctx.save()
+  ctx.translate(34, 118)
+  ctx.rotate(flail ? -1.1 : block ? -0.1 : -0.35 + step * 0.08)
+  rrect(ctx, -3, -58, 6, 70, 3, HEX.wood, 2.6)
+  poly(ctx, [-7, -56, 0, -76, 7, -56], HEX.heroSteel, 2.6)
+  ellipse(ctx, 0, 6, 7, 7, HEX.enemySteel, 2.6)
+  ctx.restore()
+  // The head: a big round helm with a red paper crest and a brim, the face in it.
+  const hy = flail ? 66 : block ? 72 : 68 + step * 2
+  ctx.save()
+  if (flail) {
+    ctx.translate(64, hy)
+    ctx.rotate(0.22)
+    ctx.translate(-64, -hy)
+  }
+  ctx.beginPath()
+  ctx.moveTo(40, hy - 22)
+  ctx.quadraticCurveTo(64, hy - 62, 88, hy - 22)
+  ctx.quadraticCurveTo(64, hy - 36, 40, hy - 22)
+  fillStroke(ctx, HEX.enemyRed, 2.8)
+  ellipse(ctx, 64, hy, 36, 34, HEX.enemySteel)
+  ellipse(ctx, 64, hy + 7, 27, 22, HEX.skin, 2.8)
+  rrect(ctx, 30, hy - 17, 68, 10, 5, HEX.steelDark, 2.8)
+  ellipse(ctx, 50, hy - 20, 7, 3, css('paperWhite', 0.8), 0)
+  // Big glossy eyes (squeezed shut behind a block), rosy cheeks, a small mouth.
+  const ey = hy + 5
+  if (block) {
+    for (const side of [-1, 1]) {
+      ctx.beginPath()
+      ctx.moveTo(64 + side * 4, ey - 5)
+      ctx.lineTo(64 + side * 13, ey)
+      ctx.lineTo(64 + side * 4, ey + 5)
+      stroke(ctx, 3.2)
+    }
+    ellipse(ctx, 64, ey + 15, 3.5, 3, INK, 0)
+  } else {
+    for (const side of [-1, 1]) {
+      const ex = 64 + side * 11
+      ellipse(ctx, ex, ey, 8.5, 10, HEX.krakenEye, 2.4)
+      ellipse(ctx, ex + side * 0.5, ey + 1.5, flail ? 3.5 : 6, flail ? 4 : 7.5, HEX.krakenPupil, 0)
+      ellipse(ctx, ex - 2.2, ey - 2.6, 2.4, 2.4, HEX.paperWhite, 0)
+      ellipse(ctx, ex + 2.4, ey + 3.4, 1.1, 1.1, HEX.paperWhite, 0)
+    }
+    if (flail) ellipse(ctx, 64, ey + 16, 4.5, 4, INK, 0)
+    else {
+      ctx.beginPath()
+      ctx.moveTo(60, ey + 15)
+      ctx.quadraticCurveTo(64, ey + 18, 68, ey + 15)
+      stroke(ctx, 2.4)
+    }
+  }
+  ellipse(ctx, 45, ey + 11, 5, 3, css('c7', 0.7), 0)
+  ellipse(ctx, 83, ey + 11, 5, 3, css('c7', 0.7), 0)
+  ctx.restore()
+  // The big round paper shield, held square in front (raised on a block, flung askew in a flail).
+  const sx = flail ? 88 : 68
+  const sy = block ? 118 : flail ? 124 : 132 + step * 2
+  ctx.save()
+  ctx.translate(sx, sy)
+  ctx.rotate(flail ? 0.7 : block ? -0.08 : 0)
+  ellipse(ctx, 0, 0, 36, 35, HEX.gold)
+  ellipse(ctx, 0, 0, 29, 28, HEX.enemyRed, 2.6)
+  star(ctx, 0, 0, 17, HEX.paperWhite, 2.4)
+  ellipse(ctx, 0, 0, 5, 5, HEX.gold, 2.2)
+  // Paper shine along the upper rim.
+  ctx.beginPath()
+  ctx.arc(0, 0, 23, -2.6, -1.7)
+  ctx.lineWidth = 3.5
+  ctx.strokeStyle = css('paperWhite', 0.75)
+  ctx.stroke()
+  if (block) {
+    // The glint where the bolt glanced off.
+    star(ctx, 18, -22, 9, HEX.highlightHot, 2)
+    for (let i = 0; i < 3; i++) {
+      const a = -1.9 + i * 0.55
+      ctx.beginPath()
+      ctx.moveTo(18 + Math.cos(a) * 12, -22 + Math.sin(a) * 12)
+      ctx.lineTo(18 + Math.cos(a) * 20, -22 + Math.sin(a) * 20)
+      stroke(ctx, 2.6)
+    }
+  }
+  ctx.restore()
+  // Mitts on the shield's rim.
+  if (!flail) {
+    ellipse(ctx, sx - 31, sy + 6, 7, 7, HEX.enemySteel, 2.6)
+    ellipse(ctx, sx + 31, sy + 6, 7, 7, HEX.enemySteel, 2.6)
+  }
+  ctx.restore()
+}
+
 const crushed: Painter = (ctx) => {
   // A flattened knight: a splat of red paper with a squashed helm.
   ctx.save()
@@ -554,7 +687,11 @@ const PAINTERS: Record<FrameName, Painter> = {
   crushed,
   scrap,
   bat0: (c) => bat(c, false),
-  bat1: (c) => bat(c, true)
+  bat1: (c) => bat(c, true),
+  bearer0: (c) => bearer(c, 0),
+  bearer1: (c) => bearer(c, 1),
+  bearerBlock: (c) => bearer(c, 'block'),
+  bearerFlail: (c) => bearer(c, 'flail')
 }
 
 /** Draw `paint` into a cell with the die-cut white paper margin around it. */
