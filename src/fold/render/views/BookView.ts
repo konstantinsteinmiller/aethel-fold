@@ -125,7 +125,9 @@ export class BookView {
     this.deskTex = paintDesk()
     const deskMat = createPaperMaterial({ map: this.deskTex, grain: 0.03 })
     this.materials.push(deskMat)
-    const desk = new Mesh(new PlaneGeometry(90, 70), deskMat)
+    // Subdivided: one 90-unit triangle pair inks its own diagonal (a depth-precision crease) once the camera
+    // lowers toward the shelf.
+    const desk = new Mesh(new PlaneGeometry(90, 70, 18, 14), deskMat)
     desk.rotation.x = -Math.PI / 2
     desk.position.set(-6, DESK_Y, -4)
     desk.receiveShadow = true
@@ -182,11 +184,12 @@ export class BookView {
     left.receiveShadow = true
     this.group.add(left)
 
-    // Desk props, well outside the page so they never cover play.
+    // Desk props, well outside the page so they never cover play — and clear
+    // of the bookshelf's corner right of the book (SHELF in config.ts).
     const propMat = createPaperMaterial({ vertexColors: true, grain: 0.05, doubleSided: true, backTint: '#d8d0c0' })
     this.materials.push(propMat)
     const crane = new Mesh(craneGeometry('c3'), propMat)
-    crane.position.set(9.4, DESK_Y, -3.2)
+    crane.position.set(12.9, DESK_Y, 5.4)
     crane.rotation.y = -0.7
     crane.scale.setScalar(1.25)
     crane.castShadow = true
@@ -203,7 +206,7 @@ export class BookView {
     boat.castShadow = true
     this.group.add(boat)
     const pencil = new Mesh(pencilGeometry(), propMat)
-    pencil.position.set(9.2, DESK_Y + 0.09, 0.8)
+    pencil.position.set(10.3, DESK_Y + 0.09, 2.7)
     pencil.rotation.y = 1.1
     pencil.castShadow = true
     this.group.add(pencil)

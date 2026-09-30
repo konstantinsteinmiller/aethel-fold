@@ -122,3 +122,45 @@ for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }, { wi
     await page.screenshot({ path: `test-results/star-ribbon-${vp.width}x${vp.height}.png` })
   })
 }
+
+// The desk bookshelf's zoom button (roadmap #2) sits in the HUD's right column,
+// under mute and settings — only where the camera can't already see the shelf.
+for (const vp of [{ width: 320, height: 658, button: true }, { width: 390, height: 844, button: true }, { width: 658, height: 320, button: false }, { width: 844, height: 390, button: false }]) {
+  test(`the shelf zoom button fits the HUD grid at ${vp.width}×${vp.height}`, async ({ page }) => {
+    await page.setViewportSize({ width: vp.width, height: vp.height })
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('__seeded')) return
+      sessionStorage.setItem('__seeded', '1')
+      localStorage.setItem('aethel_state', JSON.stringify({
+        user_language: 'de', fold_wins: 1, fold_cleared: 6, fold_run: { score: 44720, hits: 0, time: 300 },
+        fold_best: { score: 44720, time: 300 }, fold_page: 3
+      }))
+    })
+    await page.goto('/')
+    await waitForGame(page)
+    await page.waitForTimeout(800)
+    const zoom = page.getByTestId('shelf-zoom')
+    if (!vp.button) {
+      await expect(zoom).toHaveCount(0)
+      expect(await page.evaluate(() => window.__fold!.state().shelf.inView)).toBe(true)
+      return
+    }
+    await expect(zoom).toBeVisible()
+    const b = await page.evaluate(() => {
+      const r = (sel: string) => {
+        const e = document.querySelector(sel)!.getBoundingClientRect()
+        return { x: e.x, y: e.y, w: e.width, h: e.height }
+      }
+      return { zoom: r('[data-testid="shelf-zoom"]'), page: r('.page-badge'), hearts: r('.hearts'), score: r('.score__tag'), row: r('.hud-right__row') }
+    })
+    const overlap = (a: any, c: any) => a.x < c.x + c.w && c.x < a.x + a.w && a.y < c.y + c.h && c.y < a.y + a.h
+    expect(b.zoom.w).toBeGreaterThanOrEqual(36)
+    expect(b.zoom.x).toBeGreaterThanOrEqual(0)
+    expect(b.zoom.x + b.zoom.w).toBeLessThanOrEqual(vp.width + 1)
+    for (const k of ['page', 'hearts', 'score', 'row'] as const) expect(overlap(b.zoom, b[k]), `zoom vs ${k}`).toBe(false)
+    // It never sits over the book: its bottom stays above the page's top corners.
+    const top = await page.evaluate(() => Math.min(window.__fold!.screenOf(-5, -7).y, window.__fold!.screenOf(5, -7).y))
+    expect(b.zoom.y + b.zoom.h, 'zoom button vs page top').toBeLessThanOrEqual(top + 0.5)
+    await page.screenshot({ path: `test-results/shelf-zoom-${vp.width}x${vp.height}.png` })
+  })
+}

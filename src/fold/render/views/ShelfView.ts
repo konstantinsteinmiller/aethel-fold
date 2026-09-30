@@ -1,0 +1,244 @@
+/**
+ * The desk bookshelf (roadmap #2): a small cardboard shelf right of the book
+ * with one standing book per book of the game and a silhouette for the one
+ * still to come. Chapter select without a menu: the camera goes out to it
+ * (`DeskCamera.setShelf`), a tap pulls a book out and a little star card
+ * rises from it, a second tap opens it (see `logic/shelf.ts`).
+ *
+ * Draw cost: the shelf body plus one mesh per book (one texture each: spine
+ * art and two swatches, see `SPINE_UV`), plus the star card while a book is
+ * pulled out — five draws at most, none at all while the shelf is out of
+ * view (`group.visible = false`). Textures repaint only when the shelf's
+ * `rev` changes; the per-frame update eases a few numbers.
+ *
+ * Room to grow: `extras` sits on the top board for later desk objects (a
+ * secrets counter, a Dragon Rush entry).
+ */
+
+import { BufferGeometry, Group, Mesh, PlaneGeometry, type CanvasTexture } from 'three'
+import { SHELF } from '../../logic/config'
+import type { FoldEvent } from '../../logic/events'
+import type { FoldGame } from '../../logic/game'
+import { shelfHalfWidth, slotAnchor, slotX, type ShelfPoint, type ShelfState } from '../../logic/shelf'
+import { PaperBuilder } from '../paperGeometry'
+import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
+import { SPINE_UV, cardCanvas, paintSpine, paintStarCard, spineCanvas } from '../art/shelfArt'
+import { toTexture } from '../art/canvas'
+
+const CARD_W = 2.1
+const CARD_H = (CARD_W * 320) / 256
+
+/** One standing book: a box whose faces sample the spine texture (spine art, cover and page swatches). */
+const bookGeometry = (): BufferGeometry => {
+  const b = new PaperBuilder()
+  const x = SHELF.bookW / 2
+  const h = SHELF.bookH
+  const z = SHELF.bookD / 2
+  const S = SPINE_UV.spine
+  const C = SPINE_UV.cover
+  const P = SPINE_UV.pages
+  const c: [number, number] = [C.u, C.v]
+  const p: [number, number] = [P.u, P.v]
+  const flat = (q: [number, number]): [[number, number], [number, number], [number, number], [number, number]] => [q, q, q, q]
+  // Spine (+z, toward the player).
+  b.quad([-x, 0, z], [x, 0, z], [x, h, z], [-x, h, z], 'paperWhite', [[S.u0, S.v0], [S.u1, S.v0], [S.u1, S.v1], [S.u0, S.v1]])
+  // Fore-edge (−z), top and bottom: the page block.
+  b.quad([x, 0, -z], [-x, 0, -z], [-x, h, -z], [x, h, -z], 'paperWhite', flat(p))
+  b.quad([-x, h, z], [x, h, z], [x, h, -z], [-x, h, -z], 'paperWhite', flat(p))
+  b.quad([-x, 0, -z], [x, 0, -z], [x, 0, z], [-x, 0, z], 'paperWhite', flat(p))
+  // Cover boards (±x).
+  b.quad([x, 0, z], [x, 0, -z], [x, h, -z], [x, h, z], 'paperWhite', flat(c))
+  b.quad([-x, 0, -z], [-x, 0, z], [-x, h, z], [-x, h, -z], 'paperWhite', flat(c))
+  return b.build()
+}
+
+/** The cardboard shelf: bottom and top boards, two sides and a back. */
+const shelfGeometry = (): BufferGeometry => {
+  const b = new PaperBuilder()
+  const hw = shelfHalfWidth()
+  const t = SHELF.board
+  const d = SHELF.bookD + 0.3
+  const innerH = SHELF.bookH + 0.28
+  b.push().translate(0, 0, 0).box(hw * 2, t, d, 'underlayer', 'parchmentEdge', 'underlayerInk', 'parchmentEdge').pop()
+  b.push().translate(0, t + innerH, 0).box(hw * 2, t, d, 'underlayer', 'parchmentEdge', 'underlayer', 'parchmentEdge').pop()
+  for (const sx of [-1, 1]) {
+    b.push().translate(sx * (hw - t / 2), t, 0).box(t, innerH, d, 'underlayer', 'parchmentEdge', 'underlayer', 'parchmentEdge').pop()
+  }
+  b.push().translate(0, t, -d / 2 + t / 2).box(hw * 2 - t * 2, innerH, t, 'underlayerInk', 'parchmentEdge', 'underlayerInk', 'underlayer').pop()
+  // A little dog-eared label strip on the bottom board's front edge.
+  b.push().translate(0, 0.02, d / 2 + 0.005).box(hw * 1.1, t * 0.7, 0.02, 'parchmentLight').pop()
+  return b.build()
+}
+
+interface Book {
+  holder: Group
+  mesh: Mesh
+  mat: PaperMaterial
+  tex: CanvasTexture
+  ctx: CanvasRenderingContext2D
+  /** Eased 0…1 pulled out. */
+  pull: number
+  /** Shake left when a locked book is tapped (1 → 0). */
+  nope: number
+}
+
+export class ShelfView {
+  readonly group = new Group()
+  /** Leans back so the spines face the steep desk camera. */
+  private readonly rack = new Group()
+  /** Room on the top board for later desk objects (roadmap #15, #16). */
+  readonly extras = new Group()
+  private readonly books: Book[] = []
+  private readonly body: Mesh
+  private readonly bodyMat: PaperMaterial
+  private readonly card: Mesh
+  private readonly cardMat: PaperMaterial
+  private readonly cardTex: CanvasTexture
+  private readonly cardCtx: CanvasRenderingContext2D
+  private cardK = 0
+  private cardSlot = -1
+  private rev = -1
+  private time = 0
+  private readonly pt: ShelfPoint = { x: 0, y: 0, z: 0 }
+
+  constructor() {
+    this.group.position.set(SHELF.x, SHELF.y, SHELF.z)
+    this.group.rotation.y = SHELF.yaw
+    this.rack.rotation.x = SHELF.lean
+    this.group.add(this.rack)
+
+    this.bodyMat = createPaperMaterial({ vertexColors: true, grain: 0.09 })
+    this.body = new Mesh(shelfGeometry(), this.bodyMat)
+    this.body.castShadow = true
+    this.body.receiveShadow = true
+    this.rack.add(this.body)
+    this.extras.position.set(0, SHELF.board * 2 + SHELF.bookH + 0.28, 0)
+    this.rack.add(this.extras)
+
+    const geo = bookGeometry()
+    geo.userData.shared = true
+    for (let i = 0; i < SHELF.slots; i++) {
+      const [c, ctx] = spineCanvas()
+      const tex = toTexture(c)
+      const mat = createPaperMaterial({ map: tex, grain: 0.05 })
+      const mesh = new Mesh(geo, mat)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      const holder = new Group()
+      holder.position.set(slotX(i), SHELF.board, 0)
+      holder.add(mesh)
+      this.rack.add(holder)
+      this.books.push({ holder, mesh, mat, tex, ctx, pull: 0, nope: 0 })
+    }
+
+    const [cc, cctx] = cardCanvas()
+    this.cardCtx = cctx
+    this.cardTex = toTexture(cc)
+    this.cardMat = createPaperMaterial({ map: this.cardTex, grain: 0.04, doubleSided: true })
+    const cg = new PlaneGeometry(CARD_W, CARD_H)
+    cg.translate(0, CARD_H / 2, 0)
+    this.card = new Mesh(cg, this.cardMat)
+    this.card.castShadow = true
+    this.card.visible = false
+    this.rack.add(this.card)
+
+    this.group.visible = false
+    this.group.userData.perfTag = 'fold.shelf'
+  }
+
+  /** Repaint spines (and the card) for the shelf's current state. Events only. */
+  private sync(s: ShelfState): void {
+    this.rev = s.rev
+    for (let i = 0; i < this.books.length; i++) {
+      const slot = s.slots[i]
+      if (!slot) continue
+      paintSpine(this.books[i]!.ctx, slot)
+      this.books[i]!.tex.needsUpdate = true
+    }
+    this.cardSlot = -1
+  }
+
+  onEvent(e: FoldEvent): void {
+    if (e.type === 'shelfSelect' && e.b === 0) {
+      const b = this.books[e.a]
+      if (b) b.nope = 1
+    }
+  }
+
+  /**
+   * Per frame (no allocation). `camK` is the camera's blend toward the shelf
+   * pose: the shelf is drawn only while the camera can see it.
+   */
+  update(g: FoldGame, dt: number, camK: number): void {
+    const s = g.shelf
+    const show = s.available && (s.inView || s.open || camK > 0.001)
+    if (this.group.visible !== show) this.group.visible = show
+    if (!show) return
+    this.time += dt
+    if (s.rev !== this.rev) this.sync(s)
+    const ease = 1 - Math.exp(-dt * 11)
+    // The glow says "tap me": out at the shelf, or on a won book's victory page where it stands in view.
+    const glow = s.open || (s.inView && g.phase === 'victory')
+    for (let i = 0; i < this.books.length; i++) {
+      const b = this.books[i]!
+      const want = s.open && s.selected === i ? 1 : 0
+      b.pull += (want - b.pull) * ease
+      if (Math.abs(want - b.pull) < 1e-4) b.pull = want
+      b.nope = Math.max(0, b.nope - dt * 2.4)
+      const h = b.holder
+      h.position.z = b.pull * SHELF.pull
+      h.position.y = SHELF.board + b.pull * 0.06
+      // Pulled out, it tips toward the player; a locked one shakes its head.
+      h.rotation.x = b.pull * 0.2
+      h.rotation.z = Math.sin(this.time * 38) * b.nope * 0.09
+      const hl = glow && i === s.highlight ? 1 : 0
+      if (b.mat.uniforms.uHighlight.value !== hl) b.mat.uniforms.uHighlight.value = hl
+    }
+    // The star card rises out of the pulled-out book.
+    const sel = s.open ? s.selected : -1
+    if (sel >= 0 && sel !== this.cardSlot && s.slots[sel]) {
+      this.cardSlot = sel
+      paintStarCard(this.cardCtx, s.slots[sel]!)
+      this.cardTex.needsUpdate = true
+    }
+    const wantCard = sel >= 0 ? 1 : 0
+    this.cardK += (wantCard - this.cardK) * ease
+    if (Math.abs(wantCard - this.cardK) < 1e-3) this.cardK = wantCard
+    const on = this.cardK > 0.01 && this.cardSlot >= 0
+    if (this.card.visible !== on) this.card.visible = on
+    if (on) {
+      const k = this.cardK
+      const b = this.books[this.cardSlot]!
+      this.card.position.set(slotX(this.cardSlot), SHELF.board + SHELF.bookH * (0.55 + 0.45 * k) + 0.1, SHELF.bookD / 2 + b.pull * SHELF.pull - 0.25)
+      this.card.rotation.x = 0.35 * k
+      this.card.scale.setScalar(0.25 + 0.75 * k)
+    }
+  }
+
+  /** Eased pull of a slot (for picking). */
+  pullOf(i: number): number {
+    return this.books[i]?.pull ?? 0
+  }
+
+  /** Page-space point on a slot's spine (`up` 0 bottom … 1 top), as currently drawn. */
+  anchorOf(i: number, up: number): ShelfPoint {
+    return slotAnchor(i, this.pt, this.pullOf(i), up)
+  }
+
+  get slots(): number {
+    return this.books.length
+  }
+
+  dispose(): void {
+    this.body.geometry.dispose()
+    this.bodyMat.dispose()
+    this.books[0]?.mesh.geometry.dispose()
+    for (const b of this.books) {
+      b.mat.dispose()
+      b.tex.dispose()
+    }
+    this.card.geometry.dispose()
+    this.cardMat.dispose()
+    this.cardTex.dispose()
+  }
+}

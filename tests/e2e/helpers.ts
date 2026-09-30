@@ -15,6 +15,17 @@ export interface FoldState {
   difficulty: number
   boss: string
   sling: { x: number; z: number; cool: number; shots: number } | null
+  /** The desk bookshelf (roadmap #2). */
+  shelf: {
+    available: boolean
+    inView: boolean
+    open: boolean
+    selected: number
+    highlight: number
+    slots: string[]
+    /** Camera blend toward the shelf pose, 0…1. */
+    camera: number
+  }
 }
 
 declare global {
@@ -25,6 +36,8 @@ declare global {
       clearPage(): void
       fastForward(s: number): void
       screenOf(x: number, z: number, y?: number): { x: number; y: number }
+      shelfScreen(slot: number): { x: number; y: number }
+      toggleShelf(): boolean
       game: any
       engine: any
     }
@@ -33,7 +46,7 @@ declare global {
 
 export const ALL_LESSONS = {
   swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true, crease: true, core: true, frog: true,
-  crush: true, sling: true, leaper: true, ballista: true
+  crush: true, sling: true, leaper: true, ballista: true, shelf: true
 }
 
 /** Seed `aethel_state` before the app boots (plain web build). */
@@ -69,6 +82,12 @@ export const swipe = async (page: Page, from: [number, number], to: [number, num
     await page.mouse.move(a.x + ((b.x - a.x) * i) / steps, a.y + ((b.y - a.y) * i) / steps)
   }
   await page.mouse.up()
+}
+
+/** Tap a book on the desk bookshelf where it is drawn now. */
+export const tapShelf = async (page: Page, slot: number): Promise<void> => {
+  const p = await page.evaluate((i) => window.__fold!.shelfScreen(i), slot)
+  await page.mouse.click(p.x, p.y)
 }
 
 export const readSave = (page: Page): Promise<Record<string, any> | null> =>

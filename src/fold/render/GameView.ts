@@ -12,11 +12,12 @@ import { Color, Scene, SpotLight, Vector3, type WebGLRenderTarget } from 'three'
 import type { FoldGame } from '../logic/game'
 import type { FoldEvent } from '../logic/events'
 import { KILL_BOLT, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from '../logic/events'
-import { CASTLE, PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME } from '../logic/config'
+import { CASTLE, PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME, PAGE_HALF_D, PAGE_HALF_W } from '../logic/config'
 import { PAGE_COUNT, pageDef } from '../logic/pages'
 import type { PageDef, PageId } from '../logic/types'
 import { createFold } from '../logic/folds'
-import { clamp01, easeInOutCubic, smoothstep } from '../logic/math'
+import { clamp01, easeInOutCubic, segmentDistance, smoothstep, v2 } from '../logic/math'
+import { SHELF_DESK, SHELF_NONE } from '../logic/shelf'
 import { FoldRenderer } from './FoldRenderer'
 import { DeskCamera, type CameraFrame } from './camera'
 import { paperGlobals } from './paperMaterial'
@@ -27,6 +28,7 @@ import { UnitsView, type SurfaceSampler } from './views/UnitsView'
 import { ProjectilesView } from './views/ProjectilesView'
 import { Effects } from './views/Effects'
 import { SheetView } from './views/SheetView'
+import { ShelfView } from './views/ShelfView'
 import { createStandeeAtlas, type StandeeAtlas } from './art/standeeArt'
 import { createSpriteTextures, type SpriteTextures } from './art/spriteArt'
 import { paintPlainSheet } from './art/pageArt'
@@ -54,6 +56,8 @@ export class GameView {
   readonly projectiles: ProjectilesView
   readonly effects: Effects
   readonly sheet: SheetView
+  /** The desk bookshelf (roadmap #2). */
+  readonly shelf: ShelfView
   readonly lamp: SpotLight
   readonly atlas: StandeeAtlas
   readonly sprites: SpriteTextures
@@ -107,6 +111,8 @@ export class GameView {
     this.scene.add(this.effects.group)
     this.sheet = new SheetView(paintPlainSheet(99))
     this.scene.add(this.sheet.mesh)
+    this.shelf = new ShelfView()
+    this.scene.add(this.shelf.group)
 
     this.surface = {
       dip: (fold, x, z) => this.page?.dip(fold, x, z) ?? 0,
@@ -146,6 +152,45 @@ export class GameView {
     out.x = cam.position.x + dx * k
     out.z = cam.position.z + dz * k
     return true
+  }
+
+  private readonly pickOut = { x: 0, z: 0 }
+  private readonly segOut = v2()
+
+  /**
+   * What a tap at a screen point hits on the desk: a shelf slot (the nearest
+   * spine within reach), `SHELF_DESK` (the open book) or `SHELF_NONE`. Taps
+   * only (allocation-free all the same).
+   */
+  pickShelf(sx: number, sy: number): number {
+    const sh = this.shelf
+    let best = SHELF_NONE
+    if (sh.group.visible) {
+      let bestD = Infinity
+      const reach = Math.max(24, Math.min(this.width, this.height) * 0.045)
+      for (let i = 0; i < sh.slots; i++) {
+        const a = sh.anchorOf(i, 0.05)
+        this.project(a.x, a.y, a.z, this.sp)
+        const ax = this.sp.x
+        const ay = this.sp.y
+        const b = sh.anchorOf(i, 0.95)
+        this.project(b.x, b.y, b.z, this.sp)
+        // Half the spine's screen width, from its projected height (a spine is ~0.36 as wide as tall).
+        const half = Math.hypot(this.sp.x - ax, this.sp.y - ay) * 0.2
+        const d = segmentDistance(sx, sy, ax, ay, this.sp.x, this.sp.y, this.segOut).x
+        if (d < Math.max(reach, half) && d < bestD) {
+          bestD = d
+          best = i
+        }
+      }
+    }
+    if (best !== SHELF_NONE) return best
+    // The open book: the play page and the turned pages on its left.
+    if (this.unproject(sx, sy, this.pickOut)) {
+      const { x, z } = this.pickOut
+      if (x <= PAGE_HALF_W + 0.3 && x >= -PAGE_HALF_W * 3 - 0.9 && Math.abs(z) <= PAGE_HALF_D + 0.3) return SHELF_DESK
+    }
+    return SHELF_NONE
   }
 
   /** Ground-plane point under the screen position of a world point. */
@@ -259,6 +304,12 @@ export class GameView {
     const g = this.game
     const fx = this.effects
     switch (e.type) {
+      case 'shelfSelect':
+        this.shelf.onEvent(e)
+        break
+      case 'shelfBook':
+        this.desk.kick(0.4)
+        break
       case 'foldSnap': {
         const f = g.folds[e.a]
         if (!f) break
@@ -587,7 +638,10 @@ export class GameView {
     }
 
     this.effects.update(dt)
+    // Out at the shelf or back at the book (real time, whatever the world's clock).
+    this.desk.setShelf(g.shelf.open)
     this.desk.update(dt)
+    this.shelf.update(g, dt, this.desk.shelfK)
 
     // Composite juice.
     this.flash = Math.max(0, this.flash - dt * 2.2)
@@ -649,6 +703,7 @@ export class GameView {
     this.projectiles.dispose()
     this.effects.dispose()
     this.sheet.dispose()
+    this.shelf.dispose()
     this.atlas.dispose()
     this.sprites.dispose()
     this.snapshotRT?.dispose()

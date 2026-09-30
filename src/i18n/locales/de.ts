@@ -142,7 +142,9 @@ export default {
       'dragon': 'Drache',
       'boss': 'Noch {n} Schwachstellen',
       'tryAgain': 'Nochmal!',
-      'almost': 'Fast geschafft'
+      'almost': 'Fast geschafft',
+      'shelf': 'Bücherregal',
+      'backToBook': 'Zurück zum Buch'
     },
     'page': {
       'border': 'Die Grenze',
@@ -216,7 +218,9 @@ export default {
       'ballista': 'Wische den Turm hoch, um die Balliste zu öffnen, dann tippe zum Schießen',
       'crush': 'Tippe auf die Mauer, um sie auf sie herunterzuklappen',
       'sling': 'Zieh die Schleuder zurück, ziele und lass los',
-      'leaper': 'Springer hüpfen über Mauern – triff sie mit der Schleuder!'
+      'leaper': 'Springer hüpfen über Mauern – triff sie mit der Schleuder!',
+      'shelf': 'Tippe ein Buch an, um es anzusehen, und noch einmal, um es zu öffnen',
+      'shelfZoom': 'Hier geht es zu deinem Bücherregal'
     },
     'pause': {
       'title': 'Pause',

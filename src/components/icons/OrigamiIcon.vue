@@ -10,7 +10,7 @@ import { computed } from 'vue'
 export type OrigamiName =
   | 'gear' | 'speaker' | 'speakerMute' | 'heart' | 'heartEmpty' | 'crane' | 'star' | 'close'
   | 'play' | 'restart' | 'book' | 'hand' | 'trophy' | 'clock' | 'frog' | 'check' | 'pause'
-  | 'left' | 'right' | 'plus' | 'minus' | 'vibrate' | 'shake' | 'quality' | 'globe' | 'music'
+  | 'left' | 'right' | 'plus' | 'minus' | 'vibrate' | 'shake' | 'quality' | 'globe' | 'music' | 'shelf'
 
 const props = withDefaults(defineProps<{
   name: OrigamiName
@@ -103,6 +103,12 @@ const dark = computed(() => c.value[1])
     template(v-else-if="name === 'book'")
       path(:fill="lit" d="M6 10c6-2 12-2 18 2v28c-6-4-12-4-18-2z")
       path(:fill="dark" d="M42 10c-6-2-12-2-18 2v28c6-4 12-4 18-2z")
+    //- ── Bookshelf: three standing books on a board ──
+    template(v-else-if="name === 'shelf'")
+      path(:fill="lit" d="M7 12h9v26H7z")
+      path(:fill="dark" d="M18 8h9v30h-9z")
+      path(fill="#e4e9f2" d="M30 14l7-2 6 24-7 2z")
+      path(fill="none" d="M4 40h40")
     //- ── Hand (ghost hand cursor) ──
     template(v-else-if="name === 'hand'")
       path(

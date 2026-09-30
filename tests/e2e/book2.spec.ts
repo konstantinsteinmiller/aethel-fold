@@ -74,7 +74,9 @@ test.describe('Aethel Fold — book 2 (The Homefront)', () => {
     await page.evaluate(() => window.__fold!.game.foldNow(0))
     for (let i = 0; i < 12 && (await state(page)).phase !== 'victory'; i++) await ff(page, 0.5)
     await expect(page.getByTestId('victory-book2')).toBeVisible({ timeout: 5000 })
-    await page.getByTestId('victory-book2').click()
+    // The button pulses (attention), so it is never "stable" at SwiftShader's frame rate; and
+    // left too long, the camera turns to the desk bookshelf and the card goes (roadmap #2).
+    await page.getByTestId('victory-book2').click({ force: true })
     await ff(page, 0.5)
     const s = await state(page)
     expect(s.book).toBe(2)

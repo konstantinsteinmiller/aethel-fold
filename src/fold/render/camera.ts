@@ -7,14 +7,21 @@
  *
  * Juice lives here too: vertical high-frequency shake (GDD §5), a zoom punch
  * on snaps, and slow focus moves for the boss.
+ *
+ * Two poses (roadmap #2): `book` frames the page, `shelf` pulls out and over
+ * so the desk bookshelf right of the book is in the picture too. The camera
+ * eases between them in real time (`setShelf`), whatever the world's time.
  */
 
 import { MathUtils, PerspectiveCamera, Vector3 } from 'three'
-import { PAGE_HALF_D, PAGE_HALF_W } from '../logic/config'
+import { PAGE_HALF_D, PAGE_HALF_W, SHELF } from '../logic/config'
+import { shelfHalfWidth, shelfToWorld, type ShelfPoint } from '../logic/shelf'
 
 /** Pitch below the horizon: steep in portrait, lower in landscape (height-limited). */
 const PITCH_PORTRAIT = MathUtils.degToRad(67)
 const PITCH_LANDSCAPE = MathUtils.degToRad(52)
+/** Out at the shelf the camera lowers to look at the spines rather than down on the book tops. */
+const PITCH_SHELF = MathUtils.degToRad(49)
 const FOV = 30
 
 export interface CameraFrame {
@@ -22,6 +29,31 @@ export interface CameraFrame {
   top: number
   bottom: number
   side: number
+}
+
+interface Pose {
+  dist: number
+  fx: number
+  fz: number
+  pitch: number
+}
+
+/** The HUD frame the "is the shelf already on screen" test uses — fixed, so the answer depends on the aspect only. */
+const REFERENCE_FRAME: CameraFrame = { top: 0.1, bottom: 0.02, side: 0.015 }
+
+/** The shelf's outer corners in page space (flat xyz), with room for a pulled-out book and its star card. */
+const shelfCorners = (): number[] => {
+  const out: number[] = []
+  const p: ShelfPoint = { x: 0, y: 0, z: 0 }
+  const hw = shelfHalfWidth()
+  const top = SHELF.board * 2 + SHELF.bookH + 1.9
+  for (const lx of [-hw, hw]) {
+    for (const [ly, lz] of [[0, SHELF.bookD / 2 + SHELF.pull + 0.2], [0, -SHELF.bookD / 2 - 0.2], [top, SHELF.bookD / 2], [top, -SHELF.bookD / 2]] as const) {
+      shelfToWorld(lx, ly, lz, p)
+      out.push(p.x, p.y, p.z)
+    }
+  }
+  return out
 }
 
 export class DeskCamera {
@@ -44,17 +76,28 @@ export class DeskCamera {
   private readonly tmp = new Vector3()
   private readonly dir = new Vector3()
   reducedMotion = false
+  /** The two framings and the eased blend between them (0 = book, 1 = shelf). */
+  private readonly bookPose: Pose = { dist: 30, fx: 0, fz: 0.35, pitch: PITCH_PORTRAIT }
+  private readonly shelfPose: Pose = { dist: 30, fx: 0, fz: 0.35, pitch: PITCH_SHELF }
+  private shelfTarget = 0
+  /** Eased 0…1 toward the shelf pose (real time). */
+  shelfK = 0
+  /** The book pose already shows the whole shelf (wide aspects): no zoom button needed. */
+  shelfInView = false
+  private readonly shelfPts = shelfCorners()
 
   constructor() {
     this.camera = new PerspectiveCamera(FOV, 1, 1, 120)
   }
 
-  /** Solve the distance that fits the page (+ margin) inside the usable frame. */
+  /** Solve both poses for an aspect and the HUD frame. */
   fit(aspect: number, frame: CameraFrame): void {
     this.aspect = aspect
     // Blend the pitch from portrait (≤ 0.8) to landscape (≥ 1.4).
     const k = Math.min(1, Math.max(0, (aspect - 0.8) / 0.6))
-    this.pitch = PITCH_PORTRAIT + (PITCH_LANDSCAPE - PITCH_PORTRAIT) * k
+    const bookPitch = PITCH_PORTRAIT + (PITCH_LANDSCAPE - PITCH_PORTRAIT) * k
+    this.bookPose.pitch = bookPitch
+    this.shelfPose.pitch = Math.min(bookPitch, PITCH_SHELF)
     const cam = this.camera
     cam.aspect = aspect
     cam.fov = FOV
@@ -62,25 +105,53 @@ export class DeskCamera {
     const mx = PAGE_HALF_W + 0.12
     const zTop = -PAGE_HALF_D - 1.1 // castle roofs and flags stand above the top edge
     const zBot = PAGE_HALF_D + 0.45
-    const corners: [number, number, number][] = [
-      [-mx, 0, zTop], [mx, 0, zTop], [-mx, 0, zBot], [mx, 0, zBot],
-      [-mx, 2.8, zTop + 0.6], [mx, 2.8, zTop + 0.6],
+    const page = [
+      -mx, 0, zTop, mx, 0, zTop, -mx, 0, zBot, mx, 0, zBot,
+      -mx, 2.8, zTop + 0.6, mx, 2.8, zTop + 0.6,
       // The castle keep's roof and flags (pages 4–5) stand ~4.4 units tall.
-      [0, 4.6, -6.1]
+      0, 4.6, -6.1
     ]
-    this.focus.set(0, 0, 0.35)
+    // Is the shelf on screen in the book pose? Judged against a fixed frame, so
+    // the HUD growing a zoom button can't flip the answer back.
+    const ref: Pose = { dist: 0, fx: 0, fz: 0, pitch: bookPitch }
+    this.solve(page, REFERENCE_FRAME, false, ref)
+    this.shelfInView = this.inside(this.shelfPts, ref, REFERENCE_FRAME)
+    this.solve(page, frame, false, this.bookPose)
+    // The shelf pose: the shelf and the upper right-hand part of the book beside it.
+    const x0 = 1.2
+    const zMid = 1.5
+    const out = [
+      x0, 0, zTop, mx, 0, zTop, x0, 0, zMid, mx, 0, zMid, mx, 2.8, zTop + 0.6,
+      ...this.shelfPts
+    ]
+    this.solve(out, frame, true, this.shelfPose, true)
+    this.pose()
+  }
+
+  /**
+   * Fit `corners` (flat xyz) inside the usable frame: bisect the distance,
+   * and for each distance slide the focus (z, and x when `centreX`) until the
+   * projected bounding box is centred between the HUD and the bottom edge
+   * (or, `alignTop`, hangs right under the HUD).
+   * Resize only (allocates nothing per frame).
+   */
+  private solve(corners: readonly number[], frame: CameraFrame, centreX: boolean, out: Pose, alignTop = false): void {
+    const cam = this.camera
+    this.pitch = out.pitch
     const usableTop = 1 - frame.top * 2
     const usableBot = -1 + frame.bottom * 2
     const usableX = 1 - frame.side * 2
-    const want = (usableTop + usableBot) / 2
+    // Centred between the HUD and the bottom edge — or hung from the HUD (the shelf pose: top-right).
+    const want = alignTop ? usableTop - 0.03 : (usableTop + usableBot) / 2
+    const yOf = (b: { minY: number; maxY: number }): number => (alignTop ? b.maxY : (b.minY + b.maxY) / 2)
     const bbox = { minX: 0, maxX: 0, minY: 0, maxY: 0 }
-    const measure = (dist: number, fz: number): typeof bbox => {
-      this.focus.z = fz
+    const measure = (dist: number, fx: number, fz: number): typeof bbox => {
+      this.focus.set(fx, 0, fz)
       this.place(dist)
       bbox.minX = bbox.minY = Infinity
       bbox.maxX = bbox.maxY = -Infinity
-      for (const c of corners) {
-        this.tmp.set(c[0], c[1], c[2]).project(cam)
+      for (let i = 0; i < corners.length; i += 3) {
+        this.tmp.set(corners[i]!, corners[i + 1]!, corners[i + 2]!).project(cam)
         bbox.minX = Math.min(bbox.minX, this.tmp.x)
         bbox.maxX = Math.max(bbox.maxX, this.tmp.x)
         bbox.minY = Math.min(bbox.minY, this.tmp.y)
@@ -88,15 +159,24 @@ export class DeskCamera {
       }
       return bbox
     }
-    // For a distance, slide the focus along z until the page's projected
-    // bounding box is centred between the HUD and the bottom edge.
+    let fx = 0
+    if (centreX) {
+      for (let i = 0; i < corners.length; i += 3) fx += corners[i]!
+      fx /= corners.length / 3
+    }
     const centred = (dist: number): number => {
       let fz = 0.35
       for (let it = 0; it < 4; it++) {
-        const b0 = measure(dist, fz)
-        const c0 = (b0.minY + b0.maxY) / 2
-        const b1 = measure(dist, fz + 0.5)
-        const c1 = (b1.minY + b1.maxY) / 2
+        if (centreX) {
+          const a = measure(dist, fx, fz)
+          const cx0 = (a.minX + a.maxX) / 2
+          const b = measure(dist, fx + 0.5, fz)
+          const cx1 = (b.minX + b.maxX) / 2
+          const sx = (cx1 - cx0) / 0.5
+          if (Math.abs(sx) > 1e-5) fx -= cx0 / sx
+        }
+        const c0 = yOf(measure(dist, fx, fz))
+        const c1 = yOf(measure(dist, fx, fz + 0.5))
         const slope = (c1 - c0) / 0.5
         if (Math.abs(slope) < 1e-5) break
         fz -= (c0 - want) / slope
@@ -106,20 +186,51 @@ export class DeskCamera {
     let lo = 6
     let hi = 90
     let bestZ = 0.35
+    let bestX = fx
     for (let it = 0; it < 26; it++) {
       const mid = (lo + hi) / 2
       const fz = centred(mid)
-      const b = measure(mid, fz)
+      const b = measure(mid, fx, fz)
       const ok = b.minX >= -usableX && b.maxX <= usableX && b.maxY <= usableTop && b.minY >= usableBot
       if (ok) {
         hi = mid
         bestZ = fz
+        bestX = fx
       } else lo = mid
     }
-    this.baseDistance = hi
-    this.distance = hi
-    this.focus.z = bestZ
-    this.place(hi)
+    out.dist = hi
+    out.fx = bestX
+    out.fz = bestZ
+  }
+
+  /** Do all `pts` project inside the usable frame from `pose`? */
+  private inside(pts: readonly number[], pose: Pose, frame: CameraFrame): boolean {
+    this.pitch = pose.pitch
+    this.focus.set(pose.fx, 0, pose.fz)
+    this.place(pose.dist)
+    for (let i = 0; i < pts.length; i += 3) {
+      this.tmp.set(pts[i]!, pts[i + 1]!, pts[i + 2]!).project(this.camera)
+      if (Math.abs(this.tmp.x) > 1 - frame.side * 2 || this.tmp.y > 1 - frame.top * 2 || this.tmp.y < -1) return false
+    }
+    return true
+  }
+
+  /** Go out to the shelf (true) or back to the book. Eased in real time by `update`. */
+  setShelf(open: boolean): void {
+    this.shelfTarget = open ? 1 : 0
+  }
+
+  /** Blend the two poses by `shelfK` into focus + base distance. */
+  private pose(): void {
+    const k = this.shelfK
+    const e = k * k * (3 - 2 * k)
+    const a = this.bookPose
+    const b = this.shelfPose
+    this.baseDistance = a.dist + (b.dist - a.dist) * e
+    this.pitch = a.pitch + (b.pitch - a.pitch) * e
+    this.focus.set(a.fx + (b.fx - a.fx) * e, 0, a.fz + (b.fz - a.fz) * e)
+    this.distance = this.baseDistance
+    this.place(this.baseDistance)
   }
 
   private place(dist: number): void {
@@ -155,6 +266,12 @@ export class DeskCamera {
     this.punchV += (-k * this.punch - c * this.punchV) * dt
     this.punch += this.punchV * dt
     this.zoom += (this.zoomTarget - this.zoom) * (1 - Math.exp(-dt * 1.8))
+    // Out to the shelf and back: a smooth real-time glide (never the world's clock).
+    if (this.shelfK !== this.shelfTarget) {
+      const step = dt / (SHELF.zoomTime * 3)
+      this.shelfK = this.shelfTarget > this.shelfK ? Math.min(1, this.shelfK + step) : Math.max(0, this.shelfK - step)
+      this.pose()
+    }
     this.distance = this.baseDistance * this.zoom * (1 + this.punch * 0.06)
     this.place(this.distance)
     if (this.shakeAmp > 0.0005) {

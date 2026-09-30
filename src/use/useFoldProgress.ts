@@ -10,6 +10,7 @@ import { PAGE_COUNT, pageDef } from '@/fold/logic/pages'
 import { asStars, isRated, readStarRecord, starKey } from '@/fold/logic/stars'
 import { emptyStats, type GameStats } from '@/fold/logic/game'
 import { type KindMemory, readKindMemory } from '@/fold/logic/difficulty'
+import { bookUnlockedBy, type ShelfProgress } from '@/fold/logic/shelf'
 
 /**
  * Aethel Fold progress — a module-level singleton view over the fields of
@@ -150,8 +151,9 @@ watch(saveDataVersion, () => {
 export const hasProgress = (): boolean =>
   resumePage.value > 1 || resumeBook.value > 1 || pagesCleared.value > 0 || wins.value > 0 || pagesCleared2.value > 0
 
-/** Book 2 opens once book 1 has been won. */
-export const bookUnlocked = (book: BookId): boolean => book === 1 || wins.value > 0 || wins2.value > 0 || pagesCleared2.value > 0
+/** Book n opens once book n − 1 has been won (the rule lives in `logic/shelf.ts`). */
+export const bookUnlocked = (book: BookId): boolean =>
+  bookUnlockedBy(book, [wins.value, wins2.value], [pagesCleared.value, pagesCleared2.value])
 
 /** Records for a book. */
 export const recordsFor = (book: BookId): Records => (book === 2 ? records2.value : records.value)
@@ -280,6 +282,16 @@ export const starsForBook = (book: BookId): BookStars => {
   }
   return { pages, earned, max: pages.length * 3 }
 }
+
+/**
+ * Everything the desk bookshelf (roadmap #2) shows, one entry per book. Reads
+ * the refs, so it is reactive inside a `watch`. Allocates: UI only.
+ */
+export const shelfProgress = (): ShelfProgress => ({
+  wins: [wins.value, wins2.value],
+  cleared: [pagesCleared.value, pagesCleared2.value],
+  stars: [starsForBook(1).pages, starsForBook(2).pages]
+})
 
 /** Stars over every book. */
 export const totalStars = (): { earned: number; max: number } => {

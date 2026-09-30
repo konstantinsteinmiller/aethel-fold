@@ -271,6 +271,8 @@ export type LessonId =
   | 'swipe' | 'stamp' | 'shield' | 'launch' | 'ridge' | 'spread' | 'peel' | 'crease' | 'core' | 'frog'
   // Added with book 2 (appended so the persisted lesson codes stay stable).
   | 'crush' | 'sling' | 'leaper' | 'ballista'
+  // Added with the desk bookshelf (roadmap #2).
+  | 'shelf'
 
 // ─── Waves ─────────────────────────────────────────────────────────────────
 

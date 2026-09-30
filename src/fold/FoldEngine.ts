@@ -18,6 +18,7 @@ import { GameView, type ScreenPoint } from './render/GameView'
 import { FoldAudio } from './audio/FoldAudio'
 import { haptics } from './haptics'
 import { getAudioContext } from '@/use/useAssets'
+import { SHELF_NONE, type ShelfProgress } from './logic/shelf'
 
 export interface EngineHooks {
   /** Every simulation event, after the view and audio have reacted. */
@@ -51,6 +52,12 @@ export class FoldEngine {
   private readonly onPointerMove = (e: PointerEvent) => this.pointer('move', e)
   private readonly onPointerUp = (e: PointerEvent) => this.pointer('up', e)
   private readonly onPointerCancel = (e: PointerEvent) => this.pointer('cancel', e)
+  /** A pointer the desk bookshelf has taken (−1 none): where and when it went down, and what it hit. */
+  private shelfPtr = -1
+  private shelfX = 0
+  private shelfY = 0
+  private shelfT = 0
+  private shelfHit = SHELF_NONE
   private readonly onWheel = (e: WheelEvent) => {
     const r = this.canvas.getBoundingClientRect()
     if (this.gestures.wheel(e.clientX - r.left, e.clientY - r.top, e.deltaY)) e.preventDefault()
@@ -118,6 +125,24 @@ export class FoldEngine {
     this.cssW = Math.max(1, w)
     this.cssH = Math.max(1, h)
     this.view.setSize(this.cssW, this.cssH, insets)
+    this.game.setShelfInView(this.view.desk.shelfInView)
+  }
+
+  // ─── Desk bookshelf (roadmap #2) ─────────────────────────────────────────
+
+  /** The saved progress the shelf shows (boot, and whenever the save changes). */
+  setShelfProgress(p: ShelfProgress): void {
+    this.game.setShelfProgress(p)
+  }
+
+  /** The HUD's zoom button: out to the shelf, or back to the book. */
+  toggleShelf(): boolean {
+    this.gestures.cancel()
+    return this.game.toggleShelf()
+  }
+
+  closeShelf(): boolean {
+    return this.game.closeShelf()
   }
 
   setPaused(p: boolean): void {
@@ -276,6 +301,9 @@ export class FoldEngine {
     if (kind === 'down') {
       this.audio?.start()
       if (this.audio && this.audio.ctx.state === 'suspended') void this.audio.ctx.resume().catch(() => undefined)
+    }
+    if (this.shelfPointer(kind, e.pointerId, x, y, now)) return
+    if (kind === 'down') {
       try {
         this.canvas.setPointerCapture(e.pointerId)
       } catch {
@@ -289,6 +317,50 @@ export class FoldEngine {
     } else {
       this.gestures.up(e.pointerId, x, y, now - 10_000)
     }
+  }
+
+  /**
+   * Taps on the desk bookshelf go to the game's shelf API instead of the
+   * gesture recognizer: every pointer while the camera is out at the shelf,
+   * and a press on a book of a shelf the play camera already shows. A tap
+   * (short, barely moved) picks what is under it. Returns true if taken.
+   */
+  private shelfPointer(kind: 'down' | 'move' | 'up' | 'cancel', id: number, x: number, y: number, now: number): boolean {
+    const g = this.game
+    const s = g.shelf
+    if (kind === 'down') {
+      if (this.shelfPtr !== -1) return s.open
+      let hit = SHELF_NONE
+      if (!s.open) {
+        if (!s.inView || !g.canOpenShelf()) return false
+        hit = this.view.pickShelf(x, y)
+        if (hit < 0) return false
+      }
+      this.shelfPtr = id
+      this.shelfX = x
+      this.shelfY = y
+      this.shelfT = now
+      this.shelfHit = hit
+      return true
+    }
+    if (id !== this.shelfPtr) return s.open
+    if (kind === 'move') return true
+    this.shelfPtr = -1
+    const slop = Math.min(this.cssW, this.cssH) * 0.04
+    const tap = kind === 'up' && now - this.shelfT < 700 && Math.hypot(x - this.shelfX, y - this.shelfY) < slop
+    if (!tap) return true
+    if (s.open) g.shelfTap(this.view.pickShelf(x, y))
+    else if (this.shelfHit >= 0) {
+      this.gestures.cancel()
+      g.openShelf('tap', this.shelfHit)
+    }
+    return true
+  }
+
+  /** Screen point (CSS px) of a shelf slot's spine centre, as drawn (tests, the ghost hand). */
+  shelfScreen(slot: number, out: ScreenPoint): ScreenPoint {
+    const a = this.view.shelf.anchorOf(slot, 0.5)
+    return this.view.project(a.x, a.y, a.z, out)
   }
 
   private feedback(kind: GestureFeedback, value: number): void {

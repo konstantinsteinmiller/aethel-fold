@@ -55,6 +55,9 @@ export type FoldEventType =
   | 'bossHit'       // a sling stone hit the dragon's body: x/z, b = hits so far, c = 1 if it interrupted the breath
   | 'ballistaFire'  // a = fold index, b = projectile slot, x/z = aim point
   | 'leap'          // a = enemy slot, c = 1 vaulting a wall / 0 a lane hop, x/z = take-off
+  | 'shelf'         // the desk bookshelf: a = 1 camera out to it / 0 back to the book, b = reason (SHELF_REASONS)
+  | 'shelfSelect'   // a = slot, b = 1 pulled out to inspect / 0 locked (it only shakes)
+  | 'shelfBook'     // a book was opened from the shelf: a = book, b = 1 continue the current run / 0 start it on page 1
 
 export const KILL_LAUNCH = 1
 export const KILL_CRUSH = 2

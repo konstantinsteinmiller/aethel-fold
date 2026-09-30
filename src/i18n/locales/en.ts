@@ -146,7 +146,9 @@ export default {
       'dragon': 'Dragon',
       'boss': '{n} weak points left',
       'tryAgain': 'Try again',
-      'almost': 'Almost there'
+      'almost': 'Almost there',
+      'shelf': 'Bookshelf',
+      'backToBook': 'Back to the book'
     },
     'page': {
       'border': 'The Border',
@@ -220,7 +222,9 @@ export default {
       'ballista': 'Swipe up the tower to open the ballista, then tap to shoot',
       'crush': 'Tap the wall to slam it down on them',
       'sling': 'Pull the sling back, aim, and let go',
-      'leaper': 'Leapers jump walls. Sling them!'
+      'leaper': 'Leapers jump walls. Sling them!',
+      'shelf': 'Tap a book to look at it, tap again to open it',
+      'shelfZoom': 'Your bookshelf is over here'
     },
     'pause': {
       'title': 'Paused',

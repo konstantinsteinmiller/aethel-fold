@@ -518,6 +518,17 @@ export class FoldAudio {
       case 'lesson':
         if (e.b === 1) this.chime(true)
         break
+      // The desk bookshelf: a soft swish out and back, a book sliding out, a locked one's knock.
+      case 'shelf':
+        this.whoosh(0.3, e.a ? 900 : 1400)
+        break
+      case 'shelfSelect':
+        if (e.b) this.unfoldSoft()
+        else this.thunk()
+        break
+      case 'shelfBook':
+        if (!e.b) this.pageTurn()
+        break
       case 'combo':
         glock(this.sfx, this.now, 72 + Math.min(12, e.b * 2), 0.6, 0.6)
         break

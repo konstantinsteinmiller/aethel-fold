@@ -9,8 +9,16 @@
  * HUD layout (safe-area aware, fluid sizes, portrait and landscape):
  *   top-left   PageBadge + HeartsBadge
  *   top-centre ScoreBadge (+ BossMeter on the dragon's page)
- *   top-right  FMuteButton + settings (folded paper gear → cootie-catcher pause)
+ *   top-right  FMuteButton + settings (folded paper gear → cootie-catcher pause),
+ *              and under them, once a book has been won and the camera can't
+ *              already see it, the zoom button out to the desk bookshelf
  * The bottom 60 % of the screen is left to the thumbs (GDD §4).
+ *
+ * Chapter select is the bookshelf on the desk (roadmap #2), not a menu: the
+ * camera goes out to it (zoom button, a tap on it where it's in view, by
+ * itself after a win, or by folding the won book shut) and a book opened
+ * there comes back as a `shelfBook` event. The pause menu's bookshelf face
+ * stays as the accessible fallback.
  */
 import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -39,8 +47,9 @@ import useUser from '@/use/useUser'
 import { isGamePaused } from '@/use/useGamePause'
 import { syncGameplayLifecycle } from '@/use/useGameplayLifecycle'
 import {
-  addStats, bankScore, bookUnlocked, checkpoint, foldSettings, learnLesson, lessons, progressRevision, readKindness,
-  recordStars, recordVictory, recordsFor, resumeBook, resumePage, runCheckpoint, saveKindness, startNewRun
+  addStats, bankScore, bookUnlocked, checkpoint, foldSettings, learnLesson, lessons, pageStars, pagesCleared,
+  pagesCleared2, progressRevision, readKindness, recordStars, recordVictory, recordsFor, resumeBook, resumePage,
+  runCheckpoint, saveKindness, shelfProgress, startNewRun, wins, wins2
 } from '@/use/useFoldProgress'
 import { mobileCheck } from '@/utils/function'
 import { BOOT, bootStage, markGameReady } from '@/use/useBoot'
@@ -51,6 +60,7 @@ const { userSoundVolume, userMusicVolume } = useUser()
 const canvas = ref<HTMLCanvasElement | null>(null)
 const stage = ref<HTMLDivElement | null>(null)
 const hudTop = ref<HTMLDivElement | null>(null)
+const shelfBtn = ref<InstanceType<typeof FHudButton> | null>(null)
 const fx = ref<InstanceType<typeof FxLayer> | null>(null)
 const ghost = ref<InstanceType<typeof GhostHand> | null>(null)
 const engine = shallowRef<FoldEngine | null>(null)
@@ -71,7 +81,11 @@ const hud = reactive({
   victoryHits: 0,
   newBest: false,
   /** The Almost! moment's Try-again button is up. */
-  retry: false
+  retry: false,
+  /** The desk bookshelf: the zoom button is shown, the camera is out at it, the hand points at the button. */
+  shelfButton: false,
+  shelfOpen: false,
+  shelfCue: false
 })
 const pauseOpen = ref(false)
 const nameKey = computed(() => pageDef(hud.book, hud.page).nameKey)
@@ -141,6 +155,10 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
         if (id) learnLesson(id)
       }
       break
+    case 'shelfBook':
+      // Opened from the desk bookshelf: another book starts on page 1 (the current one just carries on).
+      if (e.b === 0) pickBook(e.a as BookId)
+      break
     case 'victory': {
       bankStats(g)
       hud.book = g.book
@@ -186,8 +204,29 @@ const onFrame = (g: FoldGame): void => {
     const exp = g.boss.exposed >= 0
     if (hud.bossExposed !== exp) hud.bossExposed = exp
   }
+  const s = g.shelf
+  const btn = s.available && !s.inView
+  if (hud.shelfButton !== btn) hud.shelfButton = btn
+  if (hud.shelfOpen !== s.open) hud.shelfOpen = s.open
+  const cue = g.lesson.id === 'shelf' && g.lesson.hand.anchor === 'zoom'
+  if (hud.shelfCue !== cue) hud.shelfCue = cue
   const eng = engine.value
-  if (eng && ghost.value) ghost.value.update(g.lesson, (x, y, z, out) => eng.project(x, y, z, out))
+  if (eng && ghost.value) ghost.value.update(g.lesson, projectFn, anchorFn)
+}
+
+const projectFn = (x: number, y: number, z: number, out: ScreenPoint): ScreenPoint =>
+  engine.value ? engine.value.project(x, y, z, out) : out
+/** Screen centre of a HUD target the ghost hand points at (the shelf zoom button). */
+const anchorFn = (_name: 'zoom', out: ScreenPoint): boolean => {
+  const el = (shelfBtn.value?.$el as HTMLElement | undefined) ?? null
+  const host = stage.value
+  if (!el || !host) return false
+  const r = el.getBoundingClientRect()
+  const o = host.getBoundingClientRect()
+  out.x = r.left - o.left + r.width * 0.5
+  out.y = r.top - o.top + r.height * 0.6
+  out.visible = true
+  return true
 }
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
@@ -249,12 +288,15 @@ onMounted(() => {
   bootStage(BOOT.engine)
   // Two frames later the first page is on screen: the splash may go.
   requestAnimationFrame(() => requestAnimationFrame(() => markGameReady()))
+  eng.setShelfProgress(shelfProgress())
   publishDebugHandle(eng)
   // The printed story lines use the Angry font: repaint once it has loaded.
   void document.fonts?.load('40px Angry').then(() => engine.value?.refreshCaptions()).catch(() => undefined)
 })
 
 watch(locale, () => engine.value?.refreshCaptions())
+// The shelf shows the saved progress (wins unlock books, stars go on the spines).
+watch([wins, wins2, pagesCleared, pagesCleared2, pageStars], () => engine.value?.setShelfProgress(shelfProgress()))
 
 onBeforeUnmount(() => {
   ro?.disconnect()
@@ -278,11 +320,15 @@ watch(foldSettings, (s) => {
 const paused = computed(() => pauseOpen.value || isGamePaused.value)
 watch(paused, (p) => engine.value?.setPaused(p))
 // Platform "gameplay" signal: live while the player is actually playing.
-const live = computed(() => !paused.value && !hud.victory)
+const live = computed(() => !paused.value && !hud.victory && !hud.shelfOpen)
 watch(live, (v) => syncGameplayLifecycle(v), { immediate: true })
 
 const openPause = (): void => {
   pauseOpen.value = true
+}
+/** The HUD's zoom button: out to the desk bookshelf and back. */
+const toggleShelf = (): void => {
+  engine.value?.toggleShelf()
 }
 const resume = (): void => {
   pauseOpen.value = false
@@ -313,6 +359,10 @@ const pickBook = (book: BookId): void => {
 
 const onKey = (e: KeyboardEvent): void => {
   if (pauseOpen.value) return
+  if (e.key === 'Escape' && engine.value?.closeShelf()) {
+    e.preventDefault()
+    return
+  }
   if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
     e.preventDefault()
     openPause()
@@ -365,6 +415,13 @@ const publishDebugHandle = (eng: FoldEngine): void => {
     jumpTo: (p: number, book?: number) =>
       eng.jumpTo(Math.max(1, Math.min(PAGE_COUNT, p)) as PageId, eng.game.score, book === 2 ? 2 : book === 1 ? 1 : eng.game.book),
     clearPage: () => eng.game.debugClearPage(),
+    /** The desk bookshelf: toggle it, and where a slot's spine is on screen. */
+    toggleShelf: () => eng.toggleShelf(),
+    shelfScreen: (slot: number) => {
+      const out = { x: 0, y: 0, visible: false }
+      eng.shelfScreen(slot, out)
+      return { x: out.x, y: out.y }
+    },
     tryAgain: () => eng.tryAgain(),
     fastForward: (s: number) => eng.fastForward(s),
     state: () => ({
@@ -380,7 +437,16 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       enemiesLeft: eng.game.enemiesLeft(),
       difficulty: eng.game.difficulty,
       boss: eng.game.boss.phase,
-      sling: eng.game.sling ? { x: eng.game.sling.def.x, z: eng.game.sling.def.z, cool: eng.game.sling.cool, shots: eng.game.sling.shots } : null
+      sling: eng.game.sling ? { x: eng.game.sling.def.x, z: eng.game.sling.def.z, cool: eng.game.sling.cool, shots: eng.game.sling.shots } : null,
+      shelf: {
+        available: eng.game.shelf.available,
+        inView: eng.game.shelf.inView,
+        open: eng.game.shelf.open,
+        selected: eng.game.shelf.selected,
+        highlight: eng.game.shelf.highlight,
+        slots: eng.game.shelf.slots.map((s) => s.state),
+        camera: eng.view.desk.shelfK
+      }
     }),
     /** Screen position (CSS px) of a page point — lets tests aim real pointer gestures. */
     screenOf: (x: number, z: number, y = 0) => {
@@ -409,13 +475,25 @@ const pageAria = computed(() => t('fold.a11y.board'))
       div.hud-centre.flex.flex-col.items-center
         ScoreBadge(:score="hud.score" :best="best")
         BossMeter(v-if="hud.boss" :total="5" :broken="hud.bossBroken" :exposed="hud.bossExposed")
-      div.hud-right.flex.items-start
-        FMuteButton
-        FHudButton(tone="gold" :aria-label="t('fold.hud.settings')" @click="openPause")
-          OrigamiIcon(name="gear" tone="yellow")
+      div.hud-right
+        div.hud-right__row.flex.items-start
+          FMuteButton
+          FHudButton(tone="gold" :aria-label="t('fold.hud.settings')" @click="openPause")
+            OrigamiIcon(name="gear" tone="yellow")
+        //- Out to the desk bookshelf and back (only where the camera can't already see it).
+        FHudButton.hud-shelf(
+          v-if="hud.shelfButton"
+          ref="shelfBtn"
+          tone="blue"
+          data-testid="shelf-zoom"
+          :attention="hud.shelfCue"
+          :aria-label="t(hud.shelfOpen ? 'fold.hud.backToBook' : 'fold.hud.shelf')"
+          @click="toggleShelf"
+        )
+          OrigamiIcon(:name="hud.shelfOpen ? 'book' : 'shelf'" :tone="hud.shelfOpen ? 'paper' : 'blue'")
 
     VictoryPanel(
-      :open="hud.victory"
+      :open="hud.victory && !hud.shelfOpen"
       :book="hud.book"
       :score="hud.victoryScore"
       :best="best"
@@ -485,6 +563,13 @@ const pageAria = computed(() => t('fold.a11y.board'))
 
 .hud-right
   justify-self: end
+  display: flex
+  flex-direction: column
+  align-items: flex-end
+  gap: clamp(0.25rem, 1vh, 0.45rem)
+  min-width: 0
+
+.hud-right__row
   gap: clamp(0.3rem, 1.4vw, 0.55rem)
 
 // Landscape phones: keep the top strip thin so the page stays big.

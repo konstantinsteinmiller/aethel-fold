@@ -9,6 +9,7 @@
  *   one finger from the dog-eared corner .......... Peel the layer
  *   one finger on the keep's sling, pulled back ... Sling (aim the other way, let go to shoot)
  *   mouse wheel over a crease ..................... Spread (desktop)
+ *   one finger right → left over the won book ...... Fold it shut: off to the desk bookshelf
  *
  * Pure logic: it never touches the DOM. The host feeds it pointer events with
  * screen coordinates and a `project` function that maps a screen point onto
@@ -36,7 +37,7 @@ export interface GestureHost {
   feedback?(kind: GestureFeedback, value: number): void
 }
 
-type Mode = 'idle' | 'pending' | 'fold' | 'tear' | 'spread' | 'crease' | 'peel' | 'sling' | 'none'
+type Mode = 'idle' | 'pending' | 'fold' | 'tear' | 'spread' | 'crease' | 'peel' | 'sling' | 'shut' | 'none'
 
 interface Ptr {
   id: number
@@ -60,6 +61,8 @@ const SLOP = 0.022
 const TAP_MS = 420
 /** Minimum alignment between the finger and a fold's arrow to grab it. */
 const ALIGN = 0.28
+/** Screen travel (fraction of the short side) that folds the won book shut. */
+const SHUT = 0.28
 
 export class GestureRecognizer {
   mode: Mode = 'idle'
@@ -197,6 +200,16 @@ export class GestureRecognizer {
         this.tick(pull, 'dragTick')
         break
       }
+      case 'shut': {
+        const prog = Math.max(0, Math.min(1, (p.startSx - sx) / (minDim * SHUT)))
+        this.progress = prog
+        this.tick(prog, 'peelTick')
+        if (prog >= 1) {
+          g.foldShut()
+          this.mode = 'none'
+        }
+        break
+      }
       case 'peel': {
         // Drag the corner up and to the left (toward the page centre).
         const dx = p.startSx - sx
@@ -243,6 +256,9 @@ export class GestureRecognizer {
         break
       case 'sling':
         g.releaseSling()
+        break
+      case 'shut':
+        if (this.progress >= 0.5) g.foldShut()
         break
     }
     this.a.active = false
@@ -317,6 +333,13 @@ export class GestureRecognizer {
     const ux = dx / len
     const uz = dz / len
 
+    // The won book: a sweep from right to left folds it shut.
+    if (g.phase === 'victory') {
+      const sdx = p.sx - p.startSx
+      this.mode = sdx < 0 && Math.abs(sdx) > Math.abs(p.sy - p.startSy) && g.canOpenShelf() ? 'shut' : 'none'
+      this.progress = 0
+      return
+    }
     if (this.tearCandidate !== -1) {
       this.mode = 'tear'
       this.target = this.tearCandidate

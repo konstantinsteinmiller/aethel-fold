@@ -23,7 +23,7 @@ import {
   PAGE_HALF_D, PAGE_HALF_W, PAGE_TURN_TIME, PEEL_COMPLETE, SCORE, SPAWN_Z, TIME_SCALE_RATE, TORN_LINGER,
   FOLD_SNAP_THRESHOLD, LEAPER_HOP_EVERY, LEAPER_HOP_TIME, LEAPER_SHOT_CEILING, LEAPER_VAULT_LAND,
   LEAPER_VAULT_TIME, SLING_COOL, SLING_FLIGHT_BASE, SLING_FLIGHT_PER, SLING_GAIN, SLING_GRAB, SLING_MIN_PULL,
-  SLING_RADIUS, SLING_RANGE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED, ALMOST, DIFFICULTY
+  SLING_RADIUS, SLING_RANGE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED, ALMOST, DIFFICULTY, SHELF
 } from './config'
 import {
   type KindMemory, createKindMemory, difficultyFor, extraPerWave, foldSlowmoOn, noteCrumple, notePageWon,
@@ -46,6 +46,10 @@ import {
 } from './lessons'
 import { PAGE_COUNT, pageDef } from './pages'
 import { starsFor } from './stars'
+import {
+  SHELF_DESK, SHELF_REASONS, createShelfState, noteShelfWin, refreshShelf, setShelfProgress, slotActionable, slotAnchor,
+  slotOfBook, type ShelfPoint, type ShelfProgress, type ShelfReason
+} from './shelf'
 import { createRng, type Rng } from './rng'
 import { G_PAPER, clamp, clamp01, damp, segmentDistance, segmentsCross, v2 } from './math'
 import type {
@@ -114,6 +118,12 @@ export class FoldGame {
   readonly hero = createHero()
   readonly boss = createBoss()
   readonly lesson = createLessonState()
+  /** The bookshelf on the desk (roadmap #2). */
+  readonly shelf = createShelfState()
+  private readonly anchor: ShelfPoint = { x: 0, y: 0, z: 0 }
+  /** The page intro whose shelf cue already ran (one cue per page intro). */
+  private shelfCuePage = -1
+  private pageSerial = 0
   readonly learned: Record<LessonId, boolean>
   /**
    * Lesson steps whose demonstration the player has seen through (bit per
@@ -228,6 +238,13 @@ export class FoldGame {
     // Page 1 is a new run: the book forgets the crumples (not the streak or the boss ease).
     if (page === 1) resetRunMemory(this.kind)
     resetBoss(this.boss)
+    // A book opened (from the shelf, a menu, a reload): the shelf closes and knows the new current book.
+    const sh = this.shelf
+    sh.open = false
+    sh.finished = false
+    sh.selected = -1
+    sh.autoShown = false
+    refreshShelf(sh, book)
     this.loadPage(page)
   }
 
@@ -277,6 +294,7 @@ export class FoldGame {
       ? { def: sd, cool: 0, aiming: false, pullX: 0, pullZ: 0, tx: sd.x, tz: sd.z, shots: 0, rev: (this.sling?.rev ?? 0) + 1 }
       : null
     clearLesson(this.lesson)
+    this.pageSerial++
     for (const f of this.folds) if (f.def.fromWave === 0) revealFold(f)
     const exit = this.page.exit
     if (exit === 'boss') resetBoss(this.boss)
@@ -417,13 +435,14 @@ export class FoldGame {
     const realDt = Math.min(Math.max(realDtIn, 0), 0.05)
     if (this.paused || this.phase === 'boot') return
     this.phaseTime += realDt
-    this.idle += realDt
+    const atShelf = this.shelf.open
+    if (!atShelf) this.idle += realDt
     if (this.comboTimer > 0) {
       this.comboTimer -= realDt
       if (this.comboTimer <= 0) this.combo = 0
     }
     const playing = this.phase === 'play' || this.phase === 'boss' || this.phase === 'intro' || this.phase === 'finale'
-    if (playing) this.runTime += realDt
+    if (playing && !atShelf) this.runTime += realDt
 
     // Hit-stop freezes the world *completely* (GDD §5) — folds included.
     if (this.hitStop > 0) {
@@ -458,7 +477,8 @@ export class FoldGame {
         this.updateEnemies(simDt)
         this.updateProjectiles(simDt)
         this.updateHero(simDt)
-        this.phaseTimer -= realDt
+        // Out at the shelf the page waits to turn.
+        if (!atShelf) this.phaseTimer -= realDt
         if (this.phaseTimer <= 0) this.exitPage()
         break
       case 'turn':
@@ -490,16 +510,24 @@ export class FoldGame {
         this.updateHero(simDt)
         if (this.finaleTime >= FINALE_TIME) {
           this.setPhase('victory')
+          // The shelf now has this win (the save round-trip confirms it later).
+          noteShelfWin(this.shelf, this.book)
+          this.shelf.finished = true
+          refreshShelf(this.shelf, this.book)
           this.events.emit('victory')
         }
         break
       case 'victory':
         this.updateHero(simDt)
+        // After the ribbon has had its moment, the camera turns to the shelf by itself.
+        if (!this.shelf.autoShown && this.shelf.available && this.phaseTime >= SHELF.afterVictory) this.openShelf('victory')
         break
     }
 
     this.updateKindSlowmo(realDt)
     this.updateLessons(realDt)
+    // Out at the shelf the world stands still; the paper still follows the finger (real time).
+    if (this.shelf.open) this.timeTarget = 0
   }
 
   /**
@@ -1065,7 +1093,7 @@ export class FoldGame {
   }
 
   acceptsInput(): boolean {
-    if (this.paused) return false
+    if (this.paused || this.shelf.open) return false
     const p = this.phase
     return p === 'intro' || p === 'play' || p === 'boss' || p === 'peel' || p === 'cleared'
   }
@@ -2028,6 +2056,9 @@ export class FoldGame {
         kind = 'pull'
         on = 'sling'
         break
+      case 'shelf':
+        kind = 'tap'
+        break
     }
     startDemo(l, kind, on, target, this.reducedMotion, tx, tz)
   }
@@ -2103,6 +2134,10 @@ export class FoldGame {
   }
 
   private updateLessons(realDt: number): void {
+    if (this.updateShelfLesson(realDt)) {
+      this.timeTarget = this.lesson.timeScale
+      return
+    }
     const l = this.lesson
     if (l.id && !l.hint) {
       l.age += realDt
@@ -2596,6 +2631,191 @@ export class FoldGame {
       this.handOnFold(f)
       return
     }
+  }
+
+  // ─── The desk bookshelf (roadmap #2) ─────────────────────────────────────
+
+  /** The host hands over the saved progress (at boot and whenever the save changes). */
+  setShelfProgress(p: ShelfProgress): void {
+    const s = this.shelf
+    setShelfProgress(s, p, this.book)
+    // A win the save hasn't caught up with yet stays on the shelf.
+    if (s.finished) {
+      noteShelfWin(s, this.book)
+      refreshShelf(s, this.book)
+    }
+  }
+
+  /** Does the play camera already show the shelf (wide aspects)? Set by the view on resize. */
+  setShelfInView(v: boolean): void {
+    if (this.shelf.inView === v) return
+    this.shelf.inView = v
+    this.shelf.rev++
+  }
+
+  /** Can the camera go out to the shelf now? Not mid page-turn, crumple or finale. */
+  canOpenShelf(): boolean {
+    const s = this.shelf
+    if (!s.available || s.open || this.paused) return false
+    const p = this.phase
+    return p === 'intro' || p === 'play' || p === 'boss' || p === 'cleared' || p === 'peel' || p === 'victory'
+  }
+
+  /**
+   * Out to the shelf. Mid-run the current book comes out ready (one tap goes
+   * back to it); after a win nothing is pulled out and the next book glows.
+   * `select` pulls a particular slot out (a tap on the shelf in view).
+   */
+  openShelf(reason: ShelfReason = 'button', select = -1): boolean {
+    if (!this.canOpenShelf()) return false
+    const s = this.shelf
+    this.touched()
+    s.open = true
+    s.reason = reason
+    s.autoShown = true
+    s.finished = this.phase === 'victory'
+    refreshShelf(s, this.book)
+    s.selected = -1
+    if (select >= 0 && s.slots[select]) {
+      if (slotActionable(s.slots[select])) s.selected = select
+    } else if (!s.finished) s.selected = s.highlight
+    s.rev++
+    this.events.emit('shelf', 1, SHELF_REASONS.indexOf(reason))
+    if (select >= 0 && s.selected !== select && s.slots[select]) this.events.emit('shelfSelect', select, 0)
+    return true
+  }
+
+  /** Back to the book (play continues). */
+  closeShelf(): boolean {
+    const s = this.shelf
+    if (!s.open) return false
+    s.open = false
+    s.selected = -1
+    s.rev++
+    if (this.lesson.id === 'shelf') clearLesson(this.lesson)
+    this.events.emit('shelf', 0, SHELF_REASONS.indexOf(s.reason))
+    return true
+  }
+
+  /** The HUD's zoom button. */
+  toggleShelf(): boolean {
+    return this.shelf.open ? this.closeShelf() : this.openShelf('button')
+  }
+
+  /**
+   * A tap while out at the shelf, on a slot, on the open book on the desk
+   * (`SHELF_DESK`) or on nothing (`SHELF_NONE`). First tap on a book pulls it
+   * out to inspect; a second tap opens it. A locked book only shakes.
+   */
+  shelfTap(slot: number): void {
+    const s = this.shelf
+    if (!s.open || this.paused) return
+    this.touched()
+    if (slot === SHELF_DESK) {
+      // Tapping the book on the desk goes back to it (a won book waits for a pick).
+      if (!s.finished) this.closeShelf()
+      return
+    }
+    const it = s.slots[slot]
+    if (!it) return
+    if (!slotActionable(it)) {
+      this.events.emit('shelfSelect', slot, 0)
+      return
+    }
+    if (s.selected !== slot) {
+      s.selected = slot
+      s.rev++
+      this.events.emit('shelfSelect', slot, 1)
+      return
+    }
+    // Opened: the lesson is learned, even if the hand never had to show it.
+    if (this.lesson.id === 'shelf') this.completeLesson()
+    else if (!this.learned.shelf) {
+      this.learned.shelf = true
+      this.events.emit('lesson', lessonCode('shelf'), 0)
+    }
+    const cont = it.state === 'current'
+    this.closeShelf()
+    // The host starts the run (save + `startRun`), or just carries on.
+    this.events.emit('shelfBook', it.book, cont ? 1 : 0)
+  }
+
+  /** The won book is folded shut (a swipe across it on the victory page): off to the shelf. */
+  foldShut(): boolean {
+    if (this.phase !== 'victory') return false
+    return this.openShelf('shut')
+  }
+
+  /**
+   * The shelf lesson. Out at the shelf the hand taps the glowing book, then
+   * taps it again once it is pulled out. On a page intro, while the shelf has
+   * never been used, it points the way there once: at the HUD's zoom button,
+   * or straight at the shelf where the camera already shows it (no slow-mo).
+   * Returns true while it owns the lesson slot.
+   */
+  private updateShelfLesson(realDt: number): boolean {
+    const l = this.lesson
+    const s = this.shelf
+    const mine = l.id === 'shelf'
+    if (this.learned.shelf || !s.available) {
+      if (mine) clearLesson(l)
+      return false
+    }
+    if (s.open) {
+      const target = s.selected >= 0 && slotActionable(s.slots[s.selected]) ? s.selected : s.highlight
+      if (target < 0) {
+        if (mine) clearLesson(l)
+        return false
+      }
+      const step = s.selected === target ? 2 : 1
+      if (!mine) {
+        clearLesson(l)
+        this.startLesson('shelf', target)
+      }
+      if (l.step !== step || l.target !== target) {
+        l.step = step
+        l.target = target
+        l.age = 0
+        l.rev++
+        cancelDemo(l)
+        this.beginDemo()
+      }
+      l.age += realDt
+      l.timeScale = 0
+      const a = slotAnchor(target, this.anchor, step === 2 ? 1 : 0, 0.6)
+      setHand(l, 'tap', a.x, a.z, a.x, a.z, a.y, 'world')
+      if (stepDemo(l, realDt)) this.demoSeen.shelf |= 1 << l.step
+      return true
+    }
+    if (mine) {
+      // The page-intro cue runs its course — until the first enemy is half-way down the
+      // page, so a real lesson is never kept waiting. The shelf closed without a pick ends the rest.
+      l.age += realDt
+      const lead = this.leadEnemy()
+      const busy = (this.phase !== 'intro' && this.phase !== 'play') || (lead >= 0 && this.enemies[lead]!.z > -2)
+      if (l.step !== 0 || busy || l.age > SHELF.cueTime) {
+        clearLesson(l)
+        return false
+      }
+      if (stepDemo(l, realDt)) this.demoSeen.shelf |= 1
+      this.placeShelfCue()
+      return true
+    }
+    if (l.id || this.phase !== 'intro' || this.shelfCuePage === this.pageSerial) return false
+    this.shelfCuePage = this.pageSerial
+    this.startLesson('shelf', slotOfBook(this.book))
+    // A pointer, not a freeze.
+    l.timeScale = 1
+    this.placeShelfCue()
+    return true
+  }
+
+  private placeShelfCue(): void {
+    const l = this.lesson
+    if (this.shelf.inView) {
+      const a = slotAnchor(l.target, this.anchor, 0, 0.6)
+      setHand(l, 'tap', a.x, a.z, a.x, a.z, a.y, 'world')
+    } else setHand(l, 'tap', 0, 0, 0, 0, 0, 'zoom')
   }
 
   // ─── Debug / tests ───────────────────────────────────────────────────────

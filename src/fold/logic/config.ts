@@ -300,3 +300,39 @@ export const DIFFICULTY = {
   min: 0.6,
   max: 1.5
 } as const
+
+// ─── The bookshelf on the desk (roadmap #2) ───────────────────────────────
+
+/**
+ * A small cardboard bookshelf standing on the desk right of the book: one
+ * slot per book, plus a silhouette for the book that is still coming. Wide
+ * aspects see it beside the page; portrait zooms the camera out to it.
+ * Page space (y = 0 is the play page); the view and the ghost hand both place
+ * the books from these numbers (`slotAnchor` in `shelf.ts`).
+ */
+export const SHELF = {
+  x: 9.6,
+  z: -1.7,
+  /** The desk top, below the page plane (BookView's `DESK_Y`). */
+  y: -0.62,
+  /** Turned a little toward the book and the camera (about y). */
+  yaw: -0.3,
+  /** Leans back so the spines face the steep desk camera (about x). */
+  lean: -0.32,
+  /** Book slots: one per book, the last one the coming book 3. */
+  slots: 3,
+  spacing: 1.46,
+  bookW: 1.2,
+  bookH: 3.2,
+  bookD: 2.1,
+  /** Thickness of the shelf's boards. */
+  board: 0.16,
+  /** How far an inspected book slides out toward the player. */
+  pull: 1.0,
+  /** Real seconds after the victory ribbon before the camera turns to the shelf by itself. */
+  afterVictory: 6,
+  /** Real-time constant of the camera's zoom out / in (seconds). */
+  zoomTime: 0.32,
+  /** Real seconds the ghost hand points the way to the shelf on a page intro. */
+  cueTime: 4
+} as const

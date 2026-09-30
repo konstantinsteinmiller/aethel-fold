@@ -11,6 +11,14 @@ import type { LessonId } from './types'
 
 export type HandGesture = 'swipe' | 'tap' | 'spread' | 'drag'
 
+/**
+ * Where the hand's points live:
+ *   page  — on the page plane (y = 0), the default
+ *   world — a 3D point (`y` is its height): a book on the desk shelf
+ *   zoom  — the HUD's shelf zoom button (the host resolves its screen rect)
+ */
+export type HandAnchor = 'page' | 'world' | 'zoom'
+
 export interface HandCue {
   gesture: HandGesture
   /** Page-space start and end of the motion (tap: a = b). */
@@ -20,6 +28,7 @@ export interface HandCue {
   bz: number
   /** Optional height of the target above the page (structures, the dragon). */
   y: number
+  anchor: HandAnchor
 }
 
 export interface LessonState {
@@ -217,7 +226,7 @@ export const demoShowing = (l: LessonState): boolean => l.demo.phase !== 'off'
 
 export const LESSON_IDS: readonly LessonId[] = [
   'swipe', 'stamp', 'shield', 'launch', 'ridge', 'spread', 'peel', 'crease', 'core', 'frog',
-  'crush', 'sling', 'leaper', 'ballista'
+  'crush', 'sling', 'leaper', 'ballista', 'shelf'
 ]
 
 export const lessonCode = (id: LessonId): number => LESSON_IDS.indexOf(id)
@@ -228,7 +237,7 @@ export const createLessonState = (): LessonState => ({
   target: -1,
   age: 0,
   showHand: false,
-  hand: { gesture: 'swipe', ax: 0, az: 0, bx: 0, bz: 0, y: 0 },
+  hand: { gesture: 'swipe', ax: 0, az: 0, bx: 0, bz: 0, y: 0, anchor: 'page' },
   timeScale: 1,
   hint: false,
   demo: createDemo(),
@@ -236,16 +245,20 @@ export const createLessonState = (): LessonState => ({
 })
 
 export const setHand = (
-  l: LessonState, gesture: HandGesture, ax: number, az: number, bx: number, bz: number, y = 0
+  l: LessonState, gesture: HandGesture, ax: number, az: number, bx: number, bz: number, y = 0, anchor: HandAnchor = 'page'
 ): void => {
   const h = l.hand
-  if (l.showHand && h.gesture === gesture && h.ax === ax && h.az === az && h.bx === bx && h.bz === bz && h.y === y) return
+  if (
+    l.showHand && h.gesture === gesture && h.ax === ax && h.az === az && h.bx === bx && h.bz === bz && h.y === y &&
+    h.anchor === anchor
+  ) return
   l.hand.gesture = gesture
   l.hand.ax = ax
   l.hand.az = az
   l.hand.bx = bx
   l.hand.bz = bz
   l.hand.y = y
+  l.hand.anchor = anchor
   l.showHand = true
   l.rev++
 }

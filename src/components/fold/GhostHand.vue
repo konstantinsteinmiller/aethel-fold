@@ -12,6 +12,10 @@
  * (`lesson.demo`): the hand then drops its CSS loop and is posed from the
  * demo's progress instead, so it moves in lockstep with the ghost flap the 3D
  * view draws from the same numbers — sweep, glide, press — and fades with it.
+ *
+ * The hand's points are on the page plane, at a 3D point (`world`: a book on
+ * the desk shelf) or on the HUD's shelf zoom button (`zoom`, resolved by the
+ * host's `anchor` callback) — then it sits above the HUD.
  */
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -26,6 +30,8 @@ const root = ref<HTMLDivElement | null>(null)
 const visible = ref(false)
 const gesture = ref<'swipe' | 'tap' | 'spread' | 'drag'>('swipe')
 const lessonId = ref<string | null>(null)
+const step = ref(0)
+const hud = ref(false)
 const hint = ref(false)
 const demo = ref(false)
 const a: ScreenPoint = { x: 0, y: 0, visible: false }
@@ -37,10 +43,15 @@ const hintText = computed(() => {
   const id = lessonId.value
   if (!id) return ''
   if (id === 'spread' || id === 'core') return t(props.touch ? 'fold.hint.spreadTouch' : 'fold.hint.spreadMouse')
+  if (id === 'shelf') return t(step.value === 0 ? 'fold.hint.shelfZoom' : 'fold.hint.shelf')
   return t(`fold.hint.${id}`)
 })
 
-const update = (lesson: LessonState, project: (x: number, y: number, z: number, out: ScreenPoint) => ScreenPoint): void => {
+const update = (
+  lesson: LessonState,
+  project: (x: number, y: number, z: number, out: ScreenPoint) => ScreenPoint,
+  anchor?: (name: 'zoom', out: ScreenPoint) => boolean
+): void => {
   const show = !!lesson.id && lesson.showHand
   if (show !== visible.value) visible.value = show
   const d = lesson.demo
@@ -51,11 +62,20 @@ const update = (lesson: LessonState, project: (x: number, y: number, z: number, 
     lastRev = lesson.rev
     gesture.value = lesson.hand.gesture
     lessonId.value = lesson.id
+    step.value = lesson.step
+    hud.value = lesson.hand.anchor === 'zoom'
     hint.value = lesson.hint
   }
   const h = lesson.hand
-  project(h.ax, 0, h.az, a)
-  project(h.bx, 0, h.bz, b)
+  if (h.anchor === 'zoom') {
+    if (!anchor?.('zoom', a)) a.x = a.y = -9999
+    b.x = a.x
+    b.y = a.y
+  } else {
+    const y = h.anchor === 'world' ? h.y : 0
+    project(h.ax, y, h.az, a)
+    project(h.bx, y, h.bz, b)
+  }
   const s = root.value.style
   s.setProperty('--ax', `${a.x}px`)
   s.setProperty('--ay', `${a.y}px`)
@@ -90,7 +110,7 @@ defineExpose({ update })
 </script>
 
 <template lang="pug">
-  div.ghost(ref="root" v-show="visible" :class="[`ghost--${gesture}`, { 'ghost--hint': hint, 'ghost--demo': demo }]" aria-hidden="true")
+  div.ghost(ref="root" v-show="visible" :class="[`ghost--${gesture}`, { 'ghost--hint': hint, 'ghost--demo': demo, 'ghost--hud': hud }]" aria-hidden="true")
     //- Trail: a soft dotted track from A to B.
     div.ghost__trail(v-if="gesture === 'swipe' || gesture === 'drag'")
     //- Tap ripple (looping), or the demo's press ring (posed by the logic).
@@ -138,6 +158,10 @@ defineExpose({ update })
 
 .ghost--hint
   opacity: 0.75
+
+// Pointing at a HUD button: above the HUD strip (still never catching a touch).
+.ghost--hud
+  z-index: 25
 
 .ghost__trail
   position: absolute
