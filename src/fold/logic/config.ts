@@ -232,3 +232,40 @@ export const PAGE_TURN_TIME = 1.35
 export const CRUMPLE_TIME = 1.25
 export const PAGE_DROP_TIME = 0.8
 export const PEEL_COMPLETE = 0.55
+
+// ─── "Almost!" moment on failure (roadmap #9) ─────────────────────────────
+
+export const ALMOST = {
+  /** Seconds the "Almost! N soldiers from a clear!" count stays up after the crumple. */
+  show: 2,
+  /** Seconds after the crumple the big Try-again button appears. */
+  button: 1.9,
+  /** Seconds after the crumple a fresh page drops on its own (score back to the page start). */
+  autoRetry: 5.5,
+  /** Try-agains per page attempt that continue where the page was; after that, Try again starts it fresh. */
+  continues: 1,
+  /** Share of the points gathered on this page that a Try-again continue costs. */
+  penalty: 0.5,
+  /** Sim seconds the hero can't be hurt after a Try-again drop (whoever was at the gate files past). */
+  grace: 2
+} as const
+
+// ─── Adaptive difficulty, "the book is kind" (roadmap #8) ─────────────────
+
+export const DIFFICULTY = {
+  /** March speed / spawn pace on a page the player has already crumpled on. */
+  crumpleSlow: 0.9,
+  /** Real seconds of lesson-style slow-mo when the next column walks onto a fold, after a crumple. */
+  foldSlowmo: 0.5,
+  /** Perfect pages in a row before waves grow… */
+  perfectStreak: 3,
+  /** …by this many marchers. */
+  extraPerWave: 1,
+  /** Crumples on the pages up to the boss page before the dragon's mass units ease off… */
+  bossEaseLosses: 2,
+  /** …to this share of their speed. */
+  bossEase: 0.8,
+  /** Clamp for the stacked scalar. */
+  min: 0.6,
+  max: 1.5
+} as const

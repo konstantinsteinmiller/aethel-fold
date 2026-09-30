@@ -10,6 +10,9 @@ export interface FoldState {
   timeScale: number
   folds: { id: string; kind: string; phase: string; t: number }[]
   enemies: number
+  /** Enemies alive plus still to come (the Almost! count). */
+  enemiesLeft: number
+  difficulty: number
   boss: string
   sling: { x: number; z: number; cool: number; shots: number } | null
 }

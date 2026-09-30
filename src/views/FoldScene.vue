@@ -20,6 +20,7 @@ import type { FoldGame } from '@/fold/logic/game'
 import { PAGE_COUNT, pageDef } from '@/fold/logic/pages'
 import { LESSON_IDS } from '@/fold/logic/lessons'
 import { brokenCount } from '@/fold/logic/boss'
+import { ALMOST } from '@/fold/logic/config'
 import type { BookId, LessonId, PageDef, PageId } from '@/fold/logic/types'
 import type { ScreenPoint } from '@/fold/render/GameView'
 import PageBadge from '@/components/fold/PageBadge.vue'
@@ -30,6 +31,7 @@ import FxLayer from '@/components/fold/FxLayer.vue'
 import GhostHand from '@/components/fold/GhostHand.vue'
 import CootieCatcherPause from '@/components/fold/CootieCatcherPause.vue'
 import VictoryPanel from '@/components/fold/VictoryPanel.vue'
+import AlmostRetry from '@/components/fold/AlmostRetry.vue'
 import FMuteButton from '@/components/atoms/FMuteButton.vue'
 import FHudButton from '@/components/atoms/FHudButton.vue'
 import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
@@ -37,8 +39,8 @@ import useUser from '@/use/useUser'
 import { isGamePaused } from '@/use/useGamePause'
 import { syncGameplayLifecycle } from '@/use/useGameplayLifecycle'
 import {
-  addStats, bankScore, bookUnlocked, checkpoint, foldSettings, learnLesson, lessons, progressRevision, recordVictory,
-  recordsFor, resumeBook, resumePage, runCheckpoint, startNewRun
+  addStats, bankScore, bookUnlocked, checkpoint, foldSettings, learnLesson, lessons, progressRevision, readKindness,
+  recordVictory, recordsFor, resumeBook, resumePage, runCheckpoint, saveKindness, startNewRun
 } from '@/use/useFoldProgress'
 import { mobileCheck } from '@/utils/function'
 import { BOOT, bootStage, markGameReady } from '@/use/useBoot'
@@ -67,7 +69,9 @@ const hud = reactive({
   victoryScore: 0,
   victoryTime: 0,
   victoryHits: 0,
-  newBest: false
+  newBest: false,
+  /** The Almost! moment's Try-again button is up. */
+  retry: false
 })
 const pauseOpen = ref(false)
 const nameKey = computed(() => pageDef(hud.book, hud.page).nameKey)
@@ -119,6 +123,8 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
     case 'pageCleared':
       bankStats(g)
       bankScore(g.score, g.book)
+      // The kindness memory (streak, boss ease) first: the checkpoint keeps it.
+      saveKindness(g.kind)
       // Resume on the *next* page with everything banked so far.
       checkpoint(
         Math.min(PAGE_COUNT, e.a + 1) as PageId, { score: g.score, hits: g.runHits, time: g.runTime },
@@ -142,8 +148,17 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       hud.victory = true
       break
     }
+    case 'crumple':
+      // A defeat (b = 1): remember it for the kind book, and show how close it was.
+      if (e.b === 1) {
+        saveKindness(g.kind)
+        fx.value?.almost(e.a, e.c === 1)
+      }
+      break
     case 'pageDrop':
       hud.hp = g.hero.hp
+      hud.retry = false
+      fx.value?.clearAlmost()
       break
   }
 }
@@ -159,6 +174,8 @@ const caption = (def: PageDef): string => t(`fold.story.b${def.book}p${def.id}`)
 const onFrame = (g: FoldGame): void => {
   if (hud.score !== g.score) hud.score = g.score
   if (hud.hp !== g.hero.hp) hud.hp = g.hero.hp
+  const retry = g.phase === 'crumple' && g.defeated && g.phaseTime >= ALMOST.button
+  if (hud.retry !== retry) hud.retry = retry
   if (hud.boss) {
     const broken = brokenCount(g.boss)
     if (hud.bossBroken !== broken) hud.bossBroken = broken
@@ -209,7 +226,7 @@ onMounted(() => {
   if (page === 1) startNewRun(book)
   const eng = markRaw(new FoldEngine(
     c, { onEvent, word, onFrame, caption },
-    { learned: learnedMap(), startPage: page, startScore: score, book }
+    { learned: learnedMap(), startPage: page, startScore: score, book, kind: readKindness() }
   ))
   engine.value = eng
   eng.attach()
@@ -270,6 +287,10 @@ const restartPage = (): void => {
   pauseOpen.value = false
   engine.value?.restartPage()
 }
+/** The Almost! moment's Try again: the page drops straight back. */
+const tryAgain = (): void => {
+  if (engine.value?.tryAgain()) hud.retry = false
+}
 /** Start a book from its first page (restart, play again, or a pick from the shelf). */
 const openBook = (book: BookId): void => {
   pauseOpen.value = false
@@ -292,6 +313,9 @@ const onKey = (e: KeyboardEvent): void => {
     openPause()
   } else if (e.key === 'Enter' && hud.victory) {
     playAgain()
+  } else if ((e.key === 'Enter' || e.key === ' ') && hud.retry) {
+    e.preventDefault()
+    tryAgain()
   }
 }
 onMounted(() => window.addEventListener('keydown', onKey))
@@ -313,7 +337,11 @@ watch(progressRevision, () => {
   const saved = resumePage.value
   const savedBook: BookId = resumeBook.value === 2 && bookUnlocked(2) ? 2 : 1
   const early = g.book === 1 && g.pageId === 1 && g.runTime < 90 && g.pagesCleared === 0
-  if (early && (saved > g.pageId || savedBook !== g.book)) eng.jumpTo(saved, runCheckpoint.value?.score ?? 0, savedBook)
+  if (early && (saved > g.pageId || savedBook !== g.book)) {
+    // The restored run's kindness memory comes with it (in place: the game holds this object).
+    Object.assign(g.kind, readKindness())
+    eng.jumpTo(saved, runCheckpoint.value?.score ?? 0, savedBook)
+  }
 })
 
 // ─── Debug / e2e handle ──────────────────────────────────────────────────────
@@ -332,6 +360,7 @@ const publishDebugHandle = (eng: FoldEngine): void => {
     jumpTo: (p: number, book?: number) =>
       eng.jumpTo(Math.max(1, Math.min(PAGE_COUNT, p)) as PageId, eng.game.score, book === 2 ? 2 : book === 1 ? 1 : eng.game.book),
     clearPage: () => eng.game.debugClearPage(),
+    tryAgain: () => eng.tryAgain(),
     fastForward: (s: number) => eng.fastForward(s),
     state: () => ({
       book: eng.game.book,
@@ -343,6 +372,8 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       timeScale: eng.game.timeScale,
       folds: eng.game.folds.map((f) => ({ id: f.def.id, kind: f.def.kind, phase: f.phase, t: f.t })),
       enemies: eng.game.aliveCount(),
+      enemiesLeft: eng.game.enemiesLeft(),
+      difficulty: eng.game.difficulty,
       boss: eng.game.boss.phase,
       sling: eng.game.sling ? { x: eng.game.sling.def.x, z: eng.game.sling.def.z, cool: eng.game.sling.cool, shots: eng.game.sling.shots } : null
     }),
@@ -389,6 +420,8 @@ const pageAria = computed(() => t('fold.a11y.board'))
       @again="playAgain"
       @book="pickBook"
     )
+
+    AlmostRetry(:open="hud.retry && !pauseOpen" @retry="tryAgain")
 
     CootieCatcherPause(
       :open="pauseOpen"

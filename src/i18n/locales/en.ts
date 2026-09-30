@@ -270,7 +270,9 @@ export default {
       'settings': 'Pause and settings',
       'hearts': '{n} of {max} hearts left',
       'dragon': 'Dragon',
-      'boss': '{n} weak points left'
+      'boss': '{n} weak points left',
+      'tryAgain': 'Try again',
+      'almost': 'Almost there'
     },
     'page': {
       'border': 'The Border',
@@ -325,7 +327,10 @@ export default {
       'thwack': 'THWACK!',
       'boing': 'BOING!',
       'twang': 'TWANG!',
-      'flap': 'FLAP!'
+      'flap': 'FLAP!',
+      'almostTitle': 'ALMOST!',
+      'almost': '{n} soldier from a clear! | {n} soldiers from a clear!',
+      'almostBoss': '{n} weak point to go! | {n} weak points to go!'
     },
     'hint': {
       'swipe': 'Swipe along the dotted arrow to fold the page',

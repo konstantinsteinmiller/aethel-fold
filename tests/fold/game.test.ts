@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FoldGame } from '@/fold/logic/game'
 import { PAGES, PAGE_COUNT, isPageId, pageEnemyCount } from '@/fold/logic/pages'
-import { ENEMY, HERO_HP } from '@/fold/logic/config'
+import { ALMOST, ENEMY, HERO_HP, PAGE_DROP_TIME } from '@/fold/logic/config'
 import { spawnEnemy } from '@/fold/logic/entities'
 import type { FoldEventType } from '@/fold/logic/events'
 
@@ -129,7 +129,8 @@ describe('FoldGame mechanics', () => {
     }
     expect(events.filter((e) => e === 'heroHit').length).toBe(HERO_HP)
     expect(events).toContain('crumple')
-    step(g, 3, events)
+    // Nobody taps Try again: after the Almost! moment a fresh page drops on its own.
+    step(g, ALMOST.autoRetry + PAGE_DROP_TIME + 0.2, events)
     expect(g.hero.hp).toBe(HERO_HP)
     expect(g.pageId).toBe(1)
   })

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { ALL_LESSONS, collectErrors, ff, screenOf, seedState, state, swipe, waitForGame } from './helpers'
+import { ALL_LESSONS, collectErrors, ff, readSave, screenOf, seedState, state, swipe, waitForGame } from './helpers'
 
 test.describe('Aethel Fold — gameplay', () => {
   test('boots straight into page 1 (no main menu) with a clean console', async ({ page }) => {
@@ -76,6 +76,41 @@ test.describe('Aethel Fold — gameplay', () => {
     await page.getByRole('button', { name: /resume/i }).click()
     await expect(page.getByRole('dialog', { name: 'Paused' })).toHaveCount(0)
     expect(await page.evaluate(() => window.__fold!.game.paused)).toBe(false)
+  })
+
+  test('a crumple shows how close it was, then Try again drops the page back with full hearts', async ({ page }) => {
+    await seedState(page, { fold_lessons: ALL_LESSONS })
+    await page.goto('/')
+    await waitForGame(page)
+    await page.evaluate(() => window.__fold!.jumpTo(2))
+    await ff(page, 3)
+    // Three hits through the gate: the hero goes down and the page crumples.
+    await page.evaluate(() => {
+      const g = window.__fold!.game
+      for (let k = 0; k < 3; k++) {
+        g.hero.invuln = 0
+        g.hurtHero(0, 5)
+      }
+    })
+    const left = await page.evaluate(() => window.__fold!.state().enemiesLeft)
+    expect(left).toBeGreaterThan(0)
+    await ff(page, 0.05)
+    await expect(page.locator('.fx-almost')).toContainText('ALMOST!')
+    await expect(page.locator('.fx-almost')).toContainText(`${left} soldier`)
+    const button = page.getByTestId('almost-retry')
+    // A fresh page would drop by itself after a few seconds: hold the clock.
+    await ff(page, 2)
+    await expect(button).toBeVisible({ timeout: 5000 })
+    await expect(button).toContainText('Try again')
+    // (The attention pulse never lets Playwright call it "stable"; a finger doesn't care.)
+    await button.click({ force: true })
+    const s = await state(page)
+    expect(['drop', 'play']).toContain(s.phase)
+    expect(s.hp).toBe(3)
+    expect(s.page).toBe(2)
+    await expect(button).toHaveCount(0)
+    // The kind book remembers the crumple in the one save object.
+    await expect.poll(async () => (await readSave(page))?.fold_run?.crumples?.b1p2).toBe(1)
   })
 
   test('the boss can be beaten and the frog fold ends in VICTORY with Play again', async ({ page }) => {

@@ -188,6 +188,12 @@ export class FoldEngine {
     this.game.forfeitPage()
   }
 
+  /** The Almost! moment's Try again. Returns true if a page dropped. */
+  tryAgain(): boolean {
+    this.gestures.cancel()
+    return this.game.tryAgain()
+  }
+
   dispose(): void {
     this.stop()
     this.detach()

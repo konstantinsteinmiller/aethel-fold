@@ -7,6 +7,9 @@
  *
  * Imperative and pooled on purpose: dozens of pops a second must not churn
  * Vue's virtual DOM. Elements are created once and recycled round-robin.
+ *
+ * The `almost` variant is the big two-line word of the "Almost!" moment on a
+ * crumple (roadmap #9): ALMOST! over how close the player was, held ~2 s.
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -17,6 +20,9 @@ const WORD_POOL = 8
 const root = ref<HTMLDivElement | null>(null)
 const pops: HTMLDivElement[] = []
 const words: HTMLDivElement[] = []
+let almostEl: HTMLDivElement | null = null
+let almostTitle: HTMLSpanElement | null = null
+let almostLine: HTMLSpanElement | null = null
 let popIdx = 0
 let wordIdx = 0
 const { t } = useI18n()
@@ -36,11 +42,20 @@ onMounted(() => {
     el.appendChild(d)
     words.push(d)
   }
+  almostEl = document.createElement('div')
+  almostEl.className = 'fx-word fx-almost'
+  almostTitle = document.createElement('span')
+  almostTitle.className = 'fx-almost__title'
+  almostLine = document.createElement('span')
+  almostLine.className = 'fx-almost__line'
+  almostEl.append(almostTitle, almostLine)
+  el.appendChild(almostEl)
 })
 
 onBeforeUnmount(() => {
   pops.length = 0
   words.length = 0
+  almostEl = almostTitle = almostLine = null
 })
 
 const restart = (d: HTMLDivElement, cls: string): void => {
@@ -76,7 +91,27 @@ const word = (key: string, x: number, y: number, size = 1, tone = 'default', par
   restart(d, tone)
 }
 
-defineExpose({ pop, word })
+/**
+ * The "Almost!" moment: ALMOST! and "N soldiers from a clear!" (or, on the
+ * dragon's page, "N weak points to go!") in the middle of the empty desk.
+ * `n` comes from the simulation's crumple event.
+ */
+const almost = (n: number, boss = false): void => {
+  const d = almostEl
+  if (!d || !almostTitle || !almostLine) return
+  almostTitle.textContent = t('fold.fx.almostTitle')
+  const left = Math.max(0, Math.round(n))
+  almostLine.textContent = left > 0 ? t(boss ? 'fold.fx.almostBoss' : 'fold.fx.almost', { n: left }, left) : ''
+  d.style.setProperty('--rot', `${(Math.random() - 0.5) * 6}deg`)
+  restart(d, 'almost')
+}
+
+/** Drop the Almost! word early (the page is back). */
+const clearAlmost = (): void => {
+  almostEl?.classList.remove('is-on')
+}
+
+defineExpose({ pop, word, almost, clearAlmost })
 </script>
 
 <template lang="pug">
@@ -135,6 +170,55 @@ defineExpose({ pop, word })
   &.is-on
     animation: fx-word 1.05s cubic-bezier(.2, .9, .3, 1) forwards
 
+// Centred above the Try-again button, clear of the HUD strip.
+.fx-layer :deep(.fx-almost)
+  left: 50%
+  top: 40%
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: 0.15em
+  max-width: calc(100vw - 2rem)
+  text-align: center
+  white-space: normal
+  color: #ffd23f
+  &.is-on
+    animation: fx-almost 2s cubic-bezier(.2, .9, .3, 1) forwards
+
+@media (max-height: 520px) and (orientation: landscape)
+  .fx-layer :deep(.fx-almost)
+    top: 46%
+
+.fx-layer :deep(.fx-almost__title)
+  // Height-aware too: on a landscape phone it must stay under the HUD strip.
+  font-size: calc(clamp(1.7rem, min(12vw, 14vh), 4.4rem) * var(--size, 1))
+  line-height: 1
+
+.fx-layer :deep(.fx-almost__line)
+  font-size: clamp(0.95rem, min(5.4vw, 6.5vh), 2rem)
+  line-height: 1.1
+  color: #fff6e3
+  &:empty
+    display: none
+
+@keyframes fx-almost
+  0%
+    opacity: 0
+    transform: translate(-50%, -50%) scale(0.1) rotate(0)
+  10%
+    opacity: 1
+    transform: translate(-50%, -55%) scale(1.2) rotate(var(--rot))
+  20%
+    transform: translate(-50%, -55%) scale(0.95) rotate(var(--rot))
+  28%
+    transform: translate(-50%, -56%) scale(1) rotate(var(--rot))
+  85%
+    opacity: 1
+    transform: translate(-50%, -58%) scale(1) rotate(var(--rot))
+  100%
+    opacity: 0
+    transform: translate(-50%, -75%) scale(0.96) rotate(var(--rot))
+
 @keyframes fx-pop
   0%
     opacity: 0
@@ -168,4 +252,6 @@ defineExpose({ pop, word })
 @media (prefers-reduced-motion: reduce)
   .fx-layer :deep(.fx-pop.is-on), .fx-layer :deep(.fx-word.is-on)
     animation-duration: 0.6s
+  .fx-layer :deep(.fx-almost.is-on)
+    animation-duration: 2s
 </style>

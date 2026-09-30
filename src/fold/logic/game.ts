@@ -23,8 +23,12 @@ import {
   PAGE_HALF_D, PAGE_HALF_W, PAGE_TURN_TIME, PEEL_COMPLETE, SCORE, SPAWN_Z, TIME_SCALE_RATE, TORN_LINGER,
   FOLD_SNAP_THRESHOLD, LEAPER_HOP_EVERY, LEAPER_HOP_TIME, LEAPER_SHOT_CEILING, LEAPER_VAULT_LAND,
   LEAPER_VAULT_TIME, SLING_COOL, SLING_FLIGHT_BASE, SLING_FLIGHT_PER, SLING_GAIN, SLING_GRAB, SLING_MIN_PULL,
-  SLING_RADIUS, SLING_RANGE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED
+  SLING_RADIUS, SLING_RANGE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED, ALMOST, DIFFICULTY
 } from './config'
+import {
+  type KindMemory, createKindMemory, difficultyFor, extraPerWave, foldSlowmoOn, noteCrumple, notePageWon,
+  resetRunMemory, retryPenalty, shouldEaseBoss
+} from './difficulty'
 import { EventQueue, KILL_BOLT, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from './events'
 import {
   FOLD_LOWERED, FOLD_READY, FOLD_SNAPPED, FOLD_SPRUNG, FOLD_STAMPED,
@@ -86,6 +90,8 @@ export interface GameOptions {
   learned?: Partial<Record<LessonId, boolean>>
   /** Which book to open (defaults to book 1). */
   book?: BookId
+  /** "The book is kind" memory (persisted); the game mutates this object in place. */
+  kind?: KindMemory
 }
 
 const createTear = (def: PageDef['tears'][number]): TearState => ({
@@ -152,8 +158,31 @@ export class FoldGame {
   private bossActed = false
   private pageClearedEmitted = false
 
+  // "Almost!" moment (roadmap #9)
+  /** The running crumple is a defeat (Try again offered), not a pause-menu restart. */
+  defeated = false
+  /** Try-again continues left on this page attempt. */
+  continuesLeft: number = ALMOST.continues
+  /** Where a drop returns to: a fresh page's intro/boss, or the phase a continue resumes. */
+  private dropTo: GamePhase = 'intro'
+  private crumpledFrom: GamePhase = 'play'
+
+  // Adaptive difficulty, "the book is kind" (roadmap #8) — invisible to the player.
+  /** The persisted memory the knobs below are derived from. */
+  kind: KindMemory
+  /** Multiplies enemy march speed and wave spawn pacing (sim time). 1 = as authored. */
+  difficulty = 1
+  /** Extra marchers appended to every wave (perfect streak). */
+  extraPerWave = 0
+  /** A new column (wave or dragon stomp) arrives: bumps so the fold slow-mo fires once per column. */
+  private column = 0
+  private slowmoColumn = 0
+  /** Real seconds of kind slow-mo left. */
+  private kindSlowmo = 0
+
   constructor(opts: GameOptions = {}) {
     this.rng = createRng(opts.seed ?? 0x5eed)
+    this.kind = opts.kind ?? createKindMemory()
     const learned = {} as Record<LessonId, boolean>
     for (const id of LESSON_IDS) learned[id] = !!opts.learned?.[id]
     this.learned = learned
@@ -170,6 +199,8 @@ export class FoldGame {
     this.runTime = 0
     this.pagesCleared = page - 1
     this.stats = emptyStats()
+    // Page 1 is a new run: the book forgets the crumples (not the streak or the boss ease).
+    if (page === 1) resetRunMemory(this.kind)
     resetBoss(this.boss)
     this.loadPage(page)
   }
@@ -179,7 +210,11 @@ export class FoldGame {
     this.page = pageDef(this.book, id)
     this.folds = this.page.folds.map(createFold)
     this.tears = this.page.tears.map(createTear)
-    this.waveOrder = this.page.waves.map((w) => [...w.spawns].sort((a, b) => a.at - b.at))
+    const boss = this.page.exit === 'boss'
+    if (boss && shouldEaseBoss(this.kind, this.book, id)) this.kind.bossEase = true
+    this.difficulty = difficultyFor(this.kind, this.book, id, boss)
+    this.extraPerWave = extraPerWave(this.kind)
+    this.waveOrder = this.page.waves.map((w) => this.orderWave(w.spawns))
     resetPools(this.enemies, this.projectiles)
     const h = this.hero
     h.hp = HERO_HP
@@ -205,6 +240,11 @@ export class FoldGame {
     this.peelDone = false
     this.finaleTime = 0
     this.pageClearedEmitted = false
+    this.defeated = false
+    this.continuesLeft = ALMOST.continues
+    this.column = 0
+    this.slowmoColumn = 0
+    this.kindSlowmo = 0
     const sd = this.page.sling
     this.sling = sd
       ? { def: sd, cool: 0, aiming: false, pullX: 0, pullZ: 0, tx: sd.x, tz: sd.z, shots: 0, rev: (this.sling?.rev ?? 0) + 1 }
@@ -222,6 +262,20 @@ export class FoldGame {
     this.events.emit('pageIntro', id)
   }
 
+  /** A wave's spawns in time order, plus the perfect-streak extras (page load only: allocates). */
+  private orderWave(spawns: readonly SpawnDef[]): SpawnDef[] {
+    const order = [...spawns].sort((a, b) => a.at - b.at)
+    if (this.extraPerWave <= 0) return order
+    let last: SpawnDef | null = null
+    for (const s of order) if (s.lane >= 0 && ENEMY[s.type].speed > 0) last = s
+    if (!last) return order
+    const lanes = Math.max(1, this.page.lanes.length)
+    for (let k = 0; k < this.extraPerWave; k++) {
+      order.push({ type: last.type, lane: (last.lane + k + 1) % lanes, at: last.at + 0.9 * (k + 1) })
+    }
+    return order
+  }
+
   /** Throw the page away and restart it (hero down). Score returns to the page start. */
   restartPage(): void {
     this.score = this.pageStartScore
@@ -233,9 +287,94 @@ export class FoldGame {
   forfeitPage(): void {
     const p = this.phase
     if (p === 'crumple' || p === 'drop' || p === 'turn' || p === 'victory' || p === 'finale' || p === 'boot') return
+    this.crumple(false)
+  }
+
+  /**
+   * The page crumples. A defeat opens the "Almost!" moment: the event carries
+   * how close the player was (a = enemies left, or the dragon's unbroken weak
+   * points when c = 1), b = 1 offers Try again. Left alone, a fresh page drops
+   * after `ALMOST.autoRetry`; a forfeit drops one after the crumple animation.
+   */
+  private crumple(defeat: boolean): void {
     clearLesson(this.lesson)
-    this.events.emit('crumple')
-    this.setPhase('crumple', CRUMPLE_TIME)
+    this.defeated = defeat
+    this.kindSlowmo = 0
+    if (defeat) {
+      this.crumpledFrom = this.phase
+      noteCrumple(this.kind, this.book, this.pageId)
+      // A continue picks up with the kinder pace straight away.
+      this.setDifficulty(difficultyFor(this.kind, this.book, this.pageId, this.page.exit === 'boss'))
+    }
+    this.events.emit('crumple', this.enemiesLeft(), defeat ? 1 : 0, this.page.exit === 'boss' ? 1 : 0)
+    this.setPhase('crumple', defeat ? ALMOST.autoRetry : CRUMPLE_TIME)
+  }
+
+  /** How far from a clear: enemies alive plus those still to come (the dragon: weak points left). */
+  enemiesLeft(): number {
+    if (this.page.exit === 'boss') return this.boss.weakPoints.length - brokenCount(this.boss)
+    let n = this.aliveCount()
+    for (let w = this.waveIndex; w < this.waveOrder.length; w++) {
+      const order = this.waveOrder[w]!
+      n += w === this.waveIndex && this.waveStarted ? order.length - this.waveCursor : order.length
+    }
+    return n
+  }
+
+  /** Can the Almost! moment's Try again be taken now (the crumpled ball is gone)? */
+  canTryAgain(): boolean {
+    return !this.paused && this.phase === 'crumple' && this.defeated && this.phaseTime >= CRUMPLE_TIME
+  }
+
+  /**
+   * Try again: the page drops straight back as it was, with full hearts, at
+   * the cost of `ALMOST.penalty` of the points gathered on it. Once the
+   * page's continues are spent, it drops a fresh page instead (score back to
+   * the page start). Returns true if a page dropped.
+   */
+  tryAgain(): boolean {
+    if (!this.canTryAgain()) return false
+    if (this.continuesLeft <= 0) {
+      this.dropFresh()
+      return true
+    }
+    this.continuesLeft--
+    const lost = retryPenalty(this.score - this.pageStartScore, ALMOST.penalty)
+    this.score -= lost
+    const h = this.hero
+    h.hp = HERO_HP
+    h.invuln = ALMOST.grace
+    h.mood = 'walk'
+    h.moodTimer = 0.9
+    h.rev++
+    // Whatever was in the air when the page went is gone with it.
+    for (const p of this.projectiles) p.alive = false
+    this.combo = 0
+    this.comboTimer = 0
+    this.hitStop = 0
+    this.timeScale = 1
+    this.timeTarget = 1
+    this.defeated = false
+    this.dropTo = this.crumpledFrom
+    this.setPhase('drop', PAGE_DROP_TIME)
+    this.events.emit('pageDrop', this.pageId, 1, lost)
+    return true
+  }
+
+  /** A fresh copy of the page drops (the old crumple → restart path). */
+  private dropFresh(): void {
+    this.restartPage()
+    this.dropTo = this.page.exit === 'boss' ? 'boss' : 'intro'
+    // restartPage → loadPage set phase intro; keep the drop visible.
+    this.setPhase('drop', PAGE_DROP_TIME)
+  }
+
+  /** Change the pace scalar; marchers already on the page slow down (or speed up) with it. */
+  private setDifficulty(d: number): void {
+    if (d === this.difficulty) return
+    const k = d / this.difficulty
+    for (const e of this.enemies) if (e.state !== 'dead') e.speed *= k
+    this.difficulty = d
   }
 
   private setPhase(p: GamePhase, timer = 0): void {
@@ -312,16 +451,11 @@ export class FoldGame {
         break
       case 'crumple':
         this.phaseTimer -= realDt
-        if (this.phaseTimer <= 0) {
-          this.setPhase('drop', PAGE_DROP_TIME)
-          this.restartPage()
-          // restartPage → loadPage set phase intro; keep the drop visible.
-          this.setPhase('drop', PAGE_DROP_TIME)
-        }
+        if (this.phaseTimer <= 0) this.dropFresh()
         break
       case 'drop':
         this.phaseTimer -= realDt
-        if (this.phaseTimer <= 0) this.setPhase(this.page.exit === 'boss' ? 'boss' : 'intro')
+        if (this.phaseTimer <= 0) this.setPhase(this.dropTo, this.dropTo === 'cleared' ? PAGE_CLEAR_DELAY : 0)
         break
       case 'finale':
         this.finaleTime += realDt
@@ -336,7 +470,33 @@ export class FoldGame {
         break
     }
 
+    this.updateKindSlowmo(realDt)
     this.updateLessons(realDt)
+  }
+
+  /**
+   * After a crumple on this page, the next column to walk onto a ready fold
+   * gets half a second of lesson-style slow-mo (sim time only: the fold
+   * itself still follows the finger in real time). Once per column.
+   */
+  private updateKindSlowmo(realDt: number): void {
+    if (this.kindSlowmo > 0) {
+      this.kindSlowmo -= realDt
+      return
+    }
+    if (this.column === this.slowmoColumn || (this.phase !== 'play' && this.phase !== 'boss')) return
+    if (!foldSlowmoOn(this.kind, this.book, this.pageId)) return
+    for (let i = 0; i < this.folds.length; i++) {
+      const f = this.folds[i]!
+      if (!isGrabbable(f)) continue
+      for (let j = 0; j < MAX_ENEMIES; j++) {
+        const e = this.enemies[j]!
+        if (e.state !== 'march' || !onFootprint(f, e.x, e.z, 0)) continue
+        this.slowmoColumn = this.column
+        this.kindSlowmo = DIFFICULTY.foldSlowmo
+        return
+      }
+    }
   }
 
   // ─── Folds ───────────────────────────────────────────────────────────────
@@ -887,18 +1047,20 @@ export class FoldGame {
       return
     }
     if (this.waveIndex >= waves.length) return
+    // The book is kind: a slower pace stretches the spawn intervals too.
+    const paced = dt * this.difficulty
     if (!this.waveStarted) {
-      this.waveGap -= dt
+      this.waveGap -= paced
       if (this.waveGap <= 0) this.startWave(this.waveIndex)
       return
     }
-    this.waveTime += dt
+    this.waveTime += paced
     const order = this.waveOrder[this.waveIndex]!
     while (this.waveCursor < order.length && order[this.waveCursor]!.at <= this.waveTime) {
       this.spawnFrom(order[this.waveCursor]!)
       this.waveCursor++
     }
-    this.updateSally(dt)
+    this.updateSally(paced)
     if (this.waveCursor >= order.length && this.mobileAlive() === 0 && !this.shotInFlight()) {
       // Next wave after a breath.
       this.waveIndex++
@@ -917,6 +1079,7 @@ export class FoldGame {
     this.waveTime = 0
     this.waveCursor = 0
     this.waveStarted = true
+    this.column++
     this.events.emit('waveStart', index)
   }
 
@@ -931,7 +1094,10 @@ export class FoldGame {
     for (let k = 0; k < s.count; k++) {
       const lane = k % Math.max(1, this.page.lanes.length)
       const slot = spawnEnemy(this.enemies, 'knight', s.x + (k - (s.count - 1) / 2) * 0.5, s.z, lane, this.rng.range(-0.3, 0.3))
-      if (slot >= 0) this.events.emit('spawn', slot)
+      if (slot >= 0) {
+        this.primeSpawn(slot)
+        this.events.emit('spawn', slot)
+      }
     }
   }
 
@@ -963,9 +1129,10 @@ export class FoldGame {
     this.events.emit('spawn', slot)
   }
 
-  /** Per-type setup after a spawn (leapers wait a moment before their first hop). */
+  /** Per-spawn setup: the book's pace, and leapers wait a moment before their first hop. */
   private primeSpawn(slot: number): void {
     const e = this.enemies[slot]!
+    e.speed *= this.difficulty
     if (e.type === 'leaper') e.cool = LEAPER_HOP_EVERY * this.rng.range(0.7, 1.2)
   }
 
@@ -1013,6 +1180,7 @@ export class FoldGame {
     this.pageClearedEmitted = true
     const perfect = this.hitsThisPage === 0
     if (perfect) this.award(SCORE.perfectPage, 0, 0, 1)
+    notePageWon(this.kind, this.book, this.pageId, perfect, false)
     this.pagesCleared = Math.max(this.pagesCleared, this.pageId)
     // Fold every raised pop-up back into the page (pop-up books close flat).
     for (const f of this.folds) {
@@ -1569,9 +1737,7 @@ export class FoldGame {
     if (h.hp <= 0) {
       h.mood = 'down'
       this.events.emit('heroDown')
-      this.events.emit('crumple')
-      clearLesson(this.lesson)
-      this.setPhase('crumple', CRUMPLE_TIME)
+      this.crumple(true)
     }
   }
 
@@ -1646,7 +1812,8 @@ export class FoldGame {
           this.bossActed = true
           const side = this.rng.next() < 0.5 ? -1 : 1
           this.events.emit('bossStomp', 0, 0, 0, side * 1.6, -1.6)
-          const n = 3 + Math.min(2, brokenCount(b))
+          const n = 3 + Math.min(2, brokenCount(b)) + this.extraPerWave
+          this.column++
           const mix = this.page.stomp
           for (let k = 0; k < n; k++) {
             const lane = k % this.page.lanes.length
@@ -1690,6 +1857,7 @@ export class FoldGame {
           this.pagesCleared = Math.max(this.pagesCleared, this.pageId)
           this.award(SCORE.boss, 0, -3, 1)
           if (this.hitsThisPage === 0) this.award(SCORE.perfectPage, 0, 0, 1)
+          notePageWon(this.kind, this.book, this.pageId, this.hitsThisPage === 0, true)
           this.events.emit('pageCleared', this.pageId, this.hitsThisPage === 0 ? 1 : 0)
           this.loadPage(Math.min(PAGE_COUNT, this.pageId + 1) as PageId)
         }
@@ -1842,6 +2010,7 @@ export class FoldGame {
       clearLesson(l)
     }
     this.timeTarget = l.id && !l.hint ? l.timeScale : 1
+    if (this.kindSlowmo > 0 && this.timeTarget > LESSON_TIME_SCALE) this.timeTarget = LESSON_TIME_SCALE
   }
 
   private foldIndexWithLesson(id: LessonId): number {

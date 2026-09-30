@@ -7,6 +7,7 @@ import { aethelState, getState, setState, setStates } from '@/use/useAethelState
 import { saveDataVersion, flushSaveNow } from '@/use/useSaveStatus'
 import type { BookId, LessonId, PageId } from '@/fold/logic/types'
 import { emptyStats, type GameStats } from '@/fold/logic/game'
+import { type KindMemory, readKindMemory } from '@/fold/logic/difficulty'
 
 /**
  * Aethel Fold progress — a module-level singleton view over the fields of
@@ -29,6 +30,14 @@ export interface RunCheckpoint {
   score: number
   hits: number
   time: number
+  /**
+   * "The book is kind" memory (roadmap #8), stored inside `fold_run` and only
+   * when it carries something: crumples per page this run (`b1p3: 2`), the
+   * perfect-page streak, and the sticky boss ease.
+   */
+  crumples?: Record<string, number>
+  streak?: number
+  bossEase?: boolean
 }
 
 export interface Records {
@@ -62,11 +71,32 @@ const readSettings = (): FoldSettings => {
   return s
 }
 
+/** The kindness fields of a `fold_run`, omitting the defaults so plain checkpoints stay `{ score, hits, time }`. */
+const kindFields = (mem: KindMemory): Pick<RunCheckpoint, 'crumples' | 'streak' | 'bossEase'> => {
+  const out: Pick<RunCheckpoint, 'crumples' | 'streak' | 'bossEase'> = {}
+  if (Object.keys(mem.crumples).length > 0) out.crumples = { ...mem.crumples }
+  if (mem.streak > 0) out.streak = mem.streak
+  if (mem.bossEase) out.bossEase = true
+  return out
+}
+
 const readCheckpoint = (): RunCheckpoint | null => {
   const v = getState<unknown>(RUN_KEY)
   if (!v || typeof v !== 'object') return null
   const r = v as Partial<RunCheckpoint>
-  return { score: Math.max(0, num(r.score)), hits: Math.max(0, num(r.hits)), time: Math.max(0, num(r.time)) }
+  return {
+    score: Math.max(0, num(r.score)), hits: Math.max(0, num(r.hits)), time: Math.max(0, num(r.time)),
+    ...kindFields(readKindMemory(v))
+  }
+}
+
+/** The persisted kindness memory (a fresh object: the game mutates its own copy). */
+export const readKindness = (): KindMemory => readKindMemory(getState<unknown>(RUN_KEY))
+
+/** Kindness that outlives a run: the streak and the boss ease stay, the crumples go. */
+const carryKindness = (): Pick<RunCheckpoint, 'streak' | 'bossEase'> => {
+  const { streak, bossEase } = kindFields(readKindness())
+  return { ...(streak ? { streak } : {}), ...(bossEase ? { bossEase } : {}) }
 }
 
 const readCleared = (key: string): number => Math.max(0, Math.min(6, num(getState(key))))
@@ -132,7 +162,7 @@ export const startNewRun = (book: BookId = resumeBook.value): void => {
   setStates({
     [PAGE_KEY]: 1,
     [BOOK_KEY]: book,
-    [RUN_KEY]: { score: 0, hits: 0, time: 0 },
+    [RUN_KEY]: { score: 0, hits: 0, time: 0, ...carryKindness() },
     [RUNS_KEY]: runs.value + 1
   })
 }
@@ -146,12 +176,28 @@ export const checkpoint = (page: PageId, run: RunCheckpoint, cleared: number, bo
   setStates({
     [PAGE_KEY]: page,
     [BOOK_KEY]: book,
-    [RUN_KEY]: { score: Math.round(run.score), hits: run.hits, time: Math.round(run.time * 10) / 10 },
+    [RUN_KEY]: {
+      score: Math.round(run.score), hits: run.hits, time: Math.round(run.time * 10) / 10,
+      ...kindFields(readKindness())
+    },
     [k.cleared]: Math.max(k.clearedRef.value, Math.min(6, cleared))
   })
   // A hard checkpoint: don't wait for the debounce, or a tab closed right after
   // a page turn resumes one page too early.
   void flushSaveNow()
+}
+
+/**
+ * Store the game's kindness memory into `fold_run` (after a crumple or a
+ * cleared page), keeping the run checkpoint beside it untouched.
+ */
+export const saveKindness = (mem: KindMemory): void => {
+  const v = getState<unknown>(RUN_KEY)
+  const base = v && typeof v === 'object' ? (v as Partial<RunCheckpoint>) : {}
+  setState(RUN_KEY, {
+    score: Math.max(0, num(base.score)), hits: Math.max(0, num(base.hits)), time: Math.max(0, num(base.time)),
+    ...kindFields(mem)
+  })
 }
 
 export const learnLesson = (id: LessonId): void => {
@@ -187,7 +233,7 @@ export const recordVictory = (score: number, time: number, book: BookId = 1): { 
     [k.cleared]: 6,
     [PAGE_KEY]: 1,
     [BOOK_KEY]: 2,
-    [RUN_KEY]: { score: 0, hits: 0, time: 0 }
+    [RUN_KEY]: { score: 0, hits: 0, time: 0, ...carryKindness() }
   })
   void flushSaveNow()
   return { newBest, newFastest }

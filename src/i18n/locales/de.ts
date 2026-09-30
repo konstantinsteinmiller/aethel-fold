@@ -266,7 +266,9 @@ export default {
       'settings': 'Pause und Einstellungen',
       'hearts': 'Noch {n} von {max} Herzen',
       'dragon': 'Drache',
-      'boss': 'Noch {n} Schwachstellen'
+      'boss': 'Noch {n} Schwachstellen',
+      'tryAgain': 'Nochmal!',
+      'almost': 'Fast geschafft'
     },
     'page': {
       'border': 'Die Grenze',
@@ -321,7 +323,10 @@ export default {
       'thwack': 'ZACK!',
       'boing': 'BOING!',
       'twang': 'SCHWIRR!',
-      'flap': 'FLATTER!'
+      'flap': 'FLATTER!',
+      'almostTitle': 'FAST!',
+      'almost': 'Nur noch {n} Soldat bis zum Sieg! | Nur noch {n} Soldaten bis zum Sieg!',
+      'almostBoss': 'Nur noch {n} Schwachstelle! | Nur noch {n} Schwachstellen!'
     },
     'hint': {
       'swipe': 'Wische entlang des gepunkteten Pfeils, um das Papier zu falten',

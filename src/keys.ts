@@ -9,7 +9,11 @@
 
 /** Page (1…6) the player resumes on after a reload. */
 export const PAGE_KEY = 'fold_page'
-/** Run checkpoint taken at every page start: `{ score, hits, time }`. */
+/**
+ * Run checkpoint taken at every page start: `{ score, hits, time }`, plus the
+ * "book is kind" memory when it carries something: `crumples` per page
+ * (`{ b1p3: 2 }`), the perfect-page `streak`, and the sticky `bossEase`.
+ */
 export const RUN_KEY = 'fold_run'
 /** Highest page ever cleared (0…6) — the headline progress number. */
 export const CLEARED_KEY = 'fold_cleared'
