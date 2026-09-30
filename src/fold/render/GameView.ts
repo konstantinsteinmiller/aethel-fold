@@ -46,6 +46,7 @@ import { createSpriteTextures, type SpriteTextures } from './art/spriteArt'
 import { paintPlainSheet } from './art/pageArt'
 import { boatGeometry, disposeModelCache } from './models'
 import { BatsView } from './views/BatsView'
+import { OutroView } from './views/OutroView'
 import { DEFAULT_LOOK, type Look } from '../logic/cosmetics'
 import type { PageLook } from './art/pageArt'
 
@@ -103,6 +104,8 @@ export class GameView {
   private boatT = 0
   /** Halloween's bat standees (roadmap #17). */
   readonly bats: BatsView
+  /** The boss outro's crowd and fireworks (C9b). */
+  readonly outro: OutroView
   /** The look new pages are printed in, and the atlas and effects follow (roadmaps #6, #17). */
   private look: Look
   /** Boot telemetry (roadmap #13): ms the standee atlas took at boot, and the deferred/seasonal paints since. */
@@ -142,6 +145,8 @@ export class GameView {
     this.scene.add(this.effects.group)
     this.bats = new BatsView(this.atlas)
     this.scene.add(this.bats.group)
+    this.outro = new OutroView(this.atlas, this.effects, this.desk)
+    this.scene.add(this.outro.mesh)
     this.sheet = new SheetView(paintPlainSheet(99))
     this.scene.add(this.sheet.mesh)
     this.shelf = new ShelfView()
@@ -426,9 +431,17 @@ export class GameView {
         this.effects.glow(DESK_LAMP.x, DESK_Y + DESK_LAMP.h - 0.4, DESK_LAMP.z + 0.6, 2.6, 0.6, 'star', 'lampWarm', 2)
         break
       case 'rushStart':
-        // A rematch: no victory crowd, the camera as for any dragon page.
-        this.units.showCrowd(false)
+        // A rematch: the camera as for any dragon page (the outro's crowd is the victory page's only).
         this.desk.setZoom(1)
+        break
+      case 'outro':
+        // Its frames are painted by now (boss and finale pages paint them on their intro); never twice.
+        this.paintDeferred()
+        this.outro.onEvent(e, g)
+        break
+      case 'outroBeat':
+      case 'firework':
+        this.outro.onEvent(e, g)
         break
       case 'rushDone':
         for (let i = 0; i < 3; i++) fx.burst(-3 + i * 3, 3, -1, { count: 50, palette: 'dragon', speed: 5, up: 7 })
@@ -571,7 +584,9 @@ export class GameView {
       }
       case 'pageIntro': {
         // Book 2's runners and leapers: their atlas frames must be painted before they can march on.
-        if (g.book === 2) this.paintDeferred()
+        // The outro's crowd (C9b): painted on the boss and finale pages' intro, under the page turn.
+        if (g.book === 2 || g.page.exit === 'boss' || g.page.exit === 'finale') this.paintDeferred()
+        this.outro.onEvent(e, g)
         if (this.transition === 'drop') break
         this.adoptPage()
         if (this.transition !== 'turn' && this.transition !== 'peel') this.transition = 'none'
@@ -645,7 +660,6 @@ export class GameView {
         break
       case 'victory': {
         this.paintDeferred()
-        this.units.showCrowd(true)
         for (let i = 0; i < 5; i++) fx.burst(-4 + i * 2, 3 + (i % 2), -1 + (i % 3), { count: 70, palette: 'festive', speed: 5.5, up: 8 })
         break
       }
@@ -803,6 +817,7 @@ export class GameView {
     this.incoming?.update(g, this.time, dt)
     this.syncAnchors()
     this.units.update(g, this.surface, this.desk.camera, this.time, dt)
+    this.outro.update(g, this.desk.camera, this.time, dt)
     this.projectiles.update(g, this.surface, this.time)
 
     // Dragon fire stream.
@@ -1005,6 +1020,7 @@ export class GameView {
     this.shelf.dispose()
     this.boatMat.dispose()
     this.bats.dispose()
+    this.outro.dispose()
     this.atlas.dispose()
     this.sprites.dispose()
     this.snapshotRT?.dispose()

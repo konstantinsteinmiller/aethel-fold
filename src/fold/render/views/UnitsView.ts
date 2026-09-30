@@ -1,7 +1,7 @@
 /**
- * Units on the page: enemies (instanced standees + 3D paper catapults), the
- * hero (standee + banner + floating paper hearts) and, at the end, the crowd
- * of tiny paper people cheering "yay!".
+ * Units on the page: enemies (instanced standees + 3D paper catapults) and the
+ * hero (standee + banner + floating paper hearts). The victory crowd is the
+ * boss outro's (`OutroView`, C9b).
  */
 
 import { Group, Mesh, type PerspectiveCamera } from 'three'
@@ -76,7 +76,6 @@ export class UnitsView {
   readonly group = new Group()
   readonly enemies: StandeeField
   readonly hero: StandeeField
-  readonly crowd: StandeeField
   private readonly catapults: CatapultModel[] = []
   private readonly catapultSlot: number[] = []
   private readonly propMat: PaperMaterial
@@ -89,13 +88,11 @@ export class UnitsView {
   private heroHp = 3
   private heartPop = [0, 0, 0]
   private heroFlash = 0
-  private crowdOn = 0
 
   constructor(atlas: StandeeAtlas) {
     this.enemies = new StandeeField(atlas, MAX_ENEMIES)
     this.hero = new StandeeField(atlas, 1)
-    this.crowd = new StandeeField(atlas, 18)
-    this.group.add(this.enemies.mesh, this.hero.mesh, this.crowd.mesh)
+    this.group.add(this.enemies.mesh, this.hero.mesh)
     this.propMat = createPaperMaterial({ vertexColors: true, grain: 0.05 })
     for (let i = 0; i < 4; i++) {
       const c = new CatapultModel(this.propMat)
@@ -114,13 +111,7 @@ export class UnitsView {
       this.hearts.push(h)
       this.group.add(h)
     }
-    for (let i = 0; i < 18; i++) this.crowd.hide(i)
-    this.crowd.commit()
     this.group.userData.perfTag = 'fold.units'
-  }
-
-  showCrowd(on: boolean): void {
-    this.crowdOn = on ? Math.max(this.crowdOn, 0.0001) : 0
   }
 
   update(game: FoldGame, surf: SurfaceSampler, camera: PerspectiveCamera, time: number, dt: number): void {
@@ -219,26 +210,6 @@ export class UnitsView {
       heart.scale.setScalar(alive ? 0.6 : 0.6 * pop)
     }
     this.heartMat.uniforms.uFlash.value = this.heroFlash * 0.4
-
-    // ─── Crowd (victory) ───
-    if (this.crowdOn > 0) {
-      this.crowdOn = Math.min(1, this.crowdOn + dt * 0.9)
-      const names: FrameName[] = ['personRed', 'personBlue', 'personGreen', 'personYellow'] as unknown as FrameName[]
-      for (let i = 0; i < 18; i++) {
-        const a = (i / 18) * Math.PI * 2 + 0.3
-        const r = 2.3 + (i % 3) * 0.55
-        const x = Math.cos(a) * r
-        const z = 0.8 + Math.sin(a) * r * 0.75
-        const base = names[i % 4] as unknown as string
-        const up = Math.floor(time * 5 + i * 0.7) % 2
-        this.crowd.setFrame(i, `${base}${up}` as FrameName)
-        const delay = clamp01(this.crowdOn * 1.8 - i * 0.05)
-        const s = easeOutBack(delay) * 0.72
-        const jump = up ? Math.abs(Math.sin(time * 9 + i)) * 0.25 : 0
-        this.crowd.place(i, x, jump, z, Math.atan2(cam.x - x, cam.z - z) * 0.4, Math.sin(time * 6 + i) * 0.08, 0, Math.max(0.001, s))
-      }
-      this.crowd.commit()
-    }
   }
 
   private placeEnemy(e: Enemy, i: number, surf: SurfaceSampler, camX: number, camZ: number, time: number): void {
@@ -319,7 +290,6 @@ export class UnitsView {
   dispose(): void {
     this.enemies.dispose()
     this.hero.dispose()
-    this.crowd.dispose()
     this.propMat.dispose()
     this.heartMat.dispose()
   }

@@ -81,6 +81,10 @@ export class FoldEngine {
   private shelfY = 0
   private shelfT = 0
   private shelfHit = SHELF_NONE
+  /** A pointer whose press skipped the boss outro (−1 none): the rest of its stroke is swallowed too. */
+  private skipPtr = -1
+  /** Low quality setting / reduced motion: the outro's lighter fireworks (C9b). */
+  private lowQuality = false
   /** A pointer that went down on the desk lamp (−1 none), and where and when. */
   private lampPtr = -1
   private lampX = 0
@@ -245,6 +249,8 @@ export class FoldEngine {
   setQuality(q: 'auto' | 'high' | 'low'): void {
     this.view.renderer.scaleLock = q === 'auto' ? null : q === 'high' ? 1 : 0.62
     this.view.setSize(this.cssW, this.cssH)
+    this.lowQuality = q === 'low'
+    this.game.outro.lite = this.lowQuality || this.game.reducedMotion
   }
 
   setShake(on: boolean): void {
@@ -252,6 +258,15 @@ export class FoldEngine {
     // Lesson demonstrations play once instead of looping (roadmap #4).
     const prefers = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
     this.game.reducedMotion = !on || prefers
+    this.game.outro.lite = this.lowQuality || this.game.reducedMotion
+  }
+
+  // ─── Boss outro (C9b) ────────────────────────────────────────────────────
+
+  /** The outro's skip button, a key, or a tap on the page: straight to the victory card. */
+  skipOutro(): boolean {
+    this.gestures.cancel()
+    return this.game.skipOutro()
   }
 
   setHaptics(on: boolean): void {
@@ -288,7 +303,6 @@ export class FoldEngine {
   /** A book's Dragon Rush: its dragon alone, faster, against the clock. */
   startRush(book: BookId): void {
     this.gestures.cancel()
-    this.view.units.showCrowd(false)
     this.game.startRun({ mode: 'dragonRush', book })
   }
 
@@ -316,13 +330,11 @@ export class FoldEngine {
   /** Start over from page 1 of a book (Play again / pick a book). */
   newRun(book: BookId = this.game.book): void {
     this.gestures.cancel()
-    this.view.units.showCrowd(false)
     this.game.startRun(1, 0, book)
   }
 
   jumpTo(page: PageId, score = this.game.score, book: BookId = this.game.book): void {
     this.gestures.cancel()
-    this.view.units.showCrowd(false)
     this.game.startRun(page, score, book)
   }
 
@@ -481,6 +493,7 @@ export class FoldEngine {
       this.audio?.start()
       if (this.audio && this.audio.ctx.state === 'suspended') void this.audio.ctx.resume().catch(() => undefined)
     }
+    if (this.outroPointer(kind, e.pointerId)) return
     if (this.shelfPointer(kind, e.pointerId, x, y, now)) return
     if (this.lampPointer(kind, e.pointerId, x, y, now)) return
     if (kind === 'down') {
@@ -534,6 +547,25 @@ export class FoldEngine {
       this.gestures.cancel()
       g.openShelf('tap', this.shelfHit)
     }
+    return true
+  }
+
+  /**
+   * While the boss outro plays, a press anywhere on the page skips it (after
+   * its first half second, which still belongs to the finale's swipe); that
+   * pointer's whole stroke is taken, so it never starts a fold or a shut.
+   * Returns true if taken.
+   */
+  private outroPointer(kind: 'down' | 'move' | 'up' | 'cancel', id: number): boolean {
+    if (kind === 'down') {
+      if (!this.game.outro.active || this.game.paused) return false
+      // Too early to skip, the press is swallowed all the same (the page takes no input now).
+      this.game.skipOutro()
+      this.skipPtr = id
+      return true
+    }
+    if (id !== this.skipPtr) return false
+    if (kind === 'up' || kind === 'cancel') this.skipPtr = -1
     return true
   }
 

@@ -11,6 +11,7 @@ export type OrigamiName =
   | 'gear' | 'speaker' | 'speakerMute' | 'heart' | 'heartEmpty' | 'crane' | 'star' | 'close'
   | 'play' | 'restart' | 'book' | 'hand' | 'trophy' | 'clock' | 'frog' | 'check' | 'pause'
   | 'left' | 'right' | 'plus' | 'minus' | 'vibrate' | 'shake' | 'quality' | 'globe' | 'music' | 'shelf' | 'dragon'
+  | 'skip'
 
 const props = withDefaults(defineProps<{
   name: OrigamiName
@@ -155,6 +156,12 @@ const dark = computed(() => c.value[1])
     template(v-else-if="name === 'right'")
       path(:fill="lit" d="M18 6l18 18-18 18z")
       path(:fill="dark" stroke="none" opacity=".5" d="M36 24L18 42V24z")
+    //- ── Skip: two folded arrows and a bar (the outro's fast-forward) ──
+    template(v-else-if="name === 'skip'")
+      path(:fill="lit" d="M6 10l15 14-15 14z")
+      path(:fill="lit" d="M20 10l15 14-15 14z")
+      path(:fill="dark" stroke="none" opacity=".5" d="M6 24h15L6 38zM20 24h15L20 38z")
+      path(:fill="dark" d="M36 10h6v28h-6z")
     template(v-else-if="name === 'plus'")
       path(:fill="lit" d="M20 6h8v14h14v8H28v14h-8V28H6v-8h14z")
     template(v-else-if="name === 'minus'")

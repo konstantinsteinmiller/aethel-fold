@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { ALL_LESSONS, collectErrors, ff, readSave, screenOf, seedState, state, swipe, waitForGame } from './helpers'
+import { ALL_LESSONS, collectErrors, ff, readSave, screenOf, seedState, state, swipe, waitForGame, skipOutro } from './helpers'
 
 test.describe('Aethel Fold — gameplay', () => {
   test('boots straight into page 1 (no main menu) with a clean console', async ({ page }) => {
@@ -162,8 +162,9 @@ test.describe('Aethel Fold — gameplay', () => {
     await swipe(page, [0, 0.4], [0, -1.8])
     for (let i = 0; i < 12 && (await state(page)).phase !== 'victory'; i++) await ff(page, 0.5)
     expect((await state(page)).phase).toBe('victory')
+    await skipOutro(page)
     await expect(page.getByText('VICTORY')).toBeVisible()
-    await expect(page.getByRole('button', { name: /play again/i })).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('button', { name: /play again/i })).toBeVisible({ timeout: 15_000 })
     await page.getByRole('button', { name: /play again/i }).click()
     await ff(page, 0.5)
     expect((await state(page)).page).toBe(1)

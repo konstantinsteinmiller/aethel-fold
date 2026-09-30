@@ -101,6 +101,24 @@ export const HEX = {
   frogDark: '#3b9442',
   frogBelly: '#d8f0a0',
 
+  // The outro's cheering crowd (C9b): chibi paper people in pastel clothes.
+  pastelPink: '#ffc2d4',
+  pastelPinkDark: '#ec93b0',
+  pastelMint: '#b4ecd0',
+  pastelMintDark: '#7fcfa8',
+  pastelSky: '#b6d6fb',
+  pastelSkyDark: '#82afe8',
+  pastelLemon: '#fff0a8',
+  pastelLemonDark: '#f0cf62',
+  pastelLilac: '#dcc8ff',
+  pastelLilacDark: '#b49ae8',
+  blush: '#ff9fb5',            // rosy cheeks
+  tongue: '#ff7f93',
+  hairBrown: '#9a6440',
+  hairGold: '#f2c35a',
+  straw: '#f5d98a',
+  strawDark: '#d9b55e',
+
   // Paper patterns (roadmap #6) — pale stocks, so lanes, folds and standees stay the loudest thing on the page.
   washi: '#f6e6d6',          // kozo paper, faintly rosy
   washiFibre: '#d9b9a4',

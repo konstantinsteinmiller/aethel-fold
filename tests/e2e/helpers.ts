@@ -42,6 +42,12 @@ declare global {
       jumpTo(p: number, book?: number): void
       clearPage(): void
       fastForward(s: number): void
+      /** The boss outro (C9b): skip it as a tap would, and read it. */
+      skipOutro(): boolean
+      outro(): {
+        active: boolean; time: number; skipped: boolean; lite: boolean; script: string | null
+        crowd: number; fireworks: number; dropped: number; chips: number; cutting: boolean; crowdShown: boolean
+      }
       screenOf(x: number, z: number, y?: number): { x: number; y: number }
       shelfScreen(slot: number): { x: number; y: number }
       toggleShelf(): boolean
@@ -92,6 +98,16 @@ export const waitForGame = async (page: Page): Promise<void> => {
 export const state = (page: Page): Promise<FoldState> => page.evaluate(() => window.__fold!.state())
 
 export const ff = (page: Page, seconds: number): Promise<void> => page.evaluate((s) => window.__fold!.fastForward(s), seconds)
+
+/**
+ * Past the boss outro (C9b) that follows the finale: wait out its first half
+ * second (a tap before it still belongs to the finale), then skip it as a tap
+ * would. The victory card follows.
+ */
+export const skipOutro = async (page: Page): Promise<void> => {
+  await ff(page, 0.6)
+  await page.evaluate(() => window.__fold!.skipOutro())
+}
 
 export const screenOf = (page: Page, x: number, z: number, y = 0) =>
   page.evaluate(([a, b, c]) => window.__fold!.screenOf(a!, b!, c), [x, z, y] as const)

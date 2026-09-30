@@ -42,6 +42,8 @@ import {
 } from './entities'
 import { bossAwake, bossPhaseCode, bossTiming, brokenCount, createBoss, nextWeakPoint, resetBoss } from './boss'
 import { bossPageOf, createRushState, rushPar } from './rush'
+import { CutsceneRunner } from './cutscene'
+import { outroFor } from './outros'
 import {
   countSecretTap, tapOnSpot, createSecretState, enterSecretPage, markFound, noteSecretSnap, readSecretList, secretById, secretCode,
   slingSecretHit, type SecretDef, type SecretId
@@ -134,6 +136,12 @@ export class FoldGame {
   mode: GameMode = 'story'
   /** The Dragon Rush clock and par (`active` only in a rush). */
   readonly rush = createRushState()
+  /**
+   * The boss outro cutscene (C9b), played on the victory page after the win
+   * is saved; a tap skips it (`skipOutro`). `outro.lite` (low quality or
+   * reduced motion) is set by the host.
+   */
+  readonly outro = new CutsceneRunner()
   /** Page secrets (roadmap #15): what has been found, and this page's counters. */
   readonly secrets: ReturnType<typeof createSecretState>
   /** Secret bonus points banked on this page: kept out of its star rating. */
@@ -334,6 +342,7 @@ export class FoldGame {
   }
 
   loadPage(id: PageId): void {
+    this.outro.stop()
     this.pageId = id
     this.page = pageDef(this.book, id)
     this.folds = this.page.folds.map(createFold)
@@ -618,6 +627,8 @@ export class FoldGame {
           this.shelf.finished = true
           refreshShelf(this.shelf, this.book)
           this.events.emit('victory')
+          // The win is saved on `victory` (the host flushes it); only then the outro.
+          this.startOutro()
         }
         break
       case 'rushOver':
@@ -625,6 +636,18 @@ export class FoldGame {
         break
       case 'victory':
         this.updateHero(simDt)
+        if (this.outro.active) {
+          this.outro.update(realDt, this.events)
+          // A cheer beat: the hero on his keep cheers with the crowd.
+          if (this.outroCheered !== this.outro.cheerAt) {
+            this.outroCheered = this.outro.cheerAt
+            this.hero.mood = 'cheer'
+            this.hero.moodTimer = 1.6
+          }
+          // The card comes with the outro's end: the shelf's clock starts from there.
+          if (!this.outro.active) this.phaseTime = 0
+          break
+        }
         // After the ribbon has had its moment, the camera turns to the shelf by itself.
         if (!this.shelf.autoShown && this.shelf.available && this.phaseTime >= SHELF.afterVictory) this.openShelf('victory')
         break
@@ -2218,6 +2241,31 @@ export class FoldGame {
     return true
   }
 
+  // ─── Boss outro (C9b) ────────────────────────────────────────────────────
+
+  private outroCheered = -Infinity
+
+  /**
+   * The book's outro, if it has one — story mode only: a Dragon Rush ends in
+   * its own result card and never reaches the victory page anyway.
+   */
+  private startOutro(): void {
+    if (this.rushing) return
+    const script = outroFor(this.book)
+    if (!script) return
+    this.outroCheered = -Infinity
+    this.outro.start(script, this.events, this.book * 7919 + this.pagesCleared)
+    this.hero.mood = 'cheer'
+    this.hero.moodTimer = 1.2
+  }
+
+  /** A tap (or the skip button) during the outro: straight to its end and the victory card. */
+  skipOutro(): boolean {
+    if (this.paused || !this.outro.skip(this.events)) return false
+    this.phaseTime = 0
+    return true
+  }
+
   private exposeWeakPoint(): void {
     const b = this.boss
     const i = nextWeakPoint(b)
@@ -2923,6 +2971,8 @@ export class FoldGame {
   canOpenShelf(): boolean {
     const s = this.shelf
     if (!s.available || s.open || this.paused) return false
+    // Not while the boss outro plays (its end brings the card, then the shelf).
+    if (this.outro.active) return false
     const p = this.phase
     return p === 'intro' || p === 'play' || p === 'boss' || p === 'cleared' || p === 'peel' || p === 'victory' || p === 'rushOver'
   }

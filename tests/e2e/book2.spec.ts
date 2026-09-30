@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { ALL_LESSONS, collectErrors, ff, readSave, screenOf, seedState, state, waitForGame } from './helpers'
+import { ALL_LESSONS, collectErrors, ff, readSave, screenOf, seedState, state, waitForGame, skipOutro } from './helpers'
 
 /** Pull the sling back from its cup by (dx, dz) page units with the real mouse, then let go. */
 const pullSling = async (page: import('@playwright/test').Page, dx: number, dz: number): Promise<void> => {
@@ -73,7 +73,8 @@ test.describe('Aethel Fold — book 2 (The Homefront)', () => {
     await ff(page, 1)
     await page.evaluate(() => window.__fold!.game.foldNow(0))
     for (let i = 0; i < 12 && (await state(page)).phase !== 'victory'; i++) await ff(page, 0.5)
-    await expect(page.getByTestId('victory-book2')).toBeVisible({ timeout: 5000 })
+    await skipOutro(page)
+    await expect(page.getByTestId('victory-book2')).toBeVisible({ timeout: 15_000 })
     // The button pulses (attention), so it is never "stable" at SwiftShader's frame rate; and
     // left too long, the camera turns to the desk bookshelf and the card goes (roadmap #2).
     await page.getByTestId('victory-book2').click({ force: true })

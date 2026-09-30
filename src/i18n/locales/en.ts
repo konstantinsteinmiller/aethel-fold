@@ -148,7 +148,8 @@ export default {
       'tryAgain': 'Try again',
       'almost': 'Almost there',
       'shelf': 'Bookshelf',
-      'backToBook': 'Back to the book'
+      'backToBook': 'Back to the book',
+      'skip': 'Skip'
     },
     'page': {
       'border': 'The Border',

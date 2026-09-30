@@ -144,7 +144,8 @@ export default {
       'tryAgain': 'Nochmal!',
       'almost': 'Fast geschafft',
       'shelf': 'Bücherregal',
-      'backToBook': 'Zurück zum Buch'
+      'backToBook': 'Zurück zum Buch',
+      'skip': 'Überspringen'
     },
     'page': {
       'border': 'Die Grenze',

@@ -47,6 +47,9 @@ export type FoldEventType =
   | 'bossStomp'     // x/z
   | 'frog'          // the finale fold completed
   | 'victory'
+  | 'outro'         // the boss outro cutscene (C9b): a = 1 started / 0 ended, b = 1 if the end was a skip
+  | 'outroBeat'     // a cutscene beat fired: a = beat index in the script, b = 1 if fired by the skip
+  | 'firework'      // a = slot, b = 0 launch / 1 burst, c = tint index (FIREWORK_TINTS), x/z = page point
   | 'tap'           // x/z — a tap that hit nothing (little ripple)
   | 'slingGrab'     // the sling's cup was taken
   | 'slingFire'     // a = projectile slot, x/z = where it will land
