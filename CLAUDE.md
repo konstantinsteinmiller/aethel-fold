@@ -62,7 +62,7 @@ Aethel Fold and the benches. Changes there must not break either.
   `.env.itch.example`); ads are off there. Ads exist only behind the build
   flags `VITE_APP_INTERSTITIALS` / `VITE_APP_REWARDED`
   (`src/platforms/adFlags.ts`), which are honoured only on platforms with an ad
-  SDK (CrazyGames, GameDistribution, Playgama, GamePix, GameMonetize, Yandex)
+  SDK (CrazyGames, GameDistribution, Playgama, GamePix, GameMonetize, Yandex, Poki)
   and are off for itch.io (the jury), plain web, Glitch and Wavedash builds.
   Any new ad code goes through `useFoldAds` and must early-return on those
   constants; `tests/platforms/foldAdFlags.test.ts` and

@@ -31,4 +31,14 @@ export const syncGameplayLifecycle = (live: boolean): void => {
       else playgamaGameplayStop()
     }).catch(() => { /* bridge missing — nothing to report to */ })
   }
+
+  // Poki: gameplayStart/Stop. Env literal so every other build drops the
+  // import; the plugin pairs the calls and holds a start until
+  // gameLoadingFinished has gone out.
+  if (import.meta.env.VITE_APP_POKI === 'true') {
+    void import('@/utils/pokiPlugin').then(({ pokiGameplayStart, pokiGameplayStop }) => {
+      if (live) pokiGameplayStart()
+      else pokiGameplayStop()
+    }).catch(() => { /* SDK glue missing — nothing to report to */ })
+  }
 }

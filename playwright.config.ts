@@ -20,6 +20,9 @@ const PLAIN_ONLY = !!process.env.E2E_PLAIN_ONLY
 /** The ad build (roadmaps #9, #17, #19: CrazyGames full release with both ad flags, fake SDK) on E2E_ADS_PORT; E2E_ADS=1 adds it to a plain-only run. */
 const ADS_PORT = Number(process.env.E2E_ADS_PORT) || 2052
 const ADS = !PLAIN_ONLY || !!process.env.E2E_ADS
+/** The Poki build (both ad flags, fake PokiSDK, `poki.spec.ts`) on E2E_POKI_PORT: only with E2E_POKI=1. */
+const POKI_PORT = Number(process.env.E2E_POKI_PORT) || 2053
+const POKI = !!process.env.E2E_POKI
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -54,6 +57,13 @@ export default defineConfig({
       command: `pnpm vite --port ${ADS_PORT} --strictPort --host localhost`,
       url: `http://localhost:${ADS_PORT}`,
       env: { VITE_APP_CRAZY_WEB: 'true', VITE_APP_CRAZY_GAMES_FULL_RELEASE: 'true', VITE_APP_INTERSTITIALS: 'true', VITE_APP_REWARDED: 'true' },
+      reuseExistingServer: true,
+      timeout: 60_000
+    }] : []),
+    ...(POKI ? [{
+      command: `pnpm vite --port ${POKI_PORT} --strictPort --host localhost`,
+      url: `http://localhost:${POKI_PORT}`,
+      env: { VITE_APP_POKI: 'true', VITE_APP_INTERSTITIALS: 'true', VITE_APP_REWARDED: 'true' },
       reuseExistingServer: true,
       timeout: 60_000
     }] : [])

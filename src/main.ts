@@ -324,6 +324,15 @@ const bootstrap = async () => {
     })
   }
 
+  // Poki: same parallel-init pattern. Saves are plain localStorage (no arm in
+  // resolveSaveStrategy), so nothing waits on the SDK; `pokiPlugin()` injects
+  // game-cdn.poki.com/scripts/v2/poki-sdk.js and awaits `PokiSDK.init()`,
+  // carrying on if it rejects (an ad blocker). `gameLoadingFinished` goes out
+  // from FLogoProgress on the splash-resolved edge, like the other portals.
+  if (import.meta.env.VITE_APP_POKI === 'true') {
+    void import('@/utils/pokiPlugin').then(({ pokiPlugin }) => pokiPlugin())
+  }
+
   // GamePix init already ran (awaited) earlier — see the `else if
   // (isGamepix)` branch above. This block intentionally has no GamePix
   // arm: the SDK must be ready before hydrate, so the parallel-init

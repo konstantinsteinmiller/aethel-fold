@@ -142,6 +142,8 @@ const hud = reactive({
   retryAd: false,
   /** The second-chance offer holds the page (ad builds, roadmap #19). */
   chance: false,
+  /** The page is crumpling (a defeat or a restart): not live play for the portals. */
+  down: false,
   /** The desk bookshelf: the zoom button is shown, the camera is out at it, the hand points at the button. */
   shelfButton: false,
   shelfOpen: false,
@@ -407,6 +409,8 @@ const onFrame = (g: FoldGame): void => {
   }
   const chance = g.lastChance > 0
   if (hud.chance !== chance) hud.chance = chance
+  const down = g.phase === 'crumple'
+  if (hud.down !== down) hud.down = down
   // Never during a cutscene: a pending interstitial waits out the intro (a replay) and the boss outro.
   if (INTERSTITIAL_ADS && !introOn.value && !g.outro.active) pollFoldInterstitial(g)
   if (hud.boss) {
@@ -580,7 +584,11 @@ watch(foldSettings, (s) => {
 const paused = computed(() => pauseOpen.value || isGamePaused.value)
 watch(paused, (p) => engine.value?.setPaused(p))
 // Platform "gameplay" signal: live while the player is actually playing.
-const live = computed(() => !paused.value && !hud.victory && !hud.shelfOpen && !hud.rushDone && !introOn.value)
+// Not live: a pause (menu or ad), the shelf, the victory / rush result cards, a
+// crumpling page, a second-chance hold, and a cutscene: the intro or the boss
+// outro (Poki pairs gameplayStart/Stop on this).
+const live = computed(() => !paused.value && !hud.victory && !hud.shelfOpen && !hud.rushDone && !hud.down && !hud.chance &&
+  !introOn.value && !hud.outro)
 watch(live, (v) => syncGameplayLifecycle(v), { immediate: true })
 // The ad grace counts live play only (ad builds; a no-op elsewhere).
 onMounted(() => startPlaytimeClock(() => live.value))
