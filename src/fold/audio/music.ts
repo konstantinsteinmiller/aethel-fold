@@ -1,8 +1,10 @@
 /**
  * The procedural soundtrack (aethel-fold-GDD §3 "Soundtrack Arc"):
  *
- *   toy      — early pages: light, curious pizzicato strings + glockenspiel,
- *              toy-like and rhythmic.
+ *   paper    — pages 1–2: a bouncy "paper theatre" folk tune, oom-pah
+ *              pizzicato under a call-and-response glockenspiel.
+ *   toy      — the previous early-page theme (light pizzicato + glockenspiel),
+ *              kept for reference; no page plays it now.
  *   siege    — the same palette with a woodblock and a minor turn.
  *   drop     — the boss reveal: the music drops out to a low drone (the gear
  *              grind is a sound effect laid over it).
@@ -17,7 +19,7 @@
 
 import { brass, glock, hat, kick, pizz, snare, tone, woodblock, type Bus } from './synth'
 
-export type SongId = 'toy' | 'siege' | 'drop' | 'boss' | 'victory' | 'finale' | 'silent'
+export type SongId = 'paper' | 'toy' | 'siege' | 'drop' | 'boss' | 'victory' | 'finale' | 'silent'
 
 interface Song {
   bpm: number
@@ -82,6 +84,18 @@ const VICTORY_MELODY: (number | null)[] = [
   76, null, 79, null, 84, null, null, null
 ]
 
+const PAPER_CHORDS = [Fh, Ch, Dm, Bb, Fh, Ch, Bb, Ch]
+const PAPER_MELODY: (number | null)[] = [
+  77, null, 81, 84, 81, null, 77, null,
+  79, null, 76, null, 72, null, null, null,
+  74, 77, 81, null, 79, 77, 74, null,
+  70, null, 74, 77, 74, null, null, null,
+  81, null, 84, 86, 84, 81, 77, null,
+  79, 81, 79, 76, 72, null, 76, null,
+  77, null, 74, 70, 74, 77, 82, null,
+  79, null, 76, null, 77, null, null, null
+]
+
 const arp = (ch: number[], s: number): number => {
   const pattern = [0, 1, 2, 1, 0, 2, 1, 2]
   const i = pattern[(s >> 1) % pattern.length]!
@@ -89,6 +103,22 @@ const arp = (ch: number[], s: number): number => {
 }
 
 const SONGS: Record<Exclude<SongId, 'silent'>, Song> = {
+  paper: {
+    bpm: 112,
+    step(b, t, s, bar) {
+      const ch = PAPER_CHORDS[bar % PAPER_CHORDS.length]!
+      // Oom-pah: bass pizz on beats 1 and 3, chord pizz on 2 and 4.
+      if (s % 8 === 0) pizz(b, t, ch[0]! - 12, 1.1, 0.34)
+      if (s % 8 === 4) {
+        pizz(b, t, ch[1]!, 0.6, 0.14)
+        pizz(b, t, ch[2]!, 0.6, 0.14)
+      }
+      const m = PAPER_MELODY[((bar % 8) * 8 + (s >> 1)) % PAPER_MELODY.length]
+      if (s % 2 === 0 && m) glock(b, t, m, 0.72, 1)
+      if (s % 4 === 2) woodblock(b, t, bar % 2 === 0 ? 84 : 86, 0.28)
+      if (bar % 8 >= 4 && s % 2 === 1) hat(b, t, 0.18)
+    }
+  },
   toy: {
     bpm: 108,
     step(b, t, s, bar) {

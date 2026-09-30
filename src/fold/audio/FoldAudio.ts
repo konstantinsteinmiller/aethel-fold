@@ -679,7 +679,7 @@ export class FoldAudio {
         }
         break
       case 'pageIntro':
-        this.music.play(e.a >= 5 ? (e.a === 6 ? 'finale' : 'drop') : e.a >= 3 ? 'siege' : 'toy')
+        this.music.play(e.a >= 5 ? (e.a === 6 ? 'finale' : 'drop') : e.a >= 3 ? 'siege' : 'paper')
         break
     }
   }
