@@ -35,6 +35,12 @@ export const BOOK_KEY = 'fold_book'
 export const CLEARED2_KEY = 'fold_cleared2'
 export const BEST2_KEY = 'fold_best2'
 export const WINS2_KEY = 'fold_wins2'
+/**
+ * Best origami stars per page (roadmap #1): `Record<'b<book>p<page>', 1…3>`,
+ * e.g. `{ b1p1: 3, b1p2: 2 }`. Only ever raised; a cloud merge keeps the
+ * per-page maximum of both sides (`carryStars` in SaveMergePolicy).
+ */
+export const STARS_KEY = 'fold_stars'
 
 // ─── User settings (shared platform layer) ──────────────────────────────────
 

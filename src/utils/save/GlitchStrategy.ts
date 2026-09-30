@@ -7,9 +7,11 @@ import type {
   SaveStrategy
 } from './types'
 import {
+  carryStars,
   computeMeta,
   decideMerge,
   META_KEY,
+  SAVE_KEYS,
   parseMeta,
   serializeMeta,
   type SaveMeta
@@ -238,6 +240,10 @@ export class GlitchStrategy implements SaveStrategy {
 
     const resolution = decideMerge(localMeta, remoteMeta)
     const bonusCoinsAwarded = 0
+    // Stars never regress on a merge: whichever blob wins takes the per-page
+    // best stars of the other (see carryStars).
+    const STATE_KEY = SAVE_KEYS.STATE
+    const localStateBefore = local.get(STATE_KEY)
 
     switch (resolution.kind) {
       case 'remote-only':
@@ -248,14 +254,22 @@ export class GlitchStrategy implements SaveStrategy {
             if (typeof value === 'string') local.set(key, value)
           }
           if (remoteMeta) local.set(META_KEY, serializeMeta(remoteMeta))
+          const withStars = carryStars(local.get(STATE_KEY), localStateBefore)
+          if (withStars != null) {
+            local.set(STATE_KEY, withStars)
+            this.dirty = true
+          }
         }
         break
       }
       case 'local-wins':
+      case 'tie-keep-local': {
+        const withStars = carryStars(localStateBefore, remoteRead(STATE_KEY))
+        if (withStars != null) local.set(STATE_KEY, withStars)
         // Local already authoritative — flush it back so remote catches up.
-        this.dirty = true
+        if (resolution.kind === 'local-wins' || withStars != null) this.dirty = true
         break
-      case 'tie-keep-local':
+      }
       case 'local-only':
         // Nothing to apply.
         break

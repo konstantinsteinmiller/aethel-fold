@@ -258,10 +258,12 @@ export default {
       'story1': '…but the frog hopped away to warn the Paper King. He is coming for your keep!',
       'story2': 'Your keep stands. The crane flies home in peace.',
       'nextBook': 'Book 2: The Homefront',
-      'backToBook1': 'Read book 1 again'
+      'backToBook1': 'Read book 1 again',
+      'stars': 'Stars'
     },
     'a11y': {
-      'board': 'Aethel Fold — a pop-up book on a desk'
+      'board': 'Aethel Fold — a pop-up book on a desk',
+      'stars': '{n} of {max} stars'
     }
   }
 }

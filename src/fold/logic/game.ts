@@ -42,11 +42,12 @@ import {
 import { bossAwake, bossPhaseCode, brokenCount, createBoss, nextWeakPoint, resetBoss } from './boss'
 import { LESSON_IDS, clearLesson, createLessonState, lessonCode, setHand } from './lessons'
 import { PAGE_COUNT, pageDef } from './pages'
+import { starsFor } from './stars'
 import { createRng, type Rng } from './rng'
 import { G_PAPER, clamp, clamp01, damp, segmentDistance, segmentsCross, v2 } from './math'
 import type {
   BookId, BossPhase, Enemy, EnemyType, FoldState, GamePhase, LessonId, PageDef, PageId, SlingState, SpawnDef,
-  TearState
+  Stars, TearState
 } from './types'
 
 const G = G_PAPER
@@ -76,12 +77,14 @@ export interface GameStats {
   /** Sling stones fired, and enemies they took down. */
   shots: number
   shotKills: number
+  /** Origami stars earned on the pages cleared this run (roadmap #1; per-page bests live in the save). */
+  stars: number
 }
 
 export const emptyStats = (): GameStats => ({
   launched: 0, crushed: 0, torn: 0, folds: 0, stamps: 0, blocks: 0,
   knights: 0, brutes: 0, archers: 0, catapults: 0, flung: 0, ridged: 0,
-  runners: 0, leapers: 0, shots: 0, shotKills: 0, bolts: 0, boltKills: 0
+  runners: 0, leapers: 0, shots: 0, shotKills: 0, bolts: 0, boltKills: 0, stars: 0
 })
 
 export interface GameOptions {
@@ -140,6 +143,10 @@ export class FoldGame {
   runHits = 0
   runTime = 0
   pagesCleared = 0
+  /** Stars the last cleared page earned (roadmap #1); also carried as `c` on `pageCleared`. */
+  pageStars: Stars = 0
+  /** A Try-again continue was taken on this page attempt: caps its rating at ★. */
+  continuedThisPage = false
 
   // Time
   timeScale = 1
@@ -198,6 +205,7 @@ export class FoldGame {
     this.runHits = 0
     this.runTime = 0
     this.pagesCleared = page - 1
+    this.pageStars = 0
     this.stats = emptyStats()
     // Page 1 is a new run: the book forgets the crumples (not the streak or the boss ease).
     if (page === 1) resetRunMemory(this.kind)
@@ -242,6 +250,7 @@ export class FoldGame {
     this.pageClearedEmitted = false
     this.defeated = false
     this.continuesLeft = ALMOST.continues
+    this.continuedThisPage = false
     this.column = 0
     this.slowmoColumn = 0
     this.kindSlowmo = 0
@@ -339,6 +348,7 @@ export class FoldGame {
       return true
     }
     this.continuesLeft--
+    this.continuedThisPage = true
     const lost = retryPenalty(this.score - this.pageStartScore, ALMOST.penalty)
     this.score -= lost
     const h = this.hero
@@ -1180,6 +1190,7 @@ export class FoldGame {
     this.pageClearedEmitted = true
     const perfect = this.hitsThisPage === 0
     if (perfect) this.award(SCORE.perfectPage, 0, 0, 1)
+    const stars = this.ratePage()
     notePageWon(this.kind, this.book, this.pageId, perfect, false)
     this.pagesCleared = Math.max(this.pagesCleared, this.pageId)
     // Fold every raised pop-up back into the page (pop-up books close flat).
@@ -1189,8 +1200,20 @@ export class FoldGame {
     }
     this.hero.mood = 'cheer'
     this.hero.moodTimer = 2
-    this.events.emit('pageCleared', this.pageId, perfect ? 1 : 0)
+    this.events.emit('pageCleared', this.pageId, perfect ? 1 : 0, stars)
     this.setPhase('cleared', PAGE_CLEAR_DELAY)
+  }
+
+  /**
+   * Rate the page just cleared (after its perfect bonus is banked): hearts
+   * lost, the points gathered on it against its par, and whether a Try-again
+   * continue was used. See `stars.ts`.
+   */
+  private ratePage(): Stars {
+    const stars = starsFor(this.hitsThisPage, this.score - this.pageStartScore, this.page.par, this.continuedThisPage)
+    this.pageStars = stars
+    this.stats.stars += stars
+    return stars
   }
 
   private exitPage(): void {
@@ -1857,8 +1880,9 @@ export class FoldGame {
           this.pagesCleared = Math.max(this.pagesCleared, this.pageId)
           this.award(SCORE.boss, 0, -3, 1)
           if (this.hitsThisPage === 0) this.award(SCORE.perfectPage, 0, 0, 1)
+          const stars = this.ratePage()
           notePageWon(this.kind, this.book, this.pageId, this.hitsThisPage === 0, true)
-          this.events.emit('pageCleared', this.pageId, this.hitsThisPage === 0 ? 1 : 0)
+          this.events.emit('pageCleared', this.pageId, this.hitsThisPage === 0 ? 1 : 0, stars)
           this.loadPage(Math.min(PAGE_COUNT, this.pageId + 1) as PageId)
         }
         break

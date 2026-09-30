@@ -6,7 +6,8 @@
  *
  * Faces: the menu (resume / restart page / settings / books / start over),
  * the settings (music, effects, vibration, screen shake, graphics, language),
- * the bookshelf (pick book 1 or, once it has been won, book 2) and a confirm.
+ * the bookshelf (pick book 1 or, once it has been won, book 2, each with the
+ * origami stars earned in it) and a confirm.
  *
  * Layout: the card is a flex column — the ribbon sits in its own row, pulled
  * half-way above the card's top edge, and only the body below it scrolls. (The
@@ -21,9 +22,10 @@ import FSwitch from '@/components/atoms/FSwitch.vue'
 import FSelect from '@/components/atoms/FSelect.vue'
 import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
 import PaperRibbon from '@/components/fold/PaperRibbon.vue'
+import StarTally from '@/components/fold/StarTally.vue'
 import type { BookId } from '@/fold/logic/types'
 import useUser from '@/use/useUser'
-import { foldSettings, setFoldSetting, type Quality } from '@/use/useFoldProgress'
+import { foldSettings, setFoldSetting, starsForBook, type Quality } from '@/use/useFoldProgress'
 import { LANGUAGES, LANGUAGE_AUTONYMS } from '@/utils/enums'
 import { setI18nLocale } from '@/i18n'
 import useSounds from '@/use/useSound'
@@ -50,6 +52,8 @@ const face = ref<'menu' | 'settings' | 'confirm' | 'books'>('menu')
 const title = computed(() =>
   face.value === 'settings' ? t('fold.pause.settings') : face.value === 'books' ? t('fold.books.title') : t('fold.pause.title'))
 const folded = ref(false)
+/** Stars per book, for the shelf rows (reactive on the saved stars). */
+const bookStars = computed(() => ({ 1: starsForBook(1), 2: starsForBook(2) }))
 
 watch(() => props.open, (o) => {
   if (o) {
@@ -169,6 +173,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               span.cootie__book-text.flex.flex-col.min-w-0
                 span.cootie__book-name {{ t(`fold.books.name${b}`) }}
                 span.cootie__book-sub {{ b === 2 && !unlocked ? t('fold.books.locked') : t(`fold.books.blurb${b}`) }}
+              StarTally.cootie__book-stars(v-if="b === 1 || unlocked" :stars="bookStars[b]" compact :data-testid="`book-${b}-stars`")
             FButton(type="primary" size="md" block @click="click(() => (face = 'menu'))")
               span.flex.items-center.justify-center.gap-2
                 OrigamiIcon(name="left" tone="white")
@@ -359,7 +364,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 .cootie__book-icon
   flex: none
+
+// The book's stars, right-aligned; the text column takes what is left.
+.cootie__book-stars
+  flex: none
+  margin-left: auto
   font-size: clamp(1.8rem, 7vw, 2.4rem)
+
+.cootie__book-text
+  flex: 1 1 auto
 
 .cootie__book-name
   color: #1c1724

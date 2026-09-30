@@ -74,3 +74,41 @@ for (const width of [320, 360, 390, 412]) {
     expect(b.hRight).toBeLessThanOrEqual(b.sLeft + 0.5)
   })
 }
+
+// The star ribbon (roadmap #1) drops in under the HUD strip on a cleared page:
+// it must stay inside the screen and never cover the HUD.
+for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }]) {
+  test(`the star ribbon stays clear of the HUD at ${vp.width}×${vp.height}`, async ({ page }) => {
+    await page.setViewportSize(vp)
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('__seeded')) return
+      sessionStorage.setItem('__seeded', '1')
+      localStorage.setItem('aethel_state', JSON.stringify({
+        fold_lessons: {
+          swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true, crease: true,
+          core: true, frog: true, crush: true, sling: true, leaper: true, ballista: true
+        }
+      }))
+    })
+    await page.goto('/')
+    await waitForGame(page)
+    await page.evaluate(() => window.__fold!.fastForward(1))
+    await page.evaluate(() => window.__fold!.clearPage())
+    await page.evaluate(() => window.__fold!.fastForward(0.2))
+    await expect(page.locator('.star-ribbon.is-on')).toBeAttached()
+    // Mid-hang: every earned star has folded in.
+    await page.waitForTimeout(1500)
+    const b = await page.evaluate(() => {
+      const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect()
+      const band = r('.star-ribbon__band')
+      const hud = [r('.page-badge'), r('.hearts'), r('.score__tag'), r('.hud-right')]
+      return { band: { x: band.x, y: band.y, w: band.width, h: band.height }, hudBottom: Math.max(...hud.map((h) => h.bottom)) }
+    })
+    expect(b.band.w).toBeGreaterThan(40)
+    expect(b.band.x).toBeGreaterThanOrEqual(0)
+    expect(b.band.x + b.band.w).toBeLessThanOrEqual(vp.width + 1)
+    expect(b.band.y, 'ribbon top vs HUD bottom').toBeGreaterThanOrEqual(b.hudBottom - 0.5)
+    expect(b.band.y + b.band.h).toBeLessThan(vp.height * 0.45)
+    await page.screenshot({ path: `test-results/star-ribbon-${vp.width}x${vp.height}.png` })
+  })
+}

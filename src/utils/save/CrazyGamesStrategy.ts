@@ -1,8 +1,10 @@
 import {
+  carryStars,
   computeMeta,
   decideMerge,
   isPayloadKey,
   META_KEY,
+  SAVE_KEYS,
   parseMeta,
   serializeMeta,
   type SaveMeta
@@ -291,6 +293,9 @@ export class CrazyGamesStrategy implements SaveStrategy {
       ?? (anyPayloadKeyPresent(local) ? computeMeta({ get: (k) => local.get(k) }) : null)
 
     const resolution = decideMerge(localMeta, remoteMeta)
+    const STATE_KEY = SAVE_KEYS.STATE
+    // The pre-merge local blob: its best stars survive a remote win (carryStars).
+    const localStateBefore = local.get(STATE_KEY)
 
     switch (resolution.kind) {
       case 'remote-only':
@@ -300,10 +305,17 @@ export class CrazyGamesStrategy implements SaveStrategy {
           local.set(key, value)
         }
         if (remoteMeta) local.set(META_KEY, serializeMeta(remoteMeta))
+        // Stars never regress: fold the local per-page bests into the adopted blob.
+        // The differing blob is queued for upload by queueLocalOnlyPayloadKeys below.
+        const withStars = carryStars(local.get(STATE_KEY), localStateBefore)
+        if (withStars != null) local.set(STATE_KEY, withStars)
         // Bonus mechanic disabled wholesale on CG — see strategy header.
         break
       }
       case 'local-wins': {
+        // …and the other way round: the cloud's best stars join the local blob.
+        const withStars = carryStars(localStateBefore, remoteSnapshot.get(STATE_KEY) ?? null)
+        if (withStars != null) local.set(STATE_KEY, withStars)
         // Local already authoritative — flush back so remote catches up.
         for (const key of local.keys()) {
           if (!isPayloadKey(key)) continue
@@ -315,7 +327,12 @@ export class CrazyGamesStrategy implements SaveStrategy {
         }
         break
       }
-      case 'tie-keep-local':
+      case 'tie-keep-local': {
+        // Same progress score, but the cloud may still hold a better star on some page.
+        const withStars = carryStars(localStateBefore, remoteSnapshot.get(STATE_KEY) ?? null)
+        if (withStars != null) local.set(STATE_KEY, withStars)
+        break
+      }
       case 'local-only':
         break
     }

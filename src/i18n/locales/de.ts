@@ -254,10 +254,12 @@ export default {
       'story1': '… doch der Frosch hüpfte davon, um den Papierkönig zu warnen. Er zieht gegen deine Burg!',
       'story2': 'Deine Burg steht. Der Kranich fliegt in Frieden heim.',
       'nextBook': 'Buch 2: Die Heimatburg',
-      'backToBook1': 'Buch 1 nochmal lesen'
+      'backToBook1': 'Buch 1 nochmal lesen',
+      'stars': 'Sterne'
     },
     'a11y': {
-      'board': 'Aethel Fold – ein Pop-up-Buch auf einem Schreibtisch'
+      'board': 'Aethel Fold – ein Pop-up-Buch auf einem Schreibtisch',
+      'stars': '{n} von {max} Sternen'
     }
   }
 }

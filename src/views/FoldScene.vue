@@ -40,7 +40,7 @@ import { isGamePaused } from '@/use/useGamePause'
 import { syncGameplayLifecycle } from '@/use/useGameplayLifecycle'
 import {
   addStats, bankScore, bookUnlocked, checkpoint, foldSettings, learnLesson, lessons, progressRevision, readKindness,
-  recordVictory, recordsFor, resumeBook, resumePage, runCheckpoint, saveKindness, startNewRun
+  recordStars, recordVictory, recordsFor, resumeBook, resumePage, runCheckpoint, saveKindness, startNewRun
 } from '@/use/useFoldProgress'
 import { mobileCheck } from '@/utils/function'
 import { BOOT, bootStage, markGameReady } from '@/use/useBoot'
@@ -121,6 +121,10 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       checkpoint(e.a as PageId, { score: g.pageStartScore, hits: g.runHits, time: g.runTime }, g.pagesCleared, g.book)
       break
     case 'pageCleared':
+      // The stars fold in on the page-turn beat (c = 1…3); the best per page is
+      // banked before the checkpoint below, whose flushSaveNow carries it.
+      fx.value?.stars(e.c)
+      recordStars(g.book, e.a as PageId, e.c)
       bankStats(g)
       bankScore(g.score, g.book)
       // The kindness memory (streak, boss ease) first: the checkpoint keeps it.
@@ -295,6 +299,7 @@ const tryAgain = (): void => {
 const openBook = (book: BookId): void => {
   pauseOpen.value = false
   hud.victory = false
+  fx.value?.clearStars()
   startNewRun(book)
   statsBase = zeroBase()
   engine.value?.newRun(book)

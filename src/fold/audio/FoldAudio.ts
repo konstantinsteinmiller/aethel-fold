@@ -16,8 +16,12 @@ import type { FoldEvent } from '../logic/events'
 import { KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_TEAR } from '../logic/events'
 import type { FoldGame } from '../logic/game'
 import { BOSS_PHASE_CODES } from '../logic/boss'
+import { STARS } from '../logic/config'
 import { brass, crackleBuffer, glock, kick, noise, noiseBuffer, roomImpulse, strings, tone, voice, type Bus } from './synth'
 import { MusicSequencer, type SongId } from './music'
+
+/** Star ribbon pitches, rising per star (E5, G5, C6). */
+const STAR_NOTES = [76, 79, 84] as const
 
 export class FoldAudio {
   readonly ctx: AudioContext
@@ -379,6 +383,28 @@ export class FoldAudio {
     notes.forEach((n, i) => glock(this.sfx, t + i * 0.07, n, 0.6, 0.8))
   }
 
+  /**
+   * The star ribbon's beats (roadmap #1): one bright paper "tink" per star
+   * earned, each a step higher, timed to StarRibbon's fold-in (both read
+   * `STARS.revealDelay` / `revealStep`). A third star gets a sparkle on top.
+   * Scheduled once on `pageCleared`, never per frame.
+   */
+  stars(n: number): void {
+    const t = this.now + STARS.revealDelay
+    const count = Math.max(0, Math.min(3, Math.round(n)))
+    for (let i = 0; i < count; i++) {
+      const at = t + i * STARS.revealStep
+      const midi = STAR_NOTES[i]!
+      glock(this.sfx, at, midi, 0.85, 1)
+      glock(this.sfx, at + 0.012, midi + 12, 0.3, 0.5)
+      noise(this.sfx, at, 0.05, 0.05, 'highpass', 5200, 0.8)
+    }
+    if (count === 3) {
+      const at = t + 3 * STARS.revealStep
+      for (let i = 0; i < 4; i++) glock(this.sfx, at + i * 0.05, 91 + i * 2, 0.35, 0.6)
+    }
+  }
+
   victoryChord(): void {
     const b = this.sfx
     const t = this.now
@@ -481,6 +507,7 @@ export class FoldAudio {
       case 'pageCleared':
         this.chime(true)
         this.yay(5)
+        this.stars(e.c)
         break
       case 'spawn':
         if (t - this.lastSpawnSfx > 0.25) {

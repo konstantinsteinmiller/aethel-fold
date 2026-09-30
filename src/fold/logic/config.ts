@@ -250,6 +250,37 @@ export const ALMOST = {
   grace: 2
 } as const
 
+// ─── Star rating per page (roadmap #1) ────────────────────────────────────
+
+export const STARS = {
+  /** ★★: cleared with at most this many hearts lost. */
+  twoStarHits: 1,
+  /**
+   * Par (see `parFor` in stars.ts) asks for this share of the page's enemy
+   * base points *on top of* the points every perfect clear banks anyway — the
+   * bonus only multi-kills, stamp crushes and combos pay. Measured against the
+   * frame-perfect autoplay bot (tests/fold/bot.ts, 8 seeds, perfect clears):
+   * its natural skill share runs from 0.36 (book 2 page 3) to 0.9 (page 1),
+   * so 0.35 is just inside what a flawless player gets without chasing combos
+   * on the hardest page, and a human has to chain folds to reach it.
+   */
+  parSkill: 0.35,
+  /**
+   * The dragon's page has no authored waves (its marchers spill from stomps),
+   * so its skill share is flat: the bot banks 3.0–5.4k on top of the boss,
+   * weak-point and perfect points.
+   */
+  bossSkill: 2500,
+  /** Pars are rounded down to this step so they read cleanly. */
+  parStep: 50,
+  /** Seconds after `pageCleared` the first star folds in (lands with the page turn's lift)… */
+  revealDelay: 0.55,
+  /** …and between stars. Audio (FoldAudio) and the ribbon (StarRibbon) share these. */
+  revealStep: 0.32,
+  /** Seconds the ribbon hangs after the last star before it folds away. */
+  revealHold: 1.1
+} as const
+
 // ─── Adaptive difficulty, "the book is kind" (roadmap #8) ─────────────────
 
 export const DIFFICULTY = {

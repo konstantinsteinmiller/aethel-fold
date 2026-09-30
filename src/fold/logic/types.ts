@@ -20,6 +20,9 @@ export type PageId = 1 | 2 | 3 | 4 | 5 | 6
  */
 export type BookId = 1 | 2
 
+/** Origami stars a cleared page earns (roadmap #1): 0 = never cleared. */
+export type Stars = 0 | 1 | 2 | 3
+
 // ─── Folds ─────────────────────────────────────────────────────────────────
 
 /**
@@ -354,6 +357,12 @@ export interface PageDef {
   bossPace?: number
   /** Seconds before the first wave. */
   introDelay: number
+  /**
+   * Score par for ★★★ (roadmap #1): a Perfect Page that gathers at least this
+   * many points on the page. Derived from the page's content by `parFor` in
+   * `stars.ts` (the rule is documented there); the finale is unrated.
+   */
+  par: number
 }
 
 // ─── Boss ──────────────────────────────────────────────────────────────────

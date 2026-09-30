@@ -1,11 +1,13 @@
 import { ref, watch, type Ref } from 'vue'
 import {
   BEST2_KEY, BEST_KEY, BOOK_KEY, CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUN_KEY, RUNS_KEY, SETTINGS_KEY,
-  STATS_KEY, WINS2_KEY, WINS_KEY
+  STARS_KEY, STATS_KEY, WINS2_KEY, WINS_KEY
 } from '@/keys'
 import { aethelState, getState, setState, setStates } from '@/use/useAethelState'
 import { saveDataVersion, flushSaveNow } from '@/use/useSaveStatus'
-import type { BookId, LessonId, PageId } from '@/fold/logic/types'
+import type { BookId, LessonId, PageId, Stars } from '@/fold/logic/types'
+import { PAGE_COUNT, pageDef } from '@/fold/logic/pages'
+import { asStars, isRated, readStarRecord, starKey } from '@/fold/logic/stars'
 import { emptyStats, type GameStats } from '@/fold/logic/game'
 import { type KindMemory, readKindMemory } from '@/fold/logic/difficulty'
 
@@ -116,6 +118,8 @@ export const lessons: Ref<Partial<Record<LessonId, boolean>>> = ref(obj(getState
 export const lifetime: Ref<GameStats> = ref(obj<GameStats>(getState(STATS_KEY), emptyStats()))
 export const foldSettings: Ref<FoldSettings> = ref(readSettings())
 export const runCheckpoint: Ref<RunCheckpoint | null> = ref(readCheckpoint())
+/** Best origami stars per page (roadmap #1), keyed `b<book>p<page>`. */
+export const pageStars: Ref<Record<string, Stars>> = ref(readStarRecord(getState(STARS_KEY)))
 /** Bumped when a cloud hydrate replaced the progress under a running game. */
 export const progressRevision = ref(0)
 
@@ -133,6 +137,7 @@ const refresh = (): void => {
   lifetime.value = obj<GameStats>(getState(STATS_KEY), emptyStats())
   foldSettings.value = readSettings()
   runCheckpoint.value = readCheckpoint()
+  pageStars.value = readStarRecord(getState(STARS_KEY))
 }
 
 watch(aethelState, refresh, { deep: false })
@@ -244,6 +249,58 @@ export const bankScore = (score: number, book: BookId = 1): void => {
   const k = bookKeys(book)
   if (score <= k.bestRef.value.score) return
   setState(k.best, { ...k.bestRef.value, score: Math.round(score) })
+}
+
+// ─── Stars (roadmap #1) ───────────────────────────────────────────────────
+
+/** Best stars ever earned on one page (0 = never cleared). */
+export const starsOf = (book: BookId, page: PageId): Stars => pageStars.value[starKey(book, page)] ?? 0
+
+export interface BookStars {
+  /** Best stars per rated page, in page order (the finale is unrated and left out). */
+  pages: Stars[]
+  earned: number
+  /** 3 × rated pages. */
+  max: number
+}
+
+/**
+ * A book's stars for the shelf, pause bookshelf and victory card. Reads
+ * `pageStars`, so it is reactive inside a `computed`. Allocates: UI only.
+ */
+export const starsForBook = (book: BookId): BookStars => {
+  const pages: Stars[] = []
+  let earned = 0
+  for (let p = 1; p <= PAGE_COUNT; p++) {
+    const id = p as PageId
+    if (!isRated(pageDef(book, id))) continue
+    const s = starsOf(book, id)
+    pages.push(s)
+    earned += s
+  }
+  return { pages, earned, max: pages.length * 3 }
+}
+
+/** Stars over every book. */
+export const totalStars = (): { earned: number; max: number } => {
+  const a = starsForBook(1)
+  const b = starsForBook(2)
+  return { earned: a.earned + b.earned, max: a.max + b.max }
+}
+
+/**
+ * Bank a cleared page's stars. Only ever raises a page's best; returns true
+ * when it did (a new best). Call it before the page-clear `checkpoint`, whose
+ * `flushSaveNow` then carries the stars to the cloud with the rest.
+ */
+export const recordStars = (book: BookId, page: PageId, stars: number): boolean => {
+  const s = asStars(stars)
+  if (s <= starsOf(book, page)) return false
+  const next = { ...pageStars.value, [starKey(book, page)]: s }
+  // Mirror at once (the aethelState watcher runs a tick later), so two clears in one tick both count.
+  pageStars.value = next
+  setState(STARS_KEY, next)
+  return true
 }
 
 export const setFoldSetting = <K extends keyof FoldSettings>(key: K, value: FoldSettings[K]): void => {

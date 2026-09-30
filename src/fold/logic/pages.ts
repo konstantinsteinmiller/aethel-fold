@@ -16,6 +16,7 @@ import {
 import type {
   BookId, EnemyType, FoldDef, FoldStructure, LaneDef, LessonId, PageDef, PageId, SlingDef, SpawnDef, TearDef, WaveDef
 } from './types'
+import { withPar } from './stars'
 
 // ─── Builders ──────────────────────────────────────────────────────────────
 
@@ -183,9 +184,15 @@ const column = (type: EnemyType, laneIdx: number, start: number, n: number, gap:
 
 const wave = (spawns: SpawnDef[], delay = 1.2, lesson?: LessonId): WaveDef => ({ spawns, delay, lesson })
 
+// Every page is wrapped in `withPar`, which gives it its ★★★ score par from
+// its own content (enemy base points + tears + the perfect bonus, plus a 30 %
+// skill share; the dragon's page adds the boss and weak-point points and a
+// flat skill share). The rule and its reasoning live in `parFor` (stars.ts),
+// so a rebalanced wave moves its page's par with it.
+
 // ─── Page 1 — The Border (swipe to fold) ───────────────────────────────────
 
-const page1: PageDef = {
+const page1: PageDef = withPar({
   id: 1,
   book: 1,
   nameKey: 'border',
@@ -209,11 +216,11 @@ const page1: PageDef = {
       ...column('knight', 2, 2.6, 4, 0.55)
     ], 1.2)
   ]
-}
+})
 
 // ─── Page 2 — The Ravine (valley + tap to stamp) ───────────────────────────
 
-const page2: PageDef = {
+const page2: PageDef = withPar({
   id: 2,
   book: 1,
   nameKey: 'ravine',
@@ -242,11 +249,11 @@ const page2: PageDef = {
       ...column('knight', 1, 2.4, 3, 0.5), ...column('knight', 2, 3.6, 3, 0.5)
     ], 1.2)
   ]
-}
+})
 
 // ─── Page 3 — The Siege (shield, launch, shape terrain) ────────────────────
 
-const page3: PageDef = {
+const page3: PageDef = withPar({
   id: 3,
   book: 1,
   nameKey: 'siege',
@@ -278,11 +285,11 @@ const page3: PageDef = {
       s('brute', 1, 3.2), ...column('knight', 0, 3.8, 2, 0.5)
     ], 1.2)
   ]
-}
+})
 
 // ─── Page 4 — The Castle Gates (spread to flatten, then peel) ──────────────
 
-const page4: PageDef = {
+const page4: PageDef = withPar({
   id: 4,
   book: 1,
   nameKey: 'gates',
@@ -320,11 +327,11 @@ const page4: PageDef = {
     // wall's launch, a stone doesn't.
     wave([s('brute', 0, 0), ...column('knight', 1, 0.8, 3, 0.5), s('brute', 2, 1.6), ...column('knight', 0, 2.4, 3, 0.45)], 1.2, 'sling')
   ]
-}
+})
 
 // ─── Page 5 — The Boss (castle core transformation) ────────────────────────
 
-const page5: PageDef = {
+const page5: PageDef = withPar({
   id: 5,
   book: 1,
   nameKey: 'core',
@@ -341,11 +348,11 @@ const page5: PageDef = {
   ],
   tears: [],
   waves: []
-}
+})
 
 // ─── Page 6 — Victory (the frog) ───────────────────────────────────────────
 
-const page6: PageDef = {
+const page6: PageDef = withPar({
   id: 6,
   book: 1,
   nameKey: 'finale',
@@ -357,7 +364,7 @@ const page6: PageDef = {
   tears: [],
   waves: [],
   finale: 'frog'
-}
+})
 
 // ═══ Book 2 — The Homefront ════════════════════════════════════════════════
 //
@@ -367,7 +374,7 @@ const page6: PageDef = {
 // walls, zig-zag between lanes).
 
 
-const home1: PageDef = {
+const home1: PageDef = withPar({
   id: 1,
   book: 2,
   nameKey: 'home',
@@ -392,9 +399,9 @@ const home1: PageDef = {
       s('brute', 2, 1.6), ...column('runner', 2, 3.2, 3, 0.4), ...column('knight', 1, 4, 2, 0.6)
     ], 1.2)
   ]
-}
+})
 
-const home2: PageDef = {
+const home2: PageDef = withPar({
   id: 2,
   book: 2,
   nameKey: 'orchard',
@@ -423,9 +430,9 @@ const home2: PageDef = {
       s('brute', 2, 2.4), ...column('runner', 0, 3, 3, 0.4), s('leaper', 0, 4.2)
     ], 1.2)
   ]
-}
+})
 
-const home3: PageDef = {
+const home3: PageDef = withPar({
   id: 3,
   book: 2,
   nameKey: 'mill',
@@ -459,9 +466,9 @@ const home3: PageDef = {
       post('catapult', -3.1, -3.5, 8), post('catapult', 3.1, -3.5, 9)
     ], 1.2)
   ]
-}
+})
 
-const home4: PageDef = {
+const home4: PageDef = withPar({
   id: 4,
   book: 2,
   nameKey: 'camp',
@@ -497,9 +504,9 @@ const home4: PageDef = {
       post('catapult', 3.2, -4.15, 9)
     ], 1.2)
   ]
-}
+})
 
-const home5: PageDef = {
+const home5: PageDef = withPar({
   id: 5,
   book: 2,
   nameKey: 'return',
@@ -519,9 +526,9 @@ const home5: PageDef = {
   ],
   tears: [],
   waves: []
-}
+})
 
-const home6: PageDef = {
+const home6: PageDef = withPar({
   id: 6,
   book: 2,
   nameKey: 'homecoming',
@@ -533,7 +540,7 @@ const home6: PageDef = {
   tears: [],
   waves: [],
   finale: 'crane'
-}
+})
 
 export const BOOKS: Readonly<Record<BookId, Readonly<Record<PageId, PageDef>>>> = {
   1: { 1: page1, 2: page2, 3: page3, 4: page4, 5: page5, 6: page6 },

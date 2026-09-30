@@ -15,10 +15,17 @@
 // + lessons       ×   50
 // + resumePage    ×  100
 // + runs          ×   10
+// + stars         ×   25   (origami stars over every page, at most 10 × 3)
 //
 // `pagesCleared` is the headline progress number (highest page ever cleared),
 // wins are completed runs, and lessons / the resume page / the run counter
-// break ties between two saves at the same milestone.
+// break ties between two saves at the same milestone. Stars (≤ 30 × 25 = 750)
+// never outrank a cleared page; they only prefer the better-played save of two
+// at the same milestone.
+//
+// Stars are also merged field-level: whichever side wins, `carryStars` folds
+// the loser's per-page best stars into the winner's blob (per-page maximum),
+// so a merge can never take a star away.
 //
 // Conflict policy:
 //   - higher score wins
@@ -26,8 +33,9 @@
 //   - same time too → keep local (no needless writes)
 //   - Aethel Fold has no currency, so a remote win never pays a bonus.
 
-import { CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUNS_KEY, WINS2_KEY, WINS_KEY } from '@/keys'
+import { CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUNS_KEY, STARS_KEY, WINS2_KEY, WINS_KEY } from '@/keys'
 import { STATE_KEY } from '@/use/useAethelState'
+import { countStars, mergeStarRecords, readStarRecord } from '@/fold/logic/stars'
 
 /** Where the meta blob is stored in localStorage / on the remote backend.
  *  NOT prefixed with `__save_internal__` — this key needs to round-trip
@@ -155,6 +163,7 @@ export const computeMeta = (
   if (lessons && typeof lessons === 'object') {
     for (const v of Object.values(lessons)) if (v === true) learned++
   }
+  const stars = countStars(safeJson<unknown>(readField(read, STARS_KEY), {}))
 
   const progressScore =
     (cleared + cleared2) * 1000
@@ -162,6 +171,7 @@ export const computeMeta = (
     + learned * 50
     + (page - 1) * 100
     + runs * 10
+    + stars * 25
 
   return { savedAt, progressScore, schemaVersion: SCHEMA_VERSION, maxStage: cleared + cleared2 }
 }
@@ -234,6 +244,36 @@ export const decideMerge = (
     return { kind: 'remote-wins', bonusCoins: 0 }
   }
   return { kind: 'tie-keep-local' }
+}
+
+/**
+ * Fold the other side's best stars into the winning side's `aethel_state`
+ * blob (per-page maximum), so a whole-blob merge never loses a star.
+ * `winnerRaw` / `otherRaw` are raw `aethel_state` strings (null = absent).
+ * Returns the new winner blob, or null when nothing changes (no write needed,
+ * or the winner blob is missing / unparseable — then it is left alone).
+ */
+export const carryStars = (winnerRaw: string | null, otherRaw: string | null): string | null => {
+  if (winnerRaw == null || otherRaw == null) return null
+  let winner: unknown
+  let other: unknown
+  try {
+    winner = JSON.parse(winnerRaw)
+    other = JSON.parse(otherRaw)
+  } catch {
+    return null
+  }
+  if (!winner || typeof winner !== 'object' || Array.isArray(winner)) return null
+  if (!other || typeof other !== 'object' || Array.isArray(other)) return null
+  const w = winner as Record<string, unknown>
+  const theirs = readStarRecord((other as Record<string, unknown>)[STARS_KEY])
+  if (Object.keys(theirs).length === 0) return null
+  const ours = readStarRecord(w[STARS_KEY])
+  const merged = mergeStarRecords(ours, theirs)
+  let changed = false
+  for (const k of Object.keys(merged)) if (merged[k] !== ours[k]) changed = true
+  if (!changed) return null
+  return JSON.stringify({ ...w, [STARS_KEY]: merged })
 }
 
 /**

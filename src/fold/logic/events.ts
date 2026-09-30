@@ -34,7 +34,7 @@ export type FoldEventType =
   | 'combo'         // b = count
   | 'waveStart'     // a = wave index
   | 'pageIntro'     // a = page id
-  | 'pageCleared'   // a = page id, b = 1 if perfect
+  | 'pageCleared'   // a = page id, b = 1 if perfect, c = stars earned (1…3, roadmap #1)
   | 'pageTurn'      // a = from page, b = to page
   | 'crumple'
   | 'pageDrop'

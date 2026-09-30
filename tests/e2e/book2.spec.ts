@@ -24,11 +24,14 @@ test.describe('Aethel Fold — book 2 (The Homefront)', () => {
 
   test('after a win, the bookshelf opens book 2, which survives a reload', async ({ page }) => {
     const errors = collectErrors(page)
-    await seedState(page, { fold_lessons: ALL_LESSONS, fold_wins: 1, fold_cleared: 6 })
+    await seedState(page, { fold_lessons: ALL_LESSONS, fold_wins: 1, fold_cleared: 6, fold_stars: { b1p1: 3, b1p2: 2, b2p1: 1 } })
     await page.goto('/')
     await waitForGame(page)
     await page.getByRole('button', { name: /pause and settings/i }).click()
     await page.getByTestId('pause-books').click()
+    // Each book on the shelf shows the stars earned in it.
+    await expect(page.getByTestId('book-1-stars')).toHaveAttribute('aria-label', '5 of 15 stars')
+    await expect(page.getByTestId('book-2-stars')).toHaveAttribute('aria-label', '1 of 15 stars')
     await page.getByTestId('book-2').click()
     await ff(page, 0.5)
     const s = await state(page)

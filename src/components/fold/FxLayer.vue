@@ -10,14 +10,19 @@
  *
  * The `almost` variant is the big two-line word of the "Almost!" moment on a
  * crumple (roadmap #9): ALMOST! over how close the player was, held ~2 s.
+ *
+ * `stars` drives the StarRibbon (roadmap #1): a cleared page's origami stars
+ * fold in one by one on the page-turn beat.
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import StarRibbon from '@/components/fold/StarRibbon.vue'
 
 const POP_POOL = 28
 const WORD_POOL = 8
 
 const root = ref<HTMLDivElement | null>(null)
+const ribbon = ref<InstanceType<typeof StarRibbon> | null>(null)
 const pops: HTMLDivElement[] = []
 const words: HTMLDivElement[] = []
 let almostEl: HTMLDivElement | null = null
@@ -111,11 +116,22 @@ const clearAlmost = (): void => {
   almostEl?.classList.remove('is-on')
 }
 
-defineExpose({ pop, word, almost, clearAlmost })
+/** A cleared page's stars (1…3) fold into the ribbon. */
+const stars = (n: number): void => {
+  ribbon.value?.play(n)
+}
+
+/** Take the star ribbon down (a new run or a jump). */
+const clearStars = (): void => {
+  ribbon.value?.clear()
+}
+
+defineExpose({ pop, word, almost, clearAlmost, stars, clearStars })
 </script>
 
 <template lang="pug">
   div.fx-layer(ref="root" aria-hidden="true")
+    StarRibbon(ref="ribbon")
 </template>
 
 <style scoped lang="sass">

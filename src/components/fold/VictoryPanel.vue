@@ -4,14 +4,17 @@
  * 'VICTORY' with massive confetti bursts." The ribbon drops with a bounce;
  * under it the run summary is printed on a paper card, then the choice of
  * what to read next: winning book 1 opens book 2 ("The Homefront"); after
- * that, either book can be picked again.
+ * that, either book can be picked again. Under the stats, the book's best
+ * origami stars, page by page (roadmap #1).
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FButton from '@/components/atoms/FButton.vue'
 import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
 import PaperRibbon from '@/components/fold/PaperRibbon.vue'
+import StarTally from '@/components/fold/StarTally.vue'
 import type { BookId } from '@/fold/logic/types'
+import { starsForBook } from '@/use/useFoldProgress'
 
 const props = defineProps<{
   /** The book just finished. */
@@ -34,6 +37,8 @@ watch(() => props.open, (o) => {
   showCard.value = false
   if (o) setTimeout(() => (showCard.value = true), 900)
 })
+
+const bookStars = computed(() => starsForBook(props.book))
 
 const timeText = computed(() => {
   const s = Math.max(0, Math.round(props.time))
@@ -68,6 +73,9 @@ const timeText = computed(() => {
             OrigamiIcon(name="heart")
             span.victory__stat-label {{ t('fold.victory.hits') }}
             span.victory__stat-value {{ hits }}
+        div.victory__stars(data-testid="victory-stars")
+          span.victory__stat-label {{ t('fold.victory.stars') }}
+          StarTally(:stars="bookStars")
         div.victory__record(v-if="newBest") {{ t('fold.victory.newBest') }}
         template(v-if="book === 1")
           FButton(type="success" size="lg" block :attention="true" data-testid="victory-book2" @click="emit('book', 2)")
@@ -187,6 +195,16 @@ const timeText = computed(() => {
   font-size: clamp(0.95rem, 4vw, 1.25rem)
   font-variant-numeric: tabular-nums
 
+.victory__stars
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: 0.25rem
+  padding: 0.35rem 0.55rem
+  background: rgba(255, 255, 255, 0.55)
+  border: 2px solid #1c1724
+  border-radius: 0.5rem
+
 .victory__record
   align-self: center
   padding: 0.2rem 0.8rem
@@ -227,6 +245,11 @@ const timeText = computed(() => {
     padding: 0.55rem 0.8rem
   .victory__stats
     grid-template-columns: repeat(4, minmax(0, 1fr))
+  .victory__stars
+    flex-direction: row
+    justify-content: center
+    gap: 0.5rem
+    padding: 0.2rem 0.4rem
   .victory__stat
     grid-template-columns: 1fr
     justify-items: center

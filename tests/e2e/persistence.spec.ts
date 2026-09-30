@@ -43,6 +43,8 @@ test.describe('aethel_state — local persistence (plain web build)', () => {
     const save = await readSave(page)
     expect(save?.fold_page).toBe(2)
     expect(save?.fold_cleared).toBe(1)
+    // The page's stars (roadmap #1) are banked in the same object, with the checkpoint.
+    expect(save?.fold_stars?.b1p1).toBeGreaterThanOrEqual(1)
     await page.reload()
     await waitForGame(page)
     expect((await state(page)).page).toBe(2)
