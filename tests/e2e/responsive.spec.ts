@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { waitForGame } from './helpers'
+import { SHELF } from '../../src/fold/logic/config'
+import { shelfCardPoint, shelfCardPose, shelfToWorld, slotX, type ShelfCardPose, type ShelfPoint } from '../../src/fold/logic/shelf'
 
 const VIEWPORTS = [
   { name: 'phone-portrait-min', width: 320, height: 658 },
@@ -162,5 +164,76 @@ for (const vp of [{ width: 320, height: 658, button: true }, { width: 390, heigh
     const top = await page.evaluate(() => Math.min(window.__fold!.screenOf(-5, -7).y, window.__fold!.screenOf(5, -7).y))
     expect(b.zoom.y + b.zoom.h, 'zoom button vs page top').toBeLessThanOrEqual(top + 0.5)
     await page.screenshot({ path: `test-results/shelf-zoom-${vp.width}x${vp.height}.png` })
+  })
+}
+
+// Out at the shelf on a portrait phone the camera frames the shelf alone: every
+// book is at least ~60 px wide (it was ~30 beside the book), and the books and
+// the pulled-out book's star card stay under the HUD grid.
+for (const vp of [{ width: 320, height: 658 }, { width: 390, height: 844 }]) {
+  test(`the shelf books are big enough to read and tap at ${vp.width}×${vp.height}`, async ({ page }) => {
+    await page.setViewportSize(vp)
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('__seeded')) return
+      sessionStorage.setItem('__seeded', '1')
+      localStorage.setItem('aethel_state', JSON.stringify({
+        fold_lessons: {
+          swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true, crease: true,
+          core: true, frog: true, crush: true, sling: true, leaper: true, ballista: true, shelf: true
+        },
+        fold_wins: 1, fold_cleared: 6, fold_stars: { b1p1: 3, b1p2: 1 }
+      }))
+    })
+    await page.goto('/')
+    await waitForGame(page)
+    await page.evaluate(() => window.__fold!.fastForward(1))
+    await page.getByTestId('shelf-zoom').click()
+    await page.evaluate(() => window.__fold!.fastForward(1.5))
+    const s = await page.evaluate(() => window.__fold!.state().shelf)
+    expect(s.camera).toBe(1)
+    expect(s.selected).toBe(0)
+    // Page-space points: each spine's left and right edge at mid height and its top, and the star card's top corners.
+    const p: ShelfPoint = { x: 0, y: 0, z: 0 }
+    const xyz = (q: ShelfPoint): [number, number, number] => [q.x, q.y, q.z]
+    const books: [number, number, number][][] = []
+    for (let i = 0; i < SHELF.slots; i++) {
+      const y = SHELF.board + SHELF.bookH * 0.5
+      books.push([
+        xyz(shelfToWorld(slotX(i) - SHELF.bookW / 2, y, SHELF.bookD / 2, p)),
+        xyz(shelfToWorld(slotX(i) + SHELF.bookW / 2, y, SHELF.bookD / 2, p)),
+        xyz(shelfToWorld(slotX(i), SHELF.board + SHELF.bookH, SHELF.bookD / 2, p))
+      ])
+    }
+    const card: ShelfCardPose = { x: 0, y: 0, z: 0, tilt: 0, scale: 1 }
+    shelfCardPose(s.selected, 1, 1, true, card)
+    const cardTop = [xyz(shelfCardPoint(card, -0.5, 1, p)), xyz(shelfCardPoint(card, 0.5, 1, p))]
+    const m = await page.evaluate(([bs, ct]) => {
+      const f = window.__fold!
+      const sc = (q: [number, number, number]) => f.screenOf(q[0], q[2], q[1])
+      const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect()
+      return {
+        widths: bs.map(([a, b]) => {
+          const s0 = sc(a!)
+          const s1 = sc(b!)
+          return Math.hypot(s1.x - s0.x, s1.y - s0.y)
+        }),
+        tops: bs.map(([, , t]) => sc(t!)),
+        card: ct.map(sc),
+        hud: Math.max(...['.page-badge', '.hearts', '.score__tag', '.hud-right'].map((sel) => r(sel).bottom))
+      }
+    }, [books, cardTop] as const)
+    for (const [i, w] of m.widths.entries()) expect(w, `book ${i + 1} on-screen width`).toBeGreaterThanOrEqual(58)
+    for (const [i, t] of m.tops.entries()) {
+      expect(t.x, `book ${i + 1} on screen`).toBeGreaterThan(0)
+      expect(t.x).toBeLessThan(vp.width)
+      expect(t.y, `book ${i + 1} top vs HUD`).toBeGreaterThan(m.hud)
+    }
+    for (const c of m.card) {
+      expect(c.x).toBeGreaterThanOrEqual(0)
+      expect(c.x).toBeLessThanOrEqual(vp.width)
+      expect(c.y, 'star card top vs HUD').toBeGreaterThan(m.hud)
+    }
+    await expect(page.getByTestId('shelf-zoom')).toBeVisible()
+    await page.screenshot({ path: `test-results/shelf-books-${vp.width}x${vp.height}.png` })
   })
 }
