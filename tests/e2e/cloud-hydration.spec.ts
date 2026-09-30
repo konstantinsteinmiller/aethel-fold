@@ -127,6 +127,29 @@ test.describe('aethel_state — SDK cloud hydration (CrazyGames build)', () => {
     await expect.poll(async () => (await state(page)).page, { timeout: 30_000 }).toBe(3)
   })
 
+  test('a late cloud hydrate during a first-launch intro ends it and jumps to the returning player\'s page (roadmap #12)', async ({ page }) => {
+    // Every boot-time read fails (the hydrate's 3 manifest tries, then the sanity guard's 3 × 3), so the
+    // game mounts as a (seemingly) fresh player and the intro plays. The retry ladder's next step is
+    // minutes away; the test takes that step now through the manager's own retry entry point.
+    const cloud = cloudFor(saved)
+    cloud.failures = 12
+    await installFakeSdk(page, cloud)
+    await page.goto(`${CG}?intro=1`)
+    await waitForGame(page)
+    expect(cloud.failures).toBe(0)
+    expect((await state(page)).page).toBe(1)
+    expect((await page.evaluate(() => window.__fold!.intro())).playing).toBe(true)
+    await page.evaluate(() => (window as any).__saveManager.retryHydrate())
+    await expect.poll(async () => (await state(page)).page, { timeout: 30_000 }).toBe(3)
+    const s = await state(page)
+    expect(s.intro).toBe(false)
+    expect(s.score).toBe(3100)
+    await expect(page.getByTestId('intro-skip')).toHaveCount(0)
+    await expect(page.locator('.hud-top')).not.toHaveClass(/hud-top--intro/)
+    // It did play, and the hydrate ended it: a returning player is not a fresh user.
+    expect((await page.evaluate(() => window.__fold!.boot())).intro).toBe('skipped')
+  })
+
   test('a brand-new player starts on page 1 and seeds the cloud', async ({ page }) => {
     const cloud = cloudFor(null)
     await installFakeSdk(page, cloud)

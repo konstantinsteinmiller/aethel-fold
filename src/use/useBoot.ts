@@ -58,6 +58,20 @@ export interface BootTelemetry {
   precompile_parallel: boolean
   /** When each boot milestone was reached (`BOOT` value → ms). */
   stages: Record<number, number>
+  /**
+   * The first-launch intro (roadmap #12): `none` (it did not play — every
+   * returning player), `playing`, `skipped` (a tap) or `watched` (it ran out).
+   *
+   * How it reads with the numbers above: the intro *is* the first frame, so
+   * `boot_ms` is unchanged (the intro's frame takes input: a tap skips it).
+   * `first_input_ms` stays "the player's first press": in an intro session
+   * that is usually the skip tap, i.e. the moment the player chose to play.
+   * Sessions with `intro !== 'none'` are told apart by this field, and
+   * `intro_end_ms` is when page 1 took over (by the tap, or after ~15 s).
+   */
+  intro: 'none' | 'playing' | 'skipped' | 'watched'
+  /** Navigation start → the intro ended and page 1 took over (−1: no intro this session). */
+  intro_end_ms: number
 }
 
 export const bootTelemetry: BootTelemetry = {
@@ -65,7 +79,9 @@ export const bootTelemetry: BootTelemetry = {
   first_input_ms: -1,
   precompile_ms: -1,
   precompile_parallel: false,
-  stages: {}
+  stages: {},
+  intro: 'none',
+  intro_end_ms: -1
 }
 
 const nowMs = (): number => (typeof performance === 'undefined' ? 0 : Math.round(performance.now()))
@@ -104,6 +120,20 @@ export const markPrecompiled = (ms: number, parallel: boolean): void => {
   bootTelemetry.precompile_ms = Math.round(ms)
   bootTelemetry.precompile_parallel = parallel
   report('precompile_ms', bootTelemetry.precompile_ms)
+}
+
+/** The first-launch intro started (roadmap #12). A replay from the settings is not a boot event and isn't recorded. */
+export const markIntroStart = (): void => {
+  if (bootTelemetry.intro !== 'none') return
+  bootTelemetry.intro = 'playing'
+}
+
+/** The first-launch intro ended: skipped by a tap, or watched to the end. Only the first call counts. */
+export const markIntroEnd = (skipped: boolean): void => {
+  if (bootTelemetry.intro !== 'playing') return
+  bootTelemetry.intro = skipped ? 'skipped' : 'watched'
+  bootTelemetry.intro_end_ms = nowMs()
+  report('intro_end_ms', bootTelemetry.intro_end_ms)
 }
 
 /** A copy for the DEV handle and tests. */

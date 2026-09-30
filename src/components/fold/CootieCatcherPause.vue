@@ -10,7 +10,8 @@
  * cosmetics picker — roadmap #6: small swatches per kind, locked ones as
  * periwinkle silhouettes with the stars they need),
  * the bookshelf (pick book 1 or, once the one before has been won, book 2 or 3, each with the
- * origami stars earned in it) and a confirm.
+ * origami stars earned in it) and a confirm. The settings end with "watch the
+ * intro again" (roadmap #12), which closes the menu and plays it over the page.
  *
  * Layout: the card is a flex column — the ribbon sits in its own row, pulled
  * half-way above the card's top edge, and only the body below it scrolls. (The
@@ -49,6 +50,7 @@ const emit = defineEmits<{
   (e: 'restartPage'): void
   (e: 'newGame'): void
   (e: 'pickBook', book: BookId): void
+  (e: 'replayIntro'): void
 }>()
 
 const { t } = useI18n()
@@ -314,6 +316,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                     span.cootie__swatch-req(v-if="!c.owned")
                       OrigamiIcon(name="star" tone="paper")
                       span {{ c.stars }}
+            //- The first-launch intro, on demand (roadmap #12).
+            FButton(type="secondary" size="sm" block data-testid="replay-intro" @click="click(() => emit('replayIntro'))")
+              span.flex.items-center.justify-center.gap-2
+                OrigamiIcon(name="play" tone="white")
+                span {{ t('fold.settings.replayIntro') }}
             FButton(type="primary" size="md" block @click="click(() => (face = 'menu'))")
               span.flex.items-center.justify-center.gap-2
                 OrigamiIcon(name="left" tone="white")

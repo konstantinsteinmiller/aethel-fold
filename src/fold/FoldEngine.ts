@@ -8,6 +8,13 @@
  * The Vue layer talks to it through a handful of methods and a hooks object;
  * no Vue reactivity crosses into this file (GDD.md §0: Vue owns the DOM,
  * three.js owns the canvas).
+ *
+ * The first-launch intro (roadmap #12, `startIntro`): while it plays, the
+ * player's game is built but frozen (never updated) and its page hidden; a
+ * separate demo `FoldGame`, driven by the pure `IntroDirector`, plays the
+ * showcase in an `IntroView` added to the same scene. A press anywhere skips
+ * it; either way the page in play comes back at once and the player's game
+ * starts from where it was — page 1, untouched, for a first launch.
  */
 
 import { FoldGame, type GameOptions } from './logic/game'
@@ -21,6 +28,10 @@ import { getAudioContext } from '@/use/useAssets'
 import { SHELF_NONE, type ShelfProgress } from './logic/shelf'
 import { SLOW_MODE_SCALE } from './logic/config'
 import type { Look } from './logic/cosmetics'
+import { IntroDirector, INTRO_PAGE, skipIntro as skipIntroState } from './logic/intro'
+import { LESSON_IDS } from './logic/lessons'
+import type { LessonId } from './logic/types'
+import { IntroView } from './render/views/IntroView'
 
 export interface EngineHooks {
   /** Every simulation event, after the view and audio have reacted. */
@@ -33,6 +44,20 @@ export interface EngineHooks {
   caption?(def: PageDef): string
   /** The player's first press on the canvas (boot telemetry, roadmap #13). Once. */
   onFirstInput?(): void
+  /** The intro (roadmap #12) is over: skipped by the player or played out; `replay` when started from the settings. */
+  onIntroEnd?(skipped: boolean, replay: boolean): void
+}
+
+/** The demo game's events the audio hears during the intro (the showcase's own sounds, nothing else). */
+const INTRO_SOUNDS: ReadonlySet<FoldEvent['type']> = new Set<FoldEvent['type']>([
+  'foldSnap', 'foldStamp', 'kill', 'lensHit', 'ballistaFire', 'slingFire', 'impact', 'blocked'
+])
+
+interface IntroRun {
+  director: IntroDirector
+  view: IntroView
+  game: FoldGame
+  replay: boolean
 }
 
 /** ms after a page's intro before its successor is painted (once the player has touched the page). */
@@ -71,6 +96,9 @@ export class FoldEngine {
   /** A new look's canvas work is waiting for idle time (or for a pause, for the page in play). */
   private lookPending = false
   private lookQueued = false
+  /** The intro on screen (roadmap #12), or null; and the pointer that skipped it, until it lifts. */
+  private intro: IntroRun | null = null
+  private introPtr = -1
   private readonly onPointerDown = (e: PointerEvent) => this.pointer('down', e)
   private readonly onPointerMove = (e: PointerEvent) => this.pointer('move', e)
   private readonly onPointerUp = (e: PointerEvent) => this.pointer('up', e)
@@ -302,6 +330,7 @@ export class FoldEngine {
 
   /** A book's Dragon Rush: its dragon alone, faster, against the clock. */
   startRush(book: BookId): void {
+    this.skipIntro()
     this.gestures.cancel()
     this.game.startRun({ mode: 'dragonRush', book })
   }
@@ -329,11 +358,13 @@ export class FoldEngine {
 
   /** Start over from page 1 of a book (Play again / pick a book). */
   newRun(book: BookId = this.game.book): void {
+    this.skipIntro()
     this.gestures.cancel()
     this.game.startRun(1, 0, book)
   }
 
   jumpTo(page: PageId, score = this.game.score, book: BookId = this.game.book): void {
+    this.skipIntro()
     this.gestures.cancel()
     this.game.startRun(page, score, book)
   }
@@ -347,6 +378,13 @@ export class FoldEngine {
   fastForward(seconds: number): void {
     const g = this.game
     const step = 1 / 60
+    // During the intro, the intro runs ahead (and may end); the player's game stays frozen.
+    const it = this.intro
+    if (it) {
+      for (let t = 0; t < seconds && !it.director.state.done; t += step) this.stepIntro(it, step)
+      if (it.director.state.done) this.endIntro()
+      return
+    }
     for (let t = 0; t < seconds; t += step) {
       g.update(step)
       const ev = g.events
@@ -376,6 +414,8 @@ export class FoldEngine {
     this.stop()
     this.detach()
     if (this.warmTimer) clearTimeout(this.warmTimer)
+    this.intro?.view.dispose()
+    this.intro = null
     this.audio?.dispose()
     this.view.dispose()
   }
@@ -387,6 +427,10 @@ export class FoldEngine {
     this.last = now
     const dt = Math.min(0.05, Math.max(0, dtMs / 1000))
     const g = this.game
+    if (this.intro) {
+      this.introFrame(dt, dtMs, now)
+      return
+    }
     // Hold to fold (roadmap #14) advances with the real clock, not the world's.
     this.gestures.frame(now)
     g.update(dt)
@@ -396,6 +440,99 @@ export class FoldEngine {
     this.audio?.update()
     this.view.renderer.sample(dtMs, now)
     this.hooks.onFrame?.(g, dt)
+  }
+
+  /**
+   * An intro frame: the demo game and its view advance; the player's game
+   * does not (its page is hidden and waits, untouched). The desk, camera,
+   * effects and composite still run through the main view.
+   */
+  private introFrame(dt: number, dtMs: number, now: number): void {
+    const g = this.game
+    const it = this.intro!
+    if (!g.paused) this.stepIntro(it, dt)
+    this.view.update(g.paused ? dt * 0.25 : dt)
+    this.dispatch()
+    this.view.render()
+    this.audio?.update()
+    this.view.renderer.sample(dtMs, now)
+    this.hooks.onFrame?.(g, dt)
+    if (this.intro === it && it.director.state.done) this.endIntro()
+  }
+
+  private stepIntro(it: IntroRun, dt: number): void {
+    it.director.step(dt)
+    const ev = it.game.events
+    for (let i = 0; i < ev.count; i++) {
+      const e = ev.items[i]!
+      it.view.onEvent(e)
+      if (INTRO_SOUNDS.has(e.type)) this.audio?.onEvent(e, it.game)
+    }
+    ev.clear()
+    it.view.update(it.director.state.t, dt)
+  }
+
+  // ─── Intro (roadmap #12) ─────────────────────────────────────────────────
+
+  /** The intro is on screen. */
+  get introPlaying(): boolean {
+    return this.intro !== null
+  }
+
+  /** Seconds into the intro (−1 when none plays; tests and debugging). */
+  get introTime(): number {
+    return this.intro ? this.intro.director.state.t : -1
+  }
+
+  /**
+   * Play the intro over the page in play: the first launch (before `prewarm`,
+   * so the splash compiles its programs too) or a replay from the settings.
+   * Builds the demo game and its view now (only when it plays). Refused in
+   * the middle of a page transition. Returns true when it started.
+   */
+  startIntro(replay = false): boolean {
+    if (this.intro || this.disposed) return false
+    const g = this.game
+    const p = g.phase
+    if (p === 'turn' || p === 'peel' || p === 'crumple' || p === 'drop') return false
+    // The page in play is built (at boot: from the boot events) before the intro hides it.
+    this.dispatch()
+    this.gestures.cancel()
+    g.closeShelf()
+    const learned = {} as Record<LessonId, boolean>
+    for (const id of LESSON_IDS) learned[id] = true
+    // A separate game: none of its events reach the hooks, so nothing it does is saved.
+    const demo = new FoldGame({ seed: 0x1a7e0, learned, demos: false, page: INTRO_PAGE })
+    demo.startRun(1)
+    demo.events.clear()
+    const view = new IntroView(this.view, demo, {
+      word: (key, x, y, size, tone) => this.hooks.word(key, x, y, size, tone),
+      sfx: (e) => this.audio?.onEvent(e, demo)
+    })
+    this.intro = { director: new IntroDirector(demo), view, game: demo, replay }
+    return true
+  }
+
+  /** Skip the intro (a tap, a key, a late cloud save): the page in play is back at once. */
+  skipIntro(): boolean {
+    const it = this.intro
+    if (!it) return false
+    skipIntroState(it.director.state)
+    this.endIntro()
+    return true
+  }
+
+  private endIntro(): void {
+    const it = this.intro
+    if (!it) return
+    this.intro = null
+    it.view.detach()
+    // The intro's objects go in idle time: the skip never waits on the disposal.
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback
+    const drop = (): void => it.view.dispose()
+    if (ric) ric(drop, { timeout: 1500 })
+    else setTimeout(drop, 50)
+    this.hooks.onIntroEnd?.(it.director.state.skipped, it.replay)
   }
 
   /** Events: view (VFX), audio, haptics, then the HUD / persistence hooks. */
@@ -462,6 +599,11 @@ export class FoldEngine {
 
   private warmNow(): void {
     if (this.disposed) return
+    // Never a canvas-painting hitch in the middle of the intro: after it.
+    if (this.intro) {
+      this.armWarm(WARM_AFTER_INTRO)
+      return
+    }
     // No parallel compile at boot: issue the programs the first page hasn't drawn yet
     // (marchers, effects, the shelf) now, so the driver links them before they appear.
     if (this.compileLater) {
@@ -488,6 +630,19 @@ export class FoldEngine {
     const x = e.clientX - r.left
     const y = e.clientY - r.top
     const now = performance.now()
+    // The intro: a press anywhere skips it; that pointer is swallowed until it lifts.
+    if (this.intro || (this.introPtr !== -1 && e.pointerId === this.introPtr)) {
+      if (kind === 'down' && this.intro) {
+        if (!this.touched) this.firstTouch()
+        this.audio?.start()
+        if (this.audio && this.audio.ctx.state === 'suspended') void this.audio.ctx.resume().catch(() => undefined)
+        this.introPtr = e.pointerId
+        this.skipIntro()
+      } else if (kind !== 'move' && e.pointerId === this.introPtr) {
+        this.introPtr = -1
+      }
+      return
+    }
     if (kind === 'down') {
       if (!this.touched) this.firstTouch()
       this.audio?.start()

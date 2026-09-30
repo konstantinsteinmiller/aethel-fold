@@ -291,7 +291,8 @@ export default {
       'highlight_standard': 'Pulsierend',
       'highlight_steady': 'Ruhig',
       'highlight_bold': 'Kräftig',
-      'seasonal': 'Saisonale Deko'
+      'seasonal': 'Saisonale Deko',
+      'replayIntro': 'Intro noch einmal ansehen'
     },
     'cosmetics': {
       'title': 'Papier & Stil',
@@ -353,6 +354,9 @@ export default {
       'again': 'Nochmal jagen',
       'back': 'Zurück zur Geschichte',
       'clock': 'Drachenjagd: {time}, Par {par}'
+    },
+    'intro': {
+      'skip': 'Intro überspringen'
     },
     'a11y': {
       'board': 'Aethel Fold – ein Pop-up-Buch auf einem Schreibtisch',

@@ -42,6 +42,18 @@
  * another device (boot, a late hydrate) unlock silently. The season comes from
  * the local date unless the player turned the decorations off; a DEV build
  * can force one with `?season=halloween|winter|none` or `__fold.setSeason`.
+ *
+ * The first-launch intro (roadmap #12, `logic/intro.ts`): on the very first
+ * launch only — nothing at all in `aethel_state` yet — the engine plays a
+ * ~15 s in-engine showcase over page 1, which is built and frozen behind it.
+ * The HUD is hidden (not unmounted: the layout and the camera framing stay
+ * put) and `IntroSkip` shows the wordless skip tab. A tap anywhere (or a key)
+ * skips straight onto page 1; otherwise it ends there by itself. Either way
+ * `fold_intro` is saved and it never plays again; the settings can replay
+ * it. A late cloud hydrate that brings back a returning player's save ends it
+ * and jumps to their page. Automated browsers (the e2e suite) never see it
+ * unless the URL asks: `?intro=1` (the policy), `?intro=0` (never),
+ * `?intro=force` (DEV: always).
  */
 import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -65,6 +77,8 @@ import VictoryPanel from '@/components/fold/VictoryPanel.vue'
 import AlmostRetry from '@/components/fold/AlmostRetry.vue'
 import RushClock from '@/components/fold/RushClock.vue'
 import RushResult from '@/components/fold/RushResult.vue'
+import IntroSkip from '@/components/fold/IntroSkip.vue'
+import { INTRO_DURATION, introUrlFlag, shouldPlayIntro, type IntroFlag } from '@/fold/logic/intro'
 import { SECRET_IDS } from '@/fold/logic/secrets'
 import { activeSeason, parseSeason, type Season } from '@/fold/logic/seasons'
 import type { Look } from '@/fold/logic/cosmetics'
@@ -78,10 +92,12 @@ import {
   addStats, bankScore, bookUnlocked, checkpoint, cosmetics, equipCosmetic, foldSettings, learnLesson, lessons, pageStars,
   pagesCleared, pagesCleared2, pagesCleared3, progressRevision, readKindness, recordRush, recordSecret, recordStars, recordVictory,
   recordsFor, resumePage, runCheckpoint, rushBest, rushBestOf, saveKindness, savedBook, secretsFound, setFoldSetting,
-  shelfProgress, startNewRun, unlockCosmetics, wins, wins2, wins3, flushSaveNow, type FoldSettings
+  shelfProgress, startNewRun, unlockCosmetics, wins, wins2, wins3, flushSaveNow, introProfile, markIntroSeen, type FoldSettings
 } from '@/use/useFoldProgress'
 import { mobileCheck } from '@/utils/function'
-import { BOOT, bootSnapshot, bootStage, markFirstInput, markGameReady, markInteractive, markPrecompiled } from '@/use/useBoot'
+import {
+  BOOT, bootSnapshot, bootStage, markFirstInput, markGameReady, markInteractive, markIntroEnd, markIntroStart, markPrecompiled
+} from '@/use/useBoot'
 
 const { t, locale } = useI18n()
 const { userSoundVolume, userMusicVolume } = useUser()
@@ -128,6 +144,8 @@ const hud = reactive({
   rushNewBest: false
 })
 const pauseOpen = ref(false)
+/** The intro (roadmap #12) is on screen: the HUD hides, the skip tab shows. */
+const introOn = ref(false)
 const nameKey = computed(() => pageDef(hud.book, hud.page).nameKey)
 const best = computed(() => recordsFor(hud.book).score)
 /** The books the pause bookshelf can open. */
@@ -158,6 +176,14 @@ const look = computed<Look>(() => ({
   ...cosmetics.value.equipped,
   season: activeSeason(today, foldSettings.value.seasonal, seasonOverride.value)
 }))
+
+/** `?intro=…` and automation (see the header): the policy, never, or always. */
+const introFlag = (): IntroFlag => {
+  if (typeof window === 'undefined') return 'policy'
+  const debug = debugAllowed()
+  const automated = typeof navigator !== 'undefined' && navigator.webdriver === true
+  return introUrlFlag(window.location.search, window.location.hash, automated && debug, debug)
+}
 
 // ─── Engine hooks ────────────────────────────────────────────────────────────
 
@@ -377,6 +403,27 @@ const anchorFn = (_name: 'zoom', out: ScreenPoint): boolean => {
   return true
 }
 
+// ─── Intro (roadmap #12) ─────────────────────────────────────────────────────
+
+/** The intro is over: page 1 (or wherever the player was, after a replay) is in play again. */
+const onIntroEnd = (skipped: boolean, replay: boolean): void => {
+  introOn.value = false
+  if (replay) return
+  markIntroEnd(skipped)
+  // Once, for good (a hard checkpoint: `markIntroSeen` flushes).
+  markIntroSeen()
+}
+/** The skip tab, or a key: the same as a tap on the page. */
+const skipIntro = (): void => {
+  markFirstInput()
+  engine.value?.skipIntro()
+}
+/** The settings' "watch the intro again". */
+const replayIntro = (): void => {
+  pauseOpen.value = false
+  if (engine.value?.startIntro(true)) introOn.value = true
+}
+
 // ─── Layout ──────────────────────────────────────────────────────────────────
 
 let ro: ResizeObserver | null = null
@@ -413,12 +460,14 @@ onMounted(() => {
   const c = canvas.value
   if (!c) return
   bootStage(BOOT.scene)
+  // Decided before this boot starts a run (which the policy would count as progress).
+  const playIntro = shouldPlayIntro(introProfile(), introFlag())
   const { page, score, book } = bootPage()
   if (page === 1) startNewRun(book)
   // Stars earned before this build (or on another device) unlock their cosmetics quietly.
   unlockCosmetics()
   const eng = markRaw(new FoldEngine(
-    c, { onEvent, word, onFrame, caption, onFirstInput: markFirstInput },
+    c, { onEvent, word, onFrame, caption, onFirstInput: markFirstInput, onIntroEnd },
     {
       learned: learnedMap(), startPage: page, startScore: score, book, kind: readKindness(),
       secrets: secretsFound.value, night: foldSettings.value.night, look: { ...look.value }
@@ -438,6 +487,11 @@ onMounted(() => {
   bootStage(BOOT.engine)
   eng.setShelfProgress(shelfProgress())
   publishDebugHandle(eng)
+  // A first launch opens on the intro, built now (before the precompile, so its programs compile behind the splash too).
+  if (playIntro && eng.startIntro()) {
+    introOn.value = true
+    markIntroStart()
+  }
   // Behind the splash: build page 1 and compile its shaders (without blocking
   // where the GPU allows), then start the loop (roadmap #13).
   void eng.prewarm().then(({ ms, parallel }) => {
@@ -485,7 +539,7 @@ watch(foldSettings, (s) => {
 const paused = computed(() => pauseOpen.value || isGamePaused.value)
 watch(paused, (p) => engine.value?.setPaused(p))
 // Platform "gameplay" signal: live while the player is actually playing.
-const live = computed(() => !paused.value && !hud.victory && !hud.shelfOpen && !hud.rushDone)
+const live = computed(() => !paused.value && !hud.victory && !hud.shelfOpen && !hud.rushDone && !introOn.value)
 watch(live, (v) => syncGameplayLifecycle(v), { immediate: true })
 
 const openPause = (): void => {
@@ -557,6 +611,14 @@ const pickBook = (book: BookId): void => {
 
 const onKey = (e: KeyboardEvent): void => {
   if (pauseOpen.value) return
+  if (introOn.value) {
+    // Any of the game's keys skips the intro (and never also opens the pause behind it).
+    if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ' || e.key === 'p' || e.key === 'P') {
+      e.preventDefault()
+      skipIntro()
+    }
+    return
+  }
   if (e.key === 'Escape' && engine.value?.closeShelf()) {
     e.preventDefault()
     return
@@ -590,6 +652,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 watch(progressRevision, () => {
   const eng = engine.value
   if (!eng) return
+  // A first-launch intro for a player whose save just arrived: they are not new after all. The intro
+  // ends (and is marked seen); the jump below then takes them to their page. (Runs don't count here:
+  // this very boot has started one.)
+  if (eng.introPlaying) {
+    const p = introProfile(false)
+    if (p.seen || p.progress) eng.skipIntro()
+  }
   const g = eng.game
   for (const id of LESSON_IDS) if (lessons.value[id]) g.learned[id] = true
   // Secrets found on another device count here too (a replay never pays twice).
@@ -667,6 +736,10 @@ const publishDebugHandle = (eng: FoldEngine): void => {
         chips: eng.view.effects.liveChips, cutting: eng.view.desk.cutting, crowdShown: eng.view.outro.mesh.visible
       }
     },
+    /** The intro (roadmap #12): is it playing, how far in; skip it; play it (as the settings' replay does). */
+    intro: () => ({ playing: eng.introPlaying, t: eng.introTime, duration: INTRO_DURATION }),
+    skipIntro: () => eng.skipIntro(),
+    replayIntro: () => replayIntro(),
     state: () => ({
       book: eng.game.book,
       page: eng.game.pageId,
@@ -680,6 +753,7 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       enemiesLeft: eng.game.enemiesLeft(),
       difficulty: eng.game.difficulty,
       mode: eng.game.mode,
+      intro: eng.introPlaying,
       rush: { time: eng.game.rush.time, par: eng.game.rush.par, done: eng.game.rush.done, attempts: eng.game.rush.attempts },
       secrets: { found: eng.game.secretsFound(), night: eng.game.secrets.night, page: eng.game.secrets.def?.id ?? null },
       boss: eng.game.boss.phase,
@@ -715,7 +789,8 @@ const pageAria = computed(() => t('fold.a11y.board'))
     GhostHand(ref="ghost" :touch="isTouch" :hold="foldSettings.holdToFold")
 
     //- ── HUD ──
-    div.hud-top(ref="hudTop")
+    //- Hidden (never unmounted) under the intro, so the layout and the camera framing stay put.
+    div.hud-top(ref="hudTop" :class="{ 'hud-top--intro': introOn }")
       div.hud-left.flex.flex-col.items-start
         PageBadge(:page="hud.page" :total="PAGE_COUNT" :name-key="nameKey" :boss="hud.boss" :book="hud.book")
         HeartsBadge(:hp="hud.hp" :max="hud.maxHp")
@@ -776,10 +851,13 @@ const pageAria = computed(() => t('fold.a11y.board'))
 
     AlmostRetry(:open="hud.retry && !pauseOpen" @retry="tryAgain")
 
+    IntroSkip(:open="introOn" :duration="INTRO_DURATION" @skip="skipIntro")
+
     CootieCatcherPause(
       :open="pauseOpen"
       :book="hud.book"
       :unlocked="openBooks"
+      @replay-intro="replayIntro"
       @resume="resume"
       @restart-page="restartPage"
       @new-game="newGame"
@@ -820,6 +898,11 @@ const pageAria = computed(() => t('fold.a11y.board'))
   pointer-events: none
   > *
     pointer-events: auto
+
+.hud-top--intro
+  visibility: hidden
+  > *
+    pointer-events: none
 
 .hud-left
   gap: clamp(0.25rem, 1vh, 0.45rem)
