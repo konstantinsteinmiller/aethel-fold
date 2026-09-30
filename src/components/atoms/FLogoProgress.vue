@@ -231,12 +231,24 @@ const signalGameReadyToYandex = () => {
   })
 }
 
+// Poki's `gameLoadingFinished()` — same splash-resolved edge, once (the
+// plugin guards it too, and holds gameplayStart until it has gone out).
+let pokiLoadSignaled = false
+const signalGameReadyToPoki = () => {
+  if (pokiLoadSignaled) return
+  if (import.meta.env.VITE_APP_POKI !== 'true') return
+  pokiLoadSignaled = true
+  void import('@/utils/pokiPlugin').then(({ pokiGameLoadingFinished }) => pokiGameLoadingFinished())
+    .catch((e) => console.warn('[FLogoProgress] Poki gameLoadingFinished failed', e))
+}
+
 watch(done, (isDone) => {
   if (isDone) {
     setTimeout(() => {
       backdropHidden.value = true
       signalGameReadyToCG()
       signalGameReadyToPlaygama()
+      signalGameReadyToPoki()
       signalGameReadyToGamepix()
       signalGameReadyToYandex()
       // Triggers the GamePix first-load interstitial (no-op on other builds

@@ -60,7 +60,7 @@ Aethel Fold and the benches. Changes there must not break either.
   buttons. Ads exist only behind the build flags `VITE_APP_INTERSTITIALS` /
   `VITE_APP_REWARDED` (`src/platforms/adFlags.ts`), which are honoured only on
   platforms with an ad SDK (CrazyGames, GameDistribution, Playgama, GamePix,
-  GameMonetize, Yandex) and are off for the jury, plain web, itch.io, Glitch
+  GameMonetize, Yandex, Poki) and are off for the jury, plain web, itch.io, Glitch
   and Wavedash builds. Any new ad code goes through `useFoldAds` and must
   early-return on those constants; `tests/platforms/foldAdFlags.test.ts` and
   `tests/ui/foldAdsUi.test.ts` guard the jury config.

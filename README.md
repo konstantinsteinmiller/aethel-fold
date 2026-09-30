@@ -11,8 +11,8 @@ controls: [`description.md`](./description.md) · what comes next:
 [`roadmap.md`](./roadmap.md).
 
 Built with Vue 3 + TypeScript + raw three.js, shipping to CrazyGames, Playgama,
-GamePix, GameMonetize, GameDistribution, Glitch.fun, itch.io, Wavedash and
-Yandex Games from one codebase.
+GamePix, GameMonetize, GameDistribution, Poki, Glitch.fun, itch.io, Wavedash
+and Yandex Games from one codebase.
 
 ---
 
@@ -167,13 +167,17 @@ pnpm build:crazy-web         pnpm build:playgama
 pnpm build:gamepix           pnpm build:gamemonetize
 pnpm build:game-distribution pnpm build:glitch
 pnpm build:itch              pnpm build:wavedash
-pnpm build:yandex
+pnpm build:yandex            pnpm build:poki
 ```
 
 Each mode reads `.env.<mode>`. That file is git-ignored: copy it from the
 committed `.env.<mode>.example`, in which every game id, title id, install id and
 token is deliberately blank. The build then strips the other platforms' SDK
 glue and emits a per-platform CSP. The jury build ships **no ads** of any kind.
+Ads (`VITE_APP_INTERSTITIALS`, `VITE_APP_REWARDED`) exist only on the builds
+with an ad SDK: CrazyGames, GameDistribution, Playgama, GamePix, GameMonetize,
+Yandex and Poki (`commercialBreak` / `rewardedBreak`; saves stay in
+localStorage).
 
 ## Docs
 

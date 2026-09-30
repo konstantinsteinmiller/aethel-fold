@@ -9,9 +9,9 @@
 //   VITE_APP_REWARDED=true        the rewarded Try again (#9) and second chance (#19)
 //
 // "Has an ad SDK" means `resolveAdProvider` returns a real provider for the
-// build: CrazyGames, GameDistribution, Playgama, GamePix, GameMonetize and
-// Yandex. Itch.io, Glitch, Wavedash and the plain web / jury build resolve to
-// the Noop provider, so the flags are forced off there even if an `.env` sets
+// build: CrazyGames, GameDistribution, Playgama, GamePix, GameMonetize, Yandex
+// and Poki. Itch.io (the jury build), Glitch, Wavedash and the plain web build
+// resolve to the Noop provider, so the flags are forced off there even if an `.env` sets
 // them by mistake.
 //
 // The constants below compare `import.meta.env.*` literals at module top
@@ -26,7 +26,8 @@ export const AD_PLATFORM_ENV_KEYS = [
   'VITE_APP_PLAYGAMA',
   'VITE_APP_GAMEPIX',
   'VITE_APP_GAME_MONETIZE',
-  'VITE_APP_YANDEX'
+  'VITE_APP_YANDEX',
+  'VITE_APP_POKI'
 ] as const
 
 export interface AdFlags {
@@ -54,7 +55,8 @@ const IS_AD_PLATFORM_BUILD =
   import.meta.env.VITE_APP_PLAYGAMA === 'true' ||
   import.meta.env.VITE_APP_GAMEPIX === 'true' ||
   import.meta.env.VITE_APP_GAME_MONETIZE === 'true' ||
-  import.meta.env.VITE_APP_YANDEX === 'true'
+  import.meta.env.VITE_APP_YANDEX === 'true' ||
+  import.meta.env.VITE_APP_POKI === 'true'
 
 /** Build constant: rewarded placements are compiled in (an ad platform with `VITE_APP_REWARDED`). */
 export const REWARDED_ADS: boolean = IS_AD_PLATFORM_BUILD && import.meta.env.VITE_APP_REWARDED === 'true'

@@ -151,6 +151,21 @@ const YANDEX_PARTNER_HOSTS: ReadonlyArray<string> = [
   'https://*.yandexadexchange.net'
 ]
 
+/**
+ * Poki: the SDK v2 script (game-cdn.poki.com) and its ad / telemetry / CDN
+ * origins. Poki mediates ads through IMA and partner bidders, so the build is
+ * also an ad-waterfall build below (open `https:` on the ad directives).
+ */
+const POKI_PARTNER_HOSTS: ReadonlyArray<string> = [
+  'https://game-cdn.poki.com',
+  'https://*.poki.com',
+  'https://*.poki.io',
+  'https://*.poki-gdn.com',
+  'https://imasdk.googleapis.com',
+  'https://*.doubleclick.net',
+  'https://*.googlesyndication.com'
+]
+
 const CONNECT_BASE_EXTRA: ReadonlyArray<string> = [
   'https://*.sentry.io',
   'wss://*.wavedash.com',
@@ -178,11 +193,12 @@ export const buildCsp = (env: Record<string, string>): string => {
   const isGamepix = env.VITE_APP_GAMEPIX === 'true'
   const isGameMonetize = env.VITE_APP_GAME_MONETIZE === 'true'
   const isYandex = env.VITE_APP_YANDEX === 'true'
+  const isPoki = env.VITE_APP_POKI === 'true'
 
   // Playgama / GamePix / GameMonetize / Yandex run an ad-waterfall like GD —
   // open the same directives so partner creatives / bidders (the Google-IMA
   // bidder chain on most, Yandex Direct on Yandex) aren't refused.
-  const adWaterfallBuild = isGameDistribution || isPlaygama || isGamepix || isGameMonetize || isYandex
+  const adWaterfallBuild = isGameDistribution || isPlaygama || isGamepix || isGameMonetize || isYandex || isPoki
 
   // Yandex's moderator rejects any third-party "service storage" URL it finds
   // anywhere in the bundle — including the CSP meta tag. `BASE_HOSTS` contains
@@ -203,11 +219,15 @@ export const buildCsp = (env: Record<string, string>): string => {
       'https://an.yandex.ru',
       ...YANDEX_PARTNER_HOSTS
     ]
-    : [
-      ...BASE_HOSTS,
-      ...(isGameDistribution ? GD_PARTNER_HOSTS : []),
-      ...(isCrazyWeb ? CG_PARTNER_HOSTS : [])
-    ]
+    : isPoki
+      // Poki: only Poki's own and its ad partners' origins — no other portal's
+      // hostnames anywhere in the bundle (the legacy BASE_HOSTS list names them all).
+      ? [...POKI_PARTNER_HOSTS]
+      : [
+        ...BASE_HOSTS,
+        ...(isGameDistribution ? GD_PARTNER_HOSTS : []),
+        ...(isCrazyWeb ? CG_PARTNER_HOSTS : [])
+      ]
 
   /**
    * The leaderboard Worker, derived from the build's own env rather than
@@ -251,7 +271,7 @@ export const buildCsp = (env: Record<string, string>): string => {
       // URL it finds, so omit the extras entirely on Yandex builds (the
       // open `https:` / `wss:` added below for ad-waterfall builds still
       // covers what's actually needed at runtime).
-      ...(isYandex ? [] : CONNECT_BASE_EXTRA),
+      ...(isYandex || isPoki ? [] : CONNECT_BASE_EXTRA),
       // GD / Playgama partner analytics / ad telemetry beacons.
       ...(adWaterfallBuild ? ['https:', 'wss:'] : []),
       ...leaderboardHost
