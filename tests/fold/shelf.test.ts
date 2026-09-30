@@ -7,7 +7,12 @@ import {
 import { lessonCode } from '@/fold/logic/lessons'
 import type { FoldEventType } from '@/fold/logic/events'
 import type { Stars } from '@/fold/logic/types'
+import { scriptDuration } from '@/fold/logic/cutscene'
+import { OUTRO_BOOK1 } from '@/fold/logic/outros'
 import { ALL_LESSONS_LEARNED } from './bot'
+
+/** Book 1's boss outro (C9b): the victory card, and the shelf's clock, wait for its end. */
+const OUTRO_TIME = scriptDuration(OUTRO_BOOK1)
 
 const DT = 1 / 60
 
@@ -206,11 +211,14 @@ describe('bookshelf in the game', () => {
     step(h, 1)
     h.foldNow(0)
     step(h, 4)
+    // Not while the boss outro plays (C9b); a tap skips it, then the sweep works.
+    expect(h.foldShut()).toBe(false)
+    expect(h.skipOutro()).toBe(true)
     expect(h.foldShut()).toBe(true)
     expect(h.shelf.open).toBe(true)
     expect(h.shelf.reason).toBe('shut')
-    // Left alone, the first game turns to the shelf by itself.
-    step(g, SHELF.afterVictory)
+    // Left alone, the first game turns to the shelf by itself, the outro's end + `afterVictory` later.
+    step(g, OUTRO_TIME + SHELF.afterVictory)
     expect(g.shelf.open).toBe(true)
     expect(g.shelf.reason).toBe('victory')
     expect(g.shelf.finished).toBe(true)
@@ -240,7 +248,7 @@ describe('the shelf lesson (wordless)', () => {
     g.setShelfProgress(progress([0, 0], [5, 0]))
     step(g, 1)
     g.foldNow(0)
-    step(g, 4 + SHELF.afterVictory)
+    step(g, 4 + OUTRO_TIME + SHELF.afterVictory)
     expect(g.shelf.open).toBe(true)
     expect(g.lesson.id).toBe('shelf')
     expect(g.lesson.step).toBe(1)

@@ -32,7 +32,7 @@ const MAX_GLOWS = 40
 
 export type ConfettiPalette =
   | 'festive' | 'paper' | 'flame' | 'gold' | 'ink' | 'hero' | 'enemy' | 'dragon' | 'water' | 'apple'
-  | 'kraken' | 'inkJet'
+  | 'kraken' | 'inkJet' | 'cool' | 'warm'
 
 const PALETTES: Record<ConfettiPalette, PaletteKey[]> = {
   festive: [...CONFETTI_KEYS],
@@ -46,7 +46,10 @@ const PALETTES: Record<ConfettiPalette, PaletteKey[]> = {
   water: ['water', 'waterLight', 'waterDark', 'paperWhite'],
   apple: ['enemyRed', 'dragonRed', 'c1', 'forest'],
   kraken: ['kraken', 'krakenLight', 'krakenSucker', 'krakenDark'],
-  inkJet: ['inkJet', 'krakenDark', 'inkSoft', 'kraken']
+  inkJet: ['inkJet', 'krakenDark', 'inkSoft', 'kraken'],
+  // The outro's fireworks (C9b).
+  cool: ['c3', 'c5', 'waterLight', 'paperWhite', 'pastelSky'],
+  warm: ['c1', 'c6', 'c2', 'c7', 'pastelPink']
 }
 
 /**
@@ -242,6 +245,60 @@ export class Effects {
       this.confetti.setColorAt(i, this.colors.get(pal[Math.floor(Math.random() * pal.length)]!)!)
     }
     this.live = Math.min(MAX_CONFETTI, this.live + o.count)
+  }
+
+  /**
+   * One chip with its own velocity (a firework rocket's trail): no options
+   * object, so a per-frame caller allocates nothing.
+   */
+  chip(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, gravity: number, color: PaletteKey): void {
+    const i = this.cursor
+    this.cursor = (this.cursor + 1) % MAX_CONFETTI
+    this.px[i] = x
+    this.py[i] = y
+    this.pz[i] = z
+    this.vx[i] = vx
+    this.vy[i] = vy
+    this.vz[i] = vz
+    this.rx[i] = Math.random() * 6
+    this.ry[i] = Math.random() * 6
+    this.rz[i] = Math.random() * 6
+    this.wx[i] = (Math.random() - 0.5) * 18
+    this.wy[i] = (Math.random() - 0.5) * 14
+    this.wz[i] = (Math.random() - 0.5) * 18
+    this.life[i] = life
+    this.maxLife[i] = life
+    this.size[i] = size
+    this.grav[i] = gravity
+    this.settle[i] = 0
+    this.flat[i] = 0
+    this.confetti.setColorAt(i, this.colors.get(color)!)
+    this.live = Math.min(MAX_CONFETTI, this.live + 1)
+  }
+
+  /**
+   * A paper firework (C9b): `count` chips thrown out on a sphere shell from
+   * one point, falling slowly and never settling — the same instanced mesh
+   * as every other chip, so a burst costs no draw call. Allocation-free.
+   */
+  fireworkBurst(x: number, y: number, z: number, count: number, palette: ConfettiPalette, life = 1.3): void {
+    const pal = PALETTES[palette]
+    for (let n = 0; n < count; n++) {
+      // An even-ish shell: golden-angle spiral in height, a little random speed.
+      const u = 1 - (2 * (n + 0.5)) / count
+      const r = Math.sqrt(Math.max(0, 1 - u * u))
+      const a = n * 2.39996 + Math.random() * 0.3
+      const sp = 4.6 + Math.random() * 1.6
+      this.chip(
+        x, y, z, Math.cos(a) * r * sp, u * sp + 0.8, Math.sin(a) * r * sp,
+        life * (0.8 + Math.random() * 0.4), 1.3 + Math.random() * 0.6, 2.2, pal[n % pal.length]!
+      )
+    }
+  }
+
+  /** Live chips (confetti, flames and fireworks together): perf telemetry. */
+  get liveChips(): number {
+    return this.live
   }
 
   /**

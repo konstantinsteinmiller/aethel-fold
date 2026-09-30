@@ -11,6 +11,11 @@
  * Two poses (roadmap #2): `book` frames the page, `shelf` pulls out and over
  * so the desk bookshelf right of the book is in the picture too. The camera
  * eases between them in real time (`setShelf`), whatever the world's time.
+ *
+ * Cutscenes (C9b) add a framing on top of the pose (`setCut`): a pull-back,
+ * a small orbit, a lower pitch, a focus shift — glided in real time with a
+ * smootherstep, so a move starts and lands without a jolt. Identity outside
+ * a cutscene; reduced motion keeps a third of it.
  */
 
 import { MathUtils, PerspectiveCamera, Vector3 } from 'three'
@@ -107,6 +112,13 @@ export class DeskCamera {
    * phones and tablets): beside the book there, its books were ~30 px wide.
    */
   shelfClose = false
+  /** The cutscene framing: where it glides from, to, and how far along (real time). */
+  private readonly cutFrom = { zoom: 1, yaw: 0, pitch: 0, fx: 0, fz: 0 }
+  private readonly cutTo = { zoom: 1, yaw: 0, pitch: 0, fx: 0, fz: 0 }
+  private readonly cutNow = { zoom: 1, yaw: 0, pitch: 0, fx: 0, fz: 0 }
+  private cutT = 1
+  private cutDur = 1
+  private readonly cutFocus = new Vector3()
   private readonly shelfPts = shelfCorners()
   private readonly closePts = shelfCorners(true)
 
@@ -288,6 +300,68 @@ export class DeskCamera {
     this.zoomTarget = z
   }
 
+  /**
+   * Glide to a cutscene framing (relative to the pose) over `dur` real
+   * seconds; all zeros and zoom 1 is home. Allocation-free.
+   */
+  setCut(zoom: number, yaw: number, pitch: number, fx: number, fz: number, dur: number): void {
+    const k = this.reducedMotion ? 0.35 : 1
+    const n = this.cutNow
+    const f = this.cutFrom
+    f.zoom = n.zoom
+    f.yaw = n.yaw
+    f.pitch = n.pitch
+    f.fx = n.fx
+    f.fz = n.fz
+    const t = this.cutTo
+    t.zoom = 1 + (zoom - 1) * k
+    t.yaw = yaw * k
+    t.pitch = pitch * k
+    t.fx = fx * k
+    t.fz = fz * k
+    this.cutT = 0
+    this.cutDur = Math.max(0.05, dur)
+  }
+
+  /** Is a cutscene framing in effect (or still gliding home)? */
+  get cutting(): boolean {
+    const n = this.cutNow
+    return this.cutT < 1 || n.zoom !== 1 || n.yaw !== 0 || n.pitch !== 0 || n.fx !== 0 || n.fz !== 0
+  }
+
+  private updateCut(dt: number): void {
+    if (this.cutT >= 1) return
+    this.cutT = Math.min(1, this.cutT + dt / this.cutDur)
+    const x = this.cutT
+    const e = x * x * x * (x * (x * 6 - 15) + 10)
+    const a = this.cutFrom
+    const b = this.cutTo
+    const n = this.cutNow
+    n.zoom = a.zoom + (b.zoom - a.zoom) * e
+    n.yaw = a.yaw + (b.yaw - a.yaw) * e
+    n.pitch = a.pitch + (b.pitch - a.pitch) * e
+    n.fx = a.fx + (b.fx - a.fx) * e
+    n.fz = a.fz + (b.fz - a.fz) * e
+  }
+
+  /** `place` with the cutscene framing on top (the focus and pitch of the pose stay as solved). */
+  private placeCut(dist: number): void {
+    const n = this.cutNow
+    if (n.zoom === 1 && n.yaw === 0 && n.pitch === 0 && n.fx === 0 && n.fz === 0) {
+      this.place(dist)
+      return
+    }
+    const cam = this.camera
+    const p = this.pitch + n.pitch
+    const cp = Math.cos(p)
+    this.dir.set(Math.sin(n.yaw) * cp, Math.sin(p), Math.cos(n.yaw) * cp)
+    this.cutFocus.set(this.focus.x + n.fx, 0, this.focus.z + n.fz)
+    cam.position.copy(this.cutFocus).addScaledVector(this.dir, dist * n.zoom)
+    cam.lookAt(this.cutFocus)
+    cam.updateProjectionMatrix()
+    cam.updateMatrixWorld(true)
+  }
+
   update(dt: number): void {
     this.shakeTime += dt
     this.shakeAmp = Math.max(0, this.shakeAmp - dt * 1.6 * Math.max(0.3, this.shakeAmp * 6))
@@ -304,7 +378,8 @@ export class DeskCamera {
       this.pose()
     }
     this.distance = this.baseDistance * this.zoom * (1 + this.punch * 0.06)
-    this.place(this.distance)
+    this.updateCut(dt)
+    this.placeCut(this.distance)
     if (this.shakeAmp > 0.0005) {
       // GDD §5: sharp, low-amplitude, high-frequency, *vertical*.
       const t = this.shakeTime

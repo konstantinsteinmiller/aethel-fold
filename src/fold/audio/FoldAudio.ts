@@ -16,7 +16,7 @@ import type { FoldEvent } from '../logic/events'
 import { KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_TEAR } from '../logic/events'
 import type { FoldGame } from '../logic/game'
 import { BOSS_PHASE_CODES } from '../logic/boss'
-import { STARS } from '../logic/config'
+import { OUTRO, STARS } from '../logic/config'
 import { brass, crackleBuffer, glock, kick, noise, noiseBuffer, roomImpulse, strings, tone, voice, type Bus } from './synth'
 import { MusicSequencer, type SongId } from './music'
 
@@ -44,6 +44,8 @@ export class FoldAudio {
   private lastSpawnSfx = 0
   private lastKillSfx = 0
   private started = false
+  /** When each firework voice falls silent (C9b): at most `OUTRO.popVoices` ring at once. */
+  private readonly popEnds = new Float64Array(OUTRO.popVoices)
   private sfxVolume = 0.8
   private musicVolume = 0.5
 
@@ -310,6 +312,38 @@ export class FoldAudio {
       voice(this.sfx, t + Math.random() * 0.18, f, f * 1.25, 0.55 + Math.random() * 0.25, i % 2 ? 'e' : 'a', 0.04)
     }
     for (let i = 0; i < 14; i++) noise(this.sfx, t + 0.1 + Math.random() * 0.8, 0.02, 0.08, 'bandpass', 1400 + Math.random() * 800, 1.5)
+  }
+
+  /**
+   * A voice for a firework sound, if one is free (the cap keeps a volley from
+   * piling up nodes on a small phone). Claims it until `dur` from now.
+   */
+  private popVoice(dur: number): boolean {
+    const t = this.ctx.currentTime
+    for (let i = 0; i < this.popEnds.length; i++) {
+      if (this.popEnds[i]! > t) continue
+      this.popEnds[i] = t + dur
+      return true
+    }
+    return false
+  }
+
+  /** A paper rocket: a soft rising fwip. */
+  fireworkLaunch(): void {
+    if (!this.popVoice(0.3)) return
+    const t = this.now
+    noise(this.sfx, t, 0.28, 0.07, 'bandpass', 900 * this.r(0.1), 1.6, 3600)
+  }
+
+  /** A small paper firework: a crisp pop and a sprinkle of crackle. */
+  fireworkPop(): void {
+    if (!this.popVoice(0.45)) return
+    const b = this.sfx
+    const t = this.now
+    const p = this.r(0.15)
+    noise(b, t, 0.025, 0.32, 'bandpass', 2100 * p, 1.4)
+    tone(b, t, 'sine', 520 * p, 150, 0.08, 0.22)
+    noise(b, t + 0.06, 0.35, 0.09, 'highpass', 2600, 0.8, 5200, true)
   }
 
   roar(): void {
@@ -590,6 +624,14 @@ export class FoldAudio {
         break
       case 'tap':
         this.tap()
+        break
+      case 'firework':
+        if (e.b === 1) this.fireworkPop()
+        else this.fireworkLaunch()
+        break
+      case 'outroBeat':
+        // The crowd's cheer beats (C9b): a smaller "yay!" than the victory's.
+        if (e.b === 0 && game.outro.script?.beats[e.a]?.kind === 'cheer') this.yay(5)
         break
       case 'secret':
         // A found secret: a bright little glissando, a sparkle on top the first time (roadmap #15).

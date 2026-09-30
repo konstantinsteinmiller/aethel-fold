@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { ALL_LESSONS, collectErrors, ff, readSave, seedState, state, tapShelf, waitForGame } from './helpers'
+import { ALL_LESSONS, collectErrors, ff, readSave, seedState, skipOutro, state, tapShelf, waitForGame } from './helpers'
 
 /** Play book 1's finale through to the victory ribbon. */
 const winBook1 = async (page: import('@playwright/test').Page): Promise<void> => {
@@ -8,6 +8,8 @@ const winBook1 = async (page: import('@playwright/test').Page): Promise<void> =>
   await page.evaluate(() => window.__fold!.game.foldNow(0))
   for (let i = 0; i < 12 && (await state(page)).phase !== 'victory'; i++) await ff(page, 0.5)
   expect((await state(page)).phase).toBe('victory')
+  // The boss outro (C9b) plays first; the card comes at its end.
+  await skipOutro(page)
 }
 
 test.describe('Aethel Fold — the desk bookshelf (chapter select)', () => {
@@ -28,7 +30,7 @@ test.describe('Aethel Fold — the desk bookshelf (chapter select)', () => {
     await waitForGame(page)
     await winBook1(page)
     // The victory card first, then the camera goes out to the shelf by itself.
-    await expect(page.getByTestId('victory-book2')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByTestId('victory-book2')).toBeVisible({ timeout: 15_000 })
     await ff(page, 7)
     let s = await state(page)
     expect(s.shelf.open).toBe(true)
@@ -147,7 +149,7 @@ test.describe('Aethel Fold — the desk bookshelf (chapter select)', () => {
     await waitForGame(page)
     await winBook1(page)
     const rush = page.getByTestId('victory-rush')
-    await expect(rush).toBeVisible({ timeout: 5000 })
+    await expect(rush).toBeVisible({ timeout: 15_000 })
     const before = await readSave(page)
     // The victory clock runs on real frames: click through the pulse without waiting for "stable".
     await rush.click({ force: true })

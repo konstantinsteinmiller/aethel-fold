@@ -410,6 +410,39 @@ export const SHELF = {
   secretsX: -1.55
 } as const
 
+// ─── Boss outro cutscene (C9b) ─────────────────────────────────────────────
+
+/**
+ * The short show after a story boss is beaten (`logic/cutscene.ts`,
+ * `logic/outros.ts`). Real seconds; the world's clock plays no part.
+ */
+export const OUTRO = {
+  /** A tap this soon after the outro starts is still the finale's swipe: it doesn't skip. */
+  skipAfter: 0.5,
+  /** Paper people on the page at most (the crowd's one instanced draw). */
+  crowdCap: 24,
+  /** How long a paper person takes to pop up from flat. */
+  popTime: 0.36,
+  /** Fireworks in flight or bursting at once: normal, and low quality / reduced motion. */
+  fireworkSlots: 4,
+  fireworkSlotsLite: 2,
+  /** Chips per burst, normal and lite. */
+  sparks: 40,
+  sparksLite: 22,
+  /** Chips a rising rocket trails (emitted at `trailRate`, each lives `trailLife`). */
+  trailRate: 30,
+  trailLife: 0.3,
+  /** Seconds from launch to burst, and a burst's chip life (its slot stays busy that long). */
+  rise: 0.7,
+  linger: 1.3,
+  /** Fireworks waiting on their fuse (a beat's volley), at most. */
+  fuseCap: 16,
+  /** Hard particle budget for the fireworks (slots × (sparks + live trail)); a unit test holds it. */
+  maxParticles: 220,
+  /** Firework pops the audio lets ring at once. */
+  popVoices: 3
+} as const
+
 // ─── Dragon Rush (roadmap #16) ─────────────────────────────────────────────
 
 export const RUSH = {

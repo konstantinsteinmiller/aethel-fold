@@ -35,15 +35,15 @@ export type FrameName =
   | 'runner0' | 'runner1' | 'runnerFlail'
   | 'leaper0' | 'leaper1' | 'leaperJump' | 'leaperFlail'
   | 'hero0' | 'heroCheer' | 'heroCower' | 'heroHit' | 'heroWalk'
-  | 'personRed0' | 'personRed1' | 'personBlue0' | 'personBlue1'
-  | 'personGreen0' | 'personGreen1' | 'personYellow0' | 'personYellow1'
+  | 'cheerVillager0' | 'cheerVillager1' | 'cheerSoldier0' | 'cheerSoldier1'
+  | 'cheerFarmer0' | 'cheerFarmer1' | 'cheerKid0' | 'cheerKid1'
   | 'crushed' | 'scrap'
   | 'bat0' | 'bat1'
 
 const ORDER: FrameName[] = [
   'knight0', 'knight1', 'knightFlail', 'brute0', 'brute1', 'bruteFlail', 'archer0', 'archerDraw',
   'hero0', 'heroCheer', 'heroCower', 'heroHit', 'heroWalk', 'crushed', 'scrap',
-  'personRed0', 'personRed1', 'personBlue0', 'personBlue1', 'personGreen0', 'personGreen1', 'personYellow0', 'personYellow1',
+  'cheerVillager0', 'cheerVillager1', 'cheerSoldier0', 'cheerSoldier1', 'cheerFarmer0', 'cheerFarmer1', 'cheerKid0', 'cheerKid1',
   'runner0', 'runner1', 'runnerFlail', 'leaper0', 'leaper1', 'leaperJump', 'leaperFlail',
   'bat0', 'bat1'
 ]
@@ -85,14 +85,14 @@ export interface FrameUV {
 }
 
 /**
- * Frames no book-1 page shows until its victory: the cheering crowd and book 2's
- * runners and leapers. `createStandeeAtlas` leaves their cells blank so the
+ * Frames no book-1 page shows until its victory: the outro's cheering crowd
+ * (C9b) and book 2's runners and leapers. `createStandeeAtlas` leaves their cells blank so the
  * boot only paints what page 1 can show (roadmap #13); `paintDeferred` fills
- * them in later (idle after the first input, or at once when a book-2 page or
- * the victory crowd needs them). Blank cells are never on screen before then.
+ * them in later (idle after the first input, or at once when a book-2 page, a
+ * boss or finale page, or the victory crowd needs them). Blank cells are never on screen before then.
  */
 const DEFERRED: ReadonlySet<FrameName> = new Set<FrameName>([
-  'personRed0', 'personRed1', 'personBlue0', 'personBlue1', 'personGreen0', 'personGreen1', 'personYellow0', 'personYellow1',
+  'cheerVillager0', 'cheerVillager1', 'cheerSoldier0', 'cheerSoldier1', 'cheerFarmer0', 'cheerFarmer1', 'cheerKid0', 'cheerKid1',
   'runner0', 'runner1', 'runnerFlail', 'leaper0', 'leaper1', 'leaperJump', 'leaperFlail'
 ])
 
@@ -468,35 +468,204 @@ const bat = (ctx: CanvasRenderingContext2D, down: boolean): void => {
   ctx.restore()
 }
 
-const person = (ctx: CanvasRenderingContext2D, body: string, armsUp: boolean): void => {
+// ─── The outro's cheering crowd (C9b) ───────────────────────────────────────
+//
+// Chibi paper people: a big round head on a small body, big shiny eyes with
+// a paper-white highlight, rosy cheeks, an open happy mouth, pastel clothes.
+// Pose 0 waves (one arm up, hat on); pose 1 is the hooray (both arms up, the
+// hat tossed into the air — the soldier's helmet only bounces).
+
+type ChibiHat = 'bonnet' | 'helmet' | 'straw' | 'party'
+
+interface ChibiStyle {
+  outfit: string
+  outfitDark: string
+  legs: string
+  hair: string
+  hat: ChibiHat
+  /** A flared dress instead of a tunic. */
+  skirt?: boolean
+  /** Two hair buns. */
+  buns?: boolean
+  /** A pennant on a stick in the waving hand. */
+  flag?: boolean
+  /** A gold star on the tabard. */
+  star?: boolean
+  /** Figure scale about the feet (kids are a head shorter). */
+  scale?: number
+}
+
+const starPts = (x: number, y: number, r0: number, r1: number): number[] => {
+  const pts: number[] = []
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i / 10) * Math.PI * 2
+    const r = i % 2 ? r1 : r0
+    pts.push(x + Math.cos(a) * r, y + Math.sin(a) * r)
+  }
+  return pts
+}
+
+/** An arm from the shoulder, `a` radians clockwise from hanging down; returns nothing, draws the mitten hand too. */
+const chibiArm = (ctx: CanvasRenderingContext2D, sx: number, sy: number, a: number, s: ChibiStyle, hand: { x: number; y: number }): void => {
+  const len = 27
   ctx.save()
-  ctx.translate(64, 182)
-  ctx.scale(0.8, 0.8)
-  ctx.translate(-64, -182)
-  // Legs.
-  rrect(ctx, 50, 140, 10, 38, 4, HEX.inkSoft, 3)
-  rrect(ctx, 68, 140, 10, 38, 4, HEX.inkSoft, 3)
-  // Arms.
-  const ay = armsUp ? 60 : 100
-  poly(ctx, [44, 106, 24, ay, 32, ay - 6, 52, 100], HEX.skin, 3.5)
-  poly(ctx, [84, 106, 104, ay, 96, ay - 6, 76, 100], HEX.skin, 3.5)
-  // Dress/tunic.
-  poly(ctx, [48, 96, 80, 96, 96, 148, 32, 148], body)
-  // Head.
-  ellipse(ctx, 64, 72, 24, 23, HEX.skin)
-  ellipse(ctx, 56, 70, 3, 3.6, INK, 0)
-  ellipse(ctx, 72, 70, 3, 3.6, INK, 0)
-  ellipse(ctx, 64, 83, armsUp ? 6 : 4, armsUp ? 5 : 2.5, INK, 0)
-  ellipse(ctx, 50, 79, 4, 2.6, css('c7', 0.7), 0)
-  ellipse(ctx, 78, 79, 4, 2.6, css('c7', 0.7), 0)
-  // Hair tuft.
-  ctx.beginPath()
-  ctx.moveTo(44, 64)
-  ctx.quadraticCurveTo(52, 40, 64, 48)
-  ctx.quadraticCurveTo(78, 38, 86, 62)
-  ctx.quadraticCurveTo(66, 54, 44, 64)
-  fillStroke(ctx, HEX.woodDark, 3)
+  ctx.translate(sx, sy)
+  ctx.rotate(a)
+  rrect(ctx, -5.5, -3, 11, len, 5.5, s.outfit, 3)
+  ellipse(ctx, 0, len + 1, 6.8, 6.8, HEX.skin, 3)
   ctx.restore()
+  hand.x = sx - Math.sin(a) * (len + 1)
+  hand.y = sy + Math.cos(a) * (len + 1)
+}
+
+const chibiHat = (ctx: CanvasRenderingContext2D, s: ChibiStyle, x: number, y: number, rot: number): void => {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(rot)
+  switch (s.hat) {
+    case 'bonnet':
+      ellipse(ctx, 0, 5, 30, 8, HEX.straw)
+      ellipse(ctx, 0, -3, 20, 12, HEX.straw)
+      rrect(ctx, -20, -1, 40, 6, 3, HEX.pastelPink, 2.4)
+      ellipse(ctx, 14, -4, 4.5, 4.5, HEX.paperWhite, 2)
+      ellipse(ctx, 14, -4, 1.8, 1.8, HEX.pastelLemonDark, 0)
+      break
+    case 'straw':
+      ellipse(ctx, 0, 6, 38, 8.5, HEX.straw)
+      rrect(ctx, -18, -15, 36, 22, 10, HEX.straw)
+      rrect(ctx, -18, -1, 36, 6, 2, HEX.pastelMintDark, 2.4)
+      ctx.beginPath()
+      ctx.moveTo(-30, 8)
+      ctx.lineTo(-24, 5)
+      ctx.moveTo(26, 5)
+      ctx.lineTo(32, 8)
+      stroke(ctx, 1.8)
+      break
+    case 'party':
+      poly(ctx, [0, -30, -14, 6, 14, 6], HEX.pastelLilac)
+      ellipse(ctx, -3, -8, 2.4, 2.4, HEX.pastelLemon, 1.6)
+      ellipse(ctx, 5, -1, 2.4, 2.4, HEX.pastelPink, 1.6)
+      ellipse(ctx, 1, -18, 2, 2, HEX.pastelMint, 1.4)
+      ellipse(ctx, 0, -32, 5.5, 5.5, HEX.pastelPink, 2.4)
+      break
+    case 'helmet':
+      ctx.beginPath()
+      ctx.ellipse(0, 10, 31, 24, 0, Math.PI, 0)
+      ctx.closePath()
+      fillStroke(ctx, HEX.heroSteel)
+      rrect(ctx, -33, 6, 66, 8, 4, HEX.enemySteel, 2.8)
+      ctx.beginPath()
+      ctx.moveTo(0, -14)
+      ctx.quadraticCurveTo(-4, -28, 8, -32)
+      ctx.quadraticCurveTo(4, -22, 12, -16)
+      ctx.quadraticCurveTo(6, -14, 0, -14)
+      fillStroke(ctx, HEX.pastelPink, 2.6)
+      break
+  }
+  ctx.restore()
+}
+
+const chibiHand = { x: 0, y: 0 }
+
+const chibi = (ctx: CanvasRenderingContext2D, s: ChibiStyle, hooray: boolean): void => {
+  ctx.save()
+  const k = s.scale ?? 1
+  ctx.translate(64, 180)
+  ctx.scale(k, k)
+  ctx.translate(-64, -174)
+  // Stubby legs and round shoes (a little skip in the hooray).
+  const lift = hooray ? -4 : 0
+  rrect(ctx, 50, 144, 11, 24, 5, s.legs, 3)
+  rrect(ctx, 67, 144 + lift, 11, 24, 5, s.legs, 3)
+  ellipse(ctx, 54, 170, 9, 5.5, HEX.woodDark, 3)
+  ellipse(ctx, 74, 170 + lift, 9, 5.5, HEX.woodDark, 3)
+  // Small body.
+  if (s.skirt) {
+    poly(ctx, [50, 108, 78, 108, 94, 152, 34, 152], s.outfit)
+    poly(ctx, [56, 112, 72, 112, 78, 146, 50, 146], HEX.paperWhite, 2.4)
+  } else {
+    rrect(ctx, 43, 106, 42, 46, 13, s.outfit)
+    rrect(ctx, 43, 134, 42, 7, 3, s.outfitDark, 2.4)
+  }
+  if (s.star) poly(ctx, starPts(64, 122, 8, 3.4), HEX.gold, 2.2)
+  // Buns and back hair behind the head.
+  if (s.buns) {
+    ellipse(ctx, 33, 60, 10, 10, s.hair)
+    ellipse(ctx, 95, 60, 10, 10, s.hair)
+  }
+  ellipse(ctx, 64, 72, 34, 31, s.hair)
+  // The big round head.
+  ellipse(ctx, 64, 80, 30, 27, HEX.skin)
+  // Bangs.
+  ctx.beginPath()
+  ctx.moveTo(33, 76)
+  ctx.quadraticCurveTo(35, 46, 64, 45)
+  ctx.quadraticCurveTo(93, 46, 95, 76)
+  ctx.lineTo(88, 64)
+  ctx.lineTo(80, 70)
+  ctx.lineTo(71, 61)
+  ctx.lineTo(62, 68)
+  ctx.lineTo(53, 61)
+  ctx.lineTo(45, 70)
+  ctx.lineTo(39, 63)
+  ctx.closePath()
+  fillStroke(ctx, s.hair, 3)
+  // Big shiny eyes: ink, a paper-white highlight and a little glint.
+  for (const ex of [52, 76]) {
+    ellipse(ctx, ex, 84, 5.4, 7, INK, 0)
+    ellipse(ctx, ex - 1.6, 80.6, 2.4, 2.6, HEX.paperWhite, 0)
+    ellipse(ctx, ex + 1.8, 87.6, 1.1, 1.1, HEX.paperWhite, 0)
+  }
+  // Rosy cheeks.
+  ellipse(ctx, 43, 93, 5.8, 3.6, css('blush', 0.85), 0)
+  ellipse(ctx, 85, 93, 5.8, 3.6, css('blush', 0.85), 0)
+  // An open, happy mouth (wider in the hooray) with a tongue.
+  const m = hooray ? 7.5 : 6
+  ctx.beginPath()
+  ctx.moveTo(64 - m, 93)
+  ctx.quadraticCurveTo(64, hooray ? 108 : 104, 64 + m, 93)
+  ctx.closePath()
+  fillStroke(ctx, INK, 2)
+  ellipse(ctx, 64, hooray ? 101.5 : 99, m * 0.5, 2.4, HEX.tongue, 0)
+  // Hat: on the head, or tossed high in the hooray (the helmet only hops).
+  if (s.hat === 'helmet') chibiHat(ctx, s, 64, hooray ? 50 : 56, hooray ? -0.12 : 0)
+  else if (hooray) chibiHat(ctx, s, 74, s.hat === 'party' ? 34 : 24, 0.4)
+  else chibiHat(ctx, s, 64, s.hat === 'party' ? 48 : 50, s.hat === 'party' ? -0.15 : 0)
+  // Arms in front: a wave (one up, one on the hip) or both up.
+  if (hooray) {
+    chibiArm(ctx, 45, 114, 2.25, s, chibiHand)
+    const fx = chibiHand.x
+    const fy = chibiHand.y
+    chibiArm(ctx, 83, 114, -2.25, s, chibiHand)
+    if (s.flag) chibiFlag(ctx, fx, fy)
+  } else {
+    chibiArm(ctx, 45, 114, 2.6, s, chibiHand)
+    if (s.flag) chibiFlag(ctx, chibiHand.x, chibiHand.y)
+    chibiArm(ctx, 83, 114, -0.45, s, chibiHand)
+  }
+  ctx.restore()
+}
+
+/** A little pennant on a stick, held up in a hand. */
+const chibiFlag = (ctx: CanvasRenderingContext2D, hx: number, hy: number): void => {
+  ctx.beginPath()
+  ctx.moveTo(hx, hy + 4)
+  ctx.lineTo(hx - 3, hy - 34)
+  stroke(ctx, 3.4)
+  poly(ctx, [hx - 3, hy - 34, hx + 20, hy - 28, hx - 2, hy - 20], HEX.pastelLemon, 2.4)
+}
+
+const VILLAGER: ChibiStyle = {
+  outfit: HEX.pastelPink, outfitDark: HEX.pastelPinkDark, legs: HEX.paperWhite, hair: HEX.hairBrown, hat: 'bonnet', skirt: true, buns: true
+}
+const SOLDIER: ChibiStyle = {
+  outfit: HEX.pastelSky, outfitDark: HEX.pastelSkyDark, legs: HEX.heroSteel, hair: HEX.hairBrown, hat: 'helmet', flag: true, star: true
+}
+const FARMER: ChibiStyle = {
+  outfit: HEX.pastelMint, outfitDark: HEX.pastelMintDark, legs: HEX.pastelSkyDark, hair: HEX.hairGold, hat: 'straw'
+}
+const KID: ChibiStyle = {
+  outfit: HEX.pastelLemon, outfitDark: HEX.pastelLemonDark, legs: HEX.pastelLilacDark, hair: HEX.hairGold, hat: 'party', scale: 0.88
 }
 
 const crushed: Painter = (ctx) => {
@@ -543,14 +712,14 @@ const PAINTERS: Record<FrameName, Painter> = {
   heroCower: (c) => knightFigure(c, 2, HERO, -0.2),
   heroHit: (c) => knightFigure(c, 2, HERO, 0.3, true),
   heroWalk: (c) => knightFigure(c, 1, HERO),
-  personRed0: (c) => person(c, HEX.c1, false),
-  personRed1: (c) => person(c, HEX.c1, true),
-  personBlue0: (c) => person(c, HEX.c3, false),
-  personBlue1: (c) => person(c, HEX.c3, true),
-  personGreen0: (c) => person(c, HEX.c4, false),
-  personGreen1: (c) => person(c, HEX.c4, true),
-  personYellow0: (c) => person(c, HEX.c2, false),
-  personYellow1: (c) => person(c, HEX.c2, true),
+  cheerVillager0: (c) => chibi(c, VILLAGER, false),
+  cheerVillager1: (c) => chibi(c, VILLAGER, true),
+  cheerSoldier0: (c) => chibi(c, SOLDIER, false),
+  cheerSoldier1: (c) => chibi(c, SOLDIER, true),
+  cheerFarmer0: (c) => chibi(c, FARMER, false),
+  cheerFarmer1: (c) => chibi(c, FARMER, true),
+  cheerKid0: (c) => chibi(c, KID, false),
+  cheerKid1: (c) => chibi(c, KID, true),
   crushed,
   scrap,
   bat0: (c) => bat(c, false),

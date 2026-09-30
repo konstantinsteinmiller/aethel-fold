@@ -31,6 +31,11 @@
  * find of each is saved (`fold_secrets`), night mode (the desk lamp) is a
  * cosmetic setting.
  *
+ * Boss outro (C9b): after the finale fold the win is recorded and flushed on
+ * `victory`, then a short cutscene plays — the cheering paper crowd and
+ * fireworks — and the victory card waits for its end. A tap anywhere, the
+ * wordless skip button (bottom right) or Enter / Space skips it.
+ *
  * Looks (roadmaps #6, #17): the equipped paper cosmetics and the season's skin
  * go to the engine as one `Look` (art only). A page clear whose stars unlock a
  * cosmetic shows the wordless unlock card after the star ribbon; stars from
@@ -104,6 +109,8 @@ const hud = reactive({
   victoryTime: 0,
   victoryHits: 0,
   newBest: false,
+  /** The boss outro is playing (C9b): the victory card waits for its end. */
+  outro: false,
   /** The Almost! moment's Try-again button is up. */
   retry: false,
   /** The desk bookshelf: the zoom button is shown, the camera is out at it, the hand points at the button. */
@@ -191,6 +198,7 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       hud.maxHp = g.hero.maxHp
       hud.boss = g.page.exit === 'boss'
       hud.victory = false
+      hud.outro = false
       hud.rush = g.rushing
       // Checkpoint: a reload resumes on this page with this score. A rush is not the story: it never moves the bookmark.
       if (!g.rushing) {
@@ -266,6 +274,9 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       hud.rushDone = true
       break
     }
+    case 'outro':
+      hud.outro = e.a === 1
+      break
     case 'victory': {
       bankStats(g)
       hud.book = g.book
@@ -341,7 +352,8 @@ const onFrame = (g: FoldGame): void => {
     if (hud.bossExposed !== exp) hud.bossExposed = exp
   }
   const s = g.shelf
-  const btn = s.available && !s.inView
+  // Not during the outro: the shelf waits for the victory card.
+  const btn = s.available && !s.inView && !g.outro.active
   if (hud.shelfButton !== btn) hud.shelfButton = btn
   if (hud.shelfOpen !== s.open) hud.shelfOpen = s.open
   const cue = g.lesson.id === 'shelf' && g.lesson.hand.anchor === 'zoom'
@@ -498,6 +510,7 @@ const tryAgain = (): void => {
 const openBook = (book: BookId): void => {
   pauseOpen.value = false
   hud.victory = false
+  hud.outro = false
   fx.value?.clearStars()
   startNewRun(book)
   statsBase = zeroBase()
@@ -512,6 +525,7 @@ const newGame = (): void => openBook(hud.book)
 const startRush = (book: BookId): void => {
   pauseOpen.value = false
   hud.victory = false
+  hud.outro = false
   fx.value?.clearStars()
   engine.value?.startRush(book)
 }
@@ -531,6 +545,10 @@ const backToStory = (): void => {
   eng.jumpTo(page, page > 1 ? runCheckpoint.value?.score ?? 0 : 0, savedBook())
 }
 const playAgain = (): void => openBook(hud.book)
+/** The outro's skip button (a tap on the page skips it too, through the engine). */
+const skipOutro = (): void => {
+  engine.value?.skipOutro()
+}
 const pickBook = (book: BookId): void => {
   if (!bookUnlocked(book)) return
   hud.rushDone = false
@@ -546,6 +564,9 @@ const onKey = (e: KeyboardEvent): void => {
   if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
     e.preventDefault()
     openPause()
+  } else if ((e.key === 'Enter' || e.key === ' ') && hud.outro) {
+    e.preventDefault()
+    skipOutro()
   } else if (e.key === 'Enter' && hud.victory) {
     playAgain()
   } else if (e.key === 'Enter' && hud.rushDone) {
@@ -636,6 +657,16 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       snow: eng.view.snow.visible, snowFlakes: eng.view.snow.count
     }),
     fastForward: (s: number) => eng.fastForward(s),
+    /** The boss outro (C9b): skip it as a tap would; its crowd, fireworks and the chips on screen. */
+    skipOutro: () => eng.skipOutro(),
+    outro: () => {
+      const r = eng.game.outro
+      return {
+        active: r.active, time: r.time, skipped: r.skipped, lite: r.lite, script: r.script?.id ?? null,
+        crowd: r.crowdCount, fireworks: r.fireworks.busy, dropped: r.fireworks.dropped,
+        chips: eng.view.effects.liveChips, cutting: eng.view.desk.cutting, crowdShown: eng.view.outro.mesh.visible
+      }
+    },
     state: () => ({
       book: eng.game.book,
       page: eng.game.pageId,
@@ -709,8 +740,18 @@ const pageAria = computed(() => t('fold.a11y.board'))
         )
           OrigamiIcon(:name="hud.shelfOpen ? 'book' : 'shelf'" :tone="hud.shelfOpen ? 'paper' : 'blue'")
 
+    //- The boss outro's skip (C9b): wordless, bottom right, clear of the HUD strip.
+    FHudButton.outro-skip(
+      v-if="hud.outro && !pauseOpen"
+      tone="slate"
+      data-testid="outro-skip"
+      :aria-label="t('fold.hud.skip')"
+      @click="skipOutro"
+    )
+      OrigamiIcon(name="skip" tone="paper")
+
     VictoryPanel(
-      :open="hud.victory && !hud.shelfOpen"
+      :open="hud.victory && !hud.outro && !hud.shelfOpen"
       :book="hud.book"
       :score="hud.victoryScore"
       :best="best"
@@ -800,6 +841,22 @@ const pageAria = computed(() => t('fold.a11y.board'))
 
 .hud-right__row
   gap: clamp(0.3rem, 1.4vw, 0.55rem)
+
+// The outro's skip: bottom right, inside the safe area, never over the HUD strip.
+.outro-skip
+  position: absolute
+  z-index: 21
+  right: calc(clamp(0.5rem, 3vw, 1.2rem) + env(safe-area-inset-right, 0px))
+  bottom: calc(clamp(0.6rem, 3vh, 1.4rem) + env(safe-area-inset-bottom, 0px))
+  animation: outro-skip-in 0.4s 0.6s ease-out both
+
+@keyframes outro-skip-in
+  from
+    opacity: 0
+    transform: translateY(0.6rem)
+  to
+    opacity: 1
+    transform: none
 
 // Landscape phones: keep the top strip thin so the page stays big.
 @media (max-height: 520px) and (orientation: landscape)
