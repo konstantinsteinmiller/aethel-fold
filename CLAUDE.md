@@ -1,8 +1,9 @@
 # aethel-fold — project instructions
 
 **Aethel Fold** (`src/fold/`, `src/views/FoldScene.vue`, route `/`) is the
-product: a 3D origami pop-up-book castle siege on raw three.js, in two books of
-six pages (`BOOKS` in `src/fold/logic/pages.ts`; book 2 unlocks after book 1). The spec is
+product: a 3D origami pop-up-book castle siege on raw three.js, in three books of
+six pages (`BOOKS` in `src/fold/logic/pages.ts`; each book unlocks after the
+previous one; book 3 is "The Sea of Paper", GDD §13). The spec is
 [`aethel-fold-GDD.md`](./aethel-fold-GDD.md); the architecture decisions, task
 list and status log are in
 [`game-implementation-plan.md`](./game-implementation-plan.md). Read both before
