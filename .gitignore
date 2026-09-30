@@ -89,3 +89,6 @@ tools/piper/
 # Playwright
 test-results/
 playwright-report/
+
+# subagent worktrees
+.claude/worktrees/

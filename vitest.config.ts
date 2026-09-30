@@ -49,6 +49,6 @@ export default defineConfig({
     // tests/e2e runs under Playwright + a real Vite dev server (Node env,
     // not jsdom). Excluded from the default suite so `pnpm test` stays
     // fast; run them with `pnpm test:e2e`.
-    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**']
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**', '.claude/**']
   }
 })
