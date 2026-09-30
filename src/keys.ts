@@ -41,6 +41,16 @@ export const WINS2_KEY = 'fold_wins2'
  * per-page maximum of both sides (`carryStars` in SaveMergePolicy).
  */
 export const STARS_KEY = 'fold_stars'
+/**
+ * Page secrets found (roadmap #15): a list of secret ids, e.g.
+ * `['lamp', 'boat']`. Only ever grows; a cloud merge keeps the union.
+ */
+export const SECRETS_KEY = 'fold_secrets'
+/**
+ * Dragon Rush best times (roadmap #16): `Record<'b<book>', seconds>`, e.g.
+ * `{ b1: 58.3 }`. Only ever lowered; a cloud merge keeps the faster.
+ */
+export const RUSH_KEY = 'fold_rush'
 
 // ─── User settings (shared platform layer) ──────────────────────────────────
 

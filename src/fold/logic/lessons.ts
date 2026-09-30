@@ -67,8 +67,10 @@ export interface LessonState {
  *   swipeTap — swipe up, glide to the flap, press: the ghost slams shut (stamp).
  *   tap      — the hand presses and the raised ghost slams shut (1 → 0).
  *   pull     — the hand drags a → b pulling the ghost along, lets go: it springs back.
+ *   hold     — hold to fold (roadmap #14): the hand presses on a and stays down; after
+ *              the hold delay the ghost folds up progressively under the still finger.
  */
-export type DemoKind = 'swipe' | 'swipeTap' | 'tap' | 'pull'
+export type DemoKind = 'swipe' | 'swipeTap' | 'tap' | 'pull' | 'hold'
 export type DemoPhase = 'off' | 'show' | 'fade'
 /** What the ghost copies: a fold's flap, a tear, the sling's cup, the page corner, or nothing. */
 export type DemoOn = 'none' | 'fold' | 'tear' | 'sling' | 'peel'
@@ -101,7 +103,20 @@ export interface LessonDemo {
 }
 
 /** Seconds per loop, per choreography. */
-export const DEMO_PERIOD: Readonly<Record<DemoKind, number>> = { swipe: 2.4, swipeTap: 3.4, tap: 1.8, pull: 2.4 }
+export const DEMO_PERIOD: Readonly<Record<DemoKind, number>> = { swipe: 2.4, swipeTap: 3.4, tap: 1.8, pull: 2.4, hold: 2.6 }
+
+/**
+ * The hold demo's beats (s into a loop): the finger lands, the press is
+ * recognised after `DEMO_HOLD_WAIT` (the gesture layer's `HOLD_MS`), then the
+ * fold is carried through in `DEMO_HOLD_FOLD` (`HOLD_FOLD_MS`) — the same
+ * rhythm the real press-and-hold has.
+ */
+export const DEMO_HOLD_DOWN = 0.4
+export const DEMO_HOLD_WAIT = 0.26
+export const DEMO_HOLD_FOLD = 0.65
+
+/** Lessons whose move hold to fold replaces (their demo becomes `hold`); the sling's is a tap, not shown. */
+export const HOLD_DEMO_LESSONS: readonly LessonId[] = ['swipe', 'shield', 'launch', 'ridge', 'frog', 'peel', 'crease', 'spread', 'core']
 /** Seconds the ghost takes to fade once the player acts. */
 export const DEMO_FADE = 0.22
 /** Loops shown with reduced motion before falling back to the plain hand. */
@@ -144,6 +159,18 @@ export const sampleDemo = (d: LessonDemo): void => {
       d.press = Math.min(sm(0.35, 0.5, c), 1 - sm(0.7, 0.85, c))
       d.fold = 1 - sm(0.45, 0.62, c)
       break
+    case 'hold': {
+      d.alpha = Math.min(sm(0, 0.25, c), 1 - sm(P - 0.5, P, c))
+      // The finger stays on the flap: no travel, just the press…
+      d.hand = 0
+      d.glide = 0
+      const up = DEMO_HOLD_DOWN + DEMO_HOLD_WAIT + DEMO_HOLD_FOLD + 0.35
+      d.press = Math.min(sm(DEMO_HOLD_DOWN - 0.15, DEMO_HOLD_DOWN, c), 1 - sm(up, up + 0.15, c))
+      // …and, once the hold is recognised, the paper folds up steadily under it.
+      const k = (c - DEMO_HOLD_DOWN - DEMO_HOLD_WAIT) / DEMO_HOLD_FOLD
+      d.fold = k <= 0 ? 0 : k >= 1 ? 1 : k
+      break
+    }
     case 'pull':
       d.alpha = Math.min(sm(0, 0.25, c), 1 - sm(P - 0.6, P - 0.1, c))
       d.hand = sm(0.3, 1.3, c)

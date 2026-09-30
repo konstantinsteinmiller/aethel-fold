@@ -51,6 +51,8 @@ const step = ref(0)
 const hud = ref(false)
 const hint = ref(false)
 const demo = ref(false)
+/** The demo is a press and hold (hold to fold): no trail, the ring fills as the paper folds. */
+const holding = ref(false)
 const a: ScreenPoint = { x: 0, y: 0, visible: false }
 const b: ScreenPoint = { x: 0, y: 0, visible: false }
 const tp: ScreenPoint = { x: 0, y: 0, visible: false }
@@ -76,6 +78,8 @@ const update = (
   const d = lesson.demo
   const on = show && d.phase !== 'off'
   if (on !== demo.value) demo.value = on
+  const held = on && d.kind === 'hold'
+  if (held !== holding.value) holding.value = held
   if (!show || !root.value) return
   if (lesson.rev !== lastRev) {
     lastRev = lesson.rev
@@ -122,6 +126,7 @@ const update = (
   s.setProperty('--hy', `${hy}px`)
   s.setProperty('--p', `${d.hand}`)
   s.setProperty('--press', `${d.press}`)
+  s.setProperty('--fold', `${d.fold}`)
   s.setProperty('--alpha', `${Math.max(0, d.alpha)}`)
 }
 
@@ -129,9 +134,9 @@ defineExpose({ update })
 </script>
 
 <template lang="pug">
-  div.ghost(ref="root" v-show="visible" :class="[`ghost--${gesture}`, { 'ghost--hint': hint, 'ghost--demo': demo, 'ghost--hud': hud }]" aria-hidden="true")
-    //- Trail: a soft dotted track from A to B.
-    div.ghost__trail(v-if="gesture === 'swipe' || gesture === 'drag'")
+  div.ghost(ref="root" v-show="visible" :class="[`ghost--${gesture}`, { 'ghost--hint': hint, 'ghost--demo': demo, 'ghost--hold': holding, 'ghost--hud': hud }]" aria-hidden="true")
+    //- Trail: a soft dotted track from A to B (not for a press and hold: the finger doesn't travel).
+    div.ghost__trail(v-if="(gesture === 'swipe' || gesture === 'drag') && !holding")
     //- Tap ripple (looping), or the demo's press ring (posed by the logic).
     div.ghost__ripple(v-if="gesture === 'tap' && !demo")
     div.ghost__press(v-if="demo")
@@ -328,6 +333,14 @@ defineExpose({ update })
   border-radius: 50%
   opacity: calc(var(--press) * var(--alpha))
   transform: scale(calc(0.4 + var(--press) * 0.9))
+
+// Press and hold (roadmap #14): the finger stays down, a second ring fills with the fold.
+.ghost--hold
+  --fold: 0
+  .ghost__press
+    opacity: calc(var(--alpha) * (0.35 + var(--press) * 0.65))
+    transform: scale(calc(0.45 + var(--fold) * 0.85))
+    border-style: dashed
 
 @media (prefers-reduced-motion: reduce)
   .ghost__hand, .ghost__trail, .ghost__ripple

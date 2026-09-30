@@ -16,16 +16,23 @@
  * Pure: no three.js, no Vue. The game owns one `ShelfState`, the host feeds it
  * the saved progress (`setShelfProgress`), the view draws it.
  *
- * Adding slots later (a Dragon Rush entry, a secrets counter) means a new
- * `ShelfSlotKind`; picking, highlighting and the lesson work per slot.
+ * Slots after the books are the Dragon Rush figurines (roadmap #16), one per
+ * book, standing on the top board once the book is won; tapped like a book
+ * (pull out → a card with the par and best time; again → the rush starts).
+ * The secrets counter (roadmap #15) is a card on the top board beside them,
+ * drawn by the view from the save — not a slot, since it isn't opened.
  */
 
 import { SHELF } from './config'
 import { BOOKS } from './pages'
+import { rushPar, rushUnlocked } from './rush'
 import type { BookId, Stars } from './types'
 
-/** What stands in a slot. Only books so far. */
-export type ShelfSlotKind = 'book'
+/**
+ * What stands in a slot: a book, or (roadmap #16) the Dragon Rush figurine
+ * of a won book — a little folded dragon on the shelf's top board.
+ */
+export type ShelfSlotKind = 'book' | 'rush'
 
 /**
  *   current — the book being played (tap twice: back to it, play continues)
@@ -33,7 +40,7 @@ export type ShelfSlotKind = 'book'
  *   locked  — exists but not unlocked yet: a silhouette
  *   coming  — not in the game yet (book 3): a silhouette with a question mark
  */
-export type ShelfSlotState = 'current' | 'open' | 'locked' | 'coming'
+export type ShelfSlotState = 'current' | 'open' | 'locked' | 'coming' | 'hidden'
 
 export interface ShelfSlot {
   kind: ShelfSlotKind
@@ -47,6 +54,9 @@ export interface ShelfSlot {
   pages: Stars[]
   /** Won at least once. */
   won: boolean
+  /** Rush slots: the best time (s, 0 = none yet) and the par. */
+  best: number
+  par: number
 }
 
 /** Saved progress, one entry per book (index = book − 1). */
@@ -55,6 +65,8 @@ export interface ShelfProgress {
   cleared: number[]
   /** Best stars per rated page. */
   stars: Stars[][]
+  /** Best Dragon Rush time per book, seconds (0 = none). */
+  rush?: number[]
 }
 
 /** Why the shelf opened (the `shelf` event's `b`). */
@@ -110,7 +122,10 @@ export const shelfAvailable = (wins: readonly number[]): boolean => {
 /** Slot index of a book. */
 export const slotOfBook = (book: number): number => book - 1
 
-const emptyProgress = (): ShelfProgress => ({ wins: [], cleared: [], stars: [] })
+const emptyProgress = (): ShelfProgress => ({ wins: [], cleared: [], stars: [], rush: [] })
+
+/** Slot index of a book's Dragon Rush figurine (after the book slots). */
+export const rushSlotOf = (book: number): number => SHELF.slots + book - 1
 
 /** The slots for some progress. `finished`: the current book has just been won. Allocates (events only). */
 export const buildSlots = (p: ShelfProgress, current: BookId, finished: boolean): ShelfSlot[] => {
@@ -125,7 +140,15 @@ export const buildSlots = (p: ShelfProgress, current: BookId, finished: boolean)
       : !bookUnlockedBy(book, p.wins, p.cleared)
         ? 'locked'
         : book === current && !finished ? 'current' : 'open'
-    out.push({ kind: 'book', book, state, stars, max: pages.length * 3, pages, won: (p.wins[i] ?? 0) > 0 })
+    out.push({ kind: 'book', book, state, stars, max: pages.length * 3, pages, won: (p.wins[i] ?? 0) > 0, best: 0, par: 0 })
+  }
+  // A Dragon Rush figurine per book of the game, standing once the book is won.
+  for (let book = 1; isPlayableBook(book); book++) {
+    const won = rushUnlocked(book, p.wins)
+    out.push({
+      kind: 'rush', book, state: won ? 'open' : 'hidden', stars: 0, max: 0, pages: [], won,
+      best: p.rush?.[book - 1] ?? 0, par: rushPar(book)
+    })
   }
   return out
 }
@@ -141,10 +164,11 @@ export const slotActionable = (s: ShelfSlot | undefined): boolean => !!s && (s.s
 export const shelfTarget = (slots: readonly ShelfSlot[], current: BookId, finished: boolean): number => {
   const cur = slotOfBook(current)
   if (!finished) return slotActionable(slots[cur]) ? cur : -1
-  for (let k = 1; k <= slots.length; k++) {
-    const i = (cur + k) % slots.length
+  const books = SHELF.slots
+  for (let k = 1; k <= books; k++) {
+    const i = (cur + k) % books
     const s = slots[i]!
-    if (slotActionable(s) && !s.won) return i
+    if (s.kind === 'book' && slotActionable(s) && !s.won) return i
   }
   return slotActionable(slots[cur]) ? cur : -1
 }
@@ -168,13 +192,13 @@ export const refreshShelf = (s: ShelfState, current: BookId): void => {
   s.available = shelfAvailable(s.progress.wins)
   s.slots = buildSlots(s.progress, current, s.finished)
   s.highlight = shelfTarget(s.slots, current, s.finished)
-  if (s.selected >= 0 && s.slots[s.selected]?.kind !== 'book') s.selected = -1
+  if (s.selected >= 0 && !slotActionable(s.slots[s.selected])) s.selected = -1
   s.rev++
 }
 
 /** Take a copy of the saved progress. */
 export const setShelfProgress = (s: ShelfState, p: ShelfProgress, current: BookId): void => {
-  s.progress = { wins: p.wins.slice(), cleared: p.cleared.slice(), stars: p.stars.map((a) => a.slice()) }
+  s.progress = { wins: p.wins.slice(), cleared: p.cleared.slice(), stars: p.stars.map((a) => a.slice()), rush: (p.rush ?? []).slice() }
   refreshShelf(s, current)
 }
 
@@ -208,8 +232,15 @@ export const shelfToWorld = (lx: number, ly: number, lz: number, out: ShelfPoint
   return out
 }
 
-/** Shelf-local x of a slot's centre. */
-export const slotX = (i: number): number => (i - (SHELF.slots - 1) / 2) * SHELF.spacing
+/** Shelf-local x of a slot's centre (a rush figurine: its spot on the top board). */
+export const slotX = (i: number): number =>
+  i < SHELF.slots ? (i - (SHELF.slots - 1) / 2) * SHELF.spacing : SHELF.rushX[i - SHELF.slots] ?? SHELF.rushX[0]!
+
+/** Is this slot index a Dragon Rush figurine? */
+export const isRushSlot = (i: number): boolean => i >= SHELF.slots
+
+/** Shelf-local height of the top board's upper face (the rush figurines and the secrets card stand on it). */
+export const shelfTopY = (): number => SHELF.board * 2 + SHELF.bookH + 0.28
 
 /**
  * World position of a point on a slot's spine (`up` = 0 bottom … 1 top), with
@@ -217,7 +248,10 @@ export const slotX = (i: number): number => (i - (SHELF.slots - 1) / 2) * SHELF.
  * view, so the hand lands on the book the renderer draws.
  */
 export const slotAnchor = (i: number, out: ShelfPoint, pull = 0, up = 0.5): ShelfPoint =>
-  shelfToWorld(slotX(i), SHELF.board + SHELF.bookH * up, SHELF.bookD / 2 + pull * SHELF.pull, out)
+  isRushSlot(i)
+    // A figurine on the top board; "pulled out" it hops up a little.
+    ? shelfToWorld(slotX(i), shelfTopY() + SHELF.rushH * up + pull * 0.35, 0.1, out)
+    : shelfToWorld(slotX(i), SHELF.board + SHELF.bookH * up, SHELF.bookD / 2 + pull * SHELF.pull, out)
 
 /** Half the shelf's outer width (shelf-local x). */
 export const shelfHalfWidth = (): number => ((SHELF.slots - 1) / 2) * SHELF.spacing + SHELF.bookW / 2 + SHELF.board + 0.12

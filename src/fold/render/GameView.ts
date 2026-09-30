@@ -8,21 +8,23 @@
  * plane for the gesture layer, and renders through the ink pipeline.
  */
 
-import { Color, Scene, SpotLight, Vector3, type WebGLRenderTarget } from 'three'
+import { Color, Mesh, Scene, SpotLight, Vector3, type WebGLRenderTarget } from 'three'
 import type { FoldGame } from '../logic/game'
 import type { FoldEvent } from '../logic/events'
 import { KILL_BOLT, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from '../logic/events'
-import { CASTLE, PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME, PAGE_HALF_D, PAGE_HALF_W, SHELF } from '../logic/config'
+import { CASTLE, DESK_LAMP, PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME, PAGE_HALF_D, PAGE_HALF_W, SHELF } from '../logic/config'
+import { SECRET_IDS } from '../logic/secrets'
 import { PAGE_COUNT, pageDef } from '../logic/pages'
 import type { PageDef, PageId } from '../logic/types'
 import { createFold } from '../logic/folds'
 import { clamp01, easeInOutCubic, segmentDistance, smoothstep, v2 } from '../logic/math'
 import { SHELF_DESK, SHELF_NONE, shelfHalfWidth } from '../logic/shelf'
+import { createPaperMaterial, type PaperMaterial } from './paperMaterial'
 import { FoldRenderer } from './FoldRenderer'
 import { DeskCamera, type CameraFrame } from './camera'
 import { paperGlobals } from './paperMaterial'
 import { HEX } from './palette'
-import { BookView } from './views/BookView'
+import { BookView, DESK_Y } from './views/BookView'
 import { PageView } from './views/PageView'
 import { UnitsView, type SurfaceSampler } from './views/UnitsView'
 import { ProjectilesView } from './views/ProjectilesView'
@@ -32,7 +34,7 @@ import { ShelfView } from './views/ShelfView'
 import { createStandeeAtlas, type StandeeAtlas } from './art/standeeArt'
 import { createSpriteTextures, type SpriteTextures } from './art/spriteArt'
 import { paintPlainSheet } from './art/pageArt'
-import { disposeModelCache } from './models'
+import { boatGeometry, disposeModelCache } from './models'
 
 export interface ScreenPoint {
   x: number
@@ -80,6 +82,12 @@ export class GameView {
   private readonly tmp = new Vector3()
   private readonly surface: SurfaceSampler
   private leftPageArt: PageView['textures'] | null = null
+  /** Night mode (roadmap #15), eased toward the game's `secrets.night` (real time). */
+  private night = 0
+  /** The Ravine's secret: a paper boat sailing down the folded ravine (seconds left, or 0). */
+  private readonly boat: Mesh
+  private readonly boatMat: PaperMaterial
+  private boatT = 0
 
   constructor(canvas: HTMLCanvasElement, private readonly game: FoldGame, private readonly signals: ViewSignals) {
     this.renderer = new FoldRenderer({ canvas })
@@ -113,6 +121,11 @@ export class GameView {
     this.scene.add(this.sheet.mesh)
     this.shelf = new ShelfView()
     this.scene.add(this.shelf.group)
+    this.boatMat = createPaperMaterial({ vertexColors: true, grain: 0.05, doubleSided: true })
+    this.boat = new Mesh(boatGeometry(), this.boatMat)
+    this.boat.visible = false
+    this.boat.castShadow = true
+    this.scene.add(this.boat)
 
     this.surface = {
       dip: (fold, x, z) => this.page?.dip(fold, x, z) ?? 0,
@@ -168,7 +181,10 @@ export class GameView {
     if (sh.group.visible) {
       let bestD = Infinity
       const reach = Math.max(24, Math.min(this.width, this.height) * 0.045)
-      for (let i = 0; i < sh.slots; i++) {
+      const slots = this.game.shelf.slots
+      for (let i = 0; i < slots.length; i++) {
+        // A rush figurine stands only once its book is won.
+        if (slots[i]!.state === 'hidden' || i >= sh.slots) continue
         const a = sh.anchorOf(i, 0.05)
         this.project(a.x, a.y, a.z, this.sp)
         const ax = this.sp.x
@@ -193,6 +209,26 @@ export class GameView {
     return SHELF_NONE
   }
 
+  /**
+   * Is a screen point on the desk lamp (the desk's secret)? Its projected
+   * foot-to-shade segment, with a finger's reach. Taps only.
+   */
+  pickLamp(sx: number, sy: number): boolean {
+    this.project(DESK_LAMP.x, DESK_Y + 0.1, DESK_LAMP.z, this.sp)
+    if (!this.sp.visible) return false
+    const ax = this.sp.x
+    const ay = this.sp.y
+    this.project(DESK_LAMP.x, DESK_Y + DESK_LAMP.h, DESK_LAMP.z + 0.4, this.sp)
+    const len = Math.hypot(this.sp.x - ax, this.sp.y - ay)
+    const reach = Math.max(22, Math.min(this.width, this.height) * 0.04, len * 0.45)
+    return segmentDistance(sx, sy, ax, ay, this.sp.x, this.sp.y, this.segOut).x < reach
+  }
+
+  /** Screen point (CSS px) of the desk lamp's middle (tests). */
+  lampScreen(out: ScreenPoint): ScreenPoint {
+    return this.project(DESK_LAMP.x, DESK_Y + DESK_LAMP.h * 0.5, DESK_LAMP.z + 0.2, out)
+  }
+
   private readonly corner = new Vector3()
 
   /**
@@ -208,6 +244,8 @@ export class GameView {
     const d = (SHELF.bookD + 0.3) / 2
     let best = Infinity
     for (let i = 0; i < 4; i++) {
+      // The board itself: the little figurines and the secrets card on it may sit under the
+      // ribbon's tail for its short hang (desk props, not UI) — the ribbon keeps its size.
       this.corner.set(i & 1 ? hw : -hw, 0, i & 2 ? d : -d)
       sh.extras.localToWorld(this.corner)
       best = Math.min(best, this.project(this.corner.x, this.corner.y, this.corner.z, this.sp).y)
@@ -331,6 +369,22 @@ export class GameView {
         break
       case 'shelfBook':
         this.desk.kick(0.4)
+        break
+      case 'secret':
+        this.secret(e)
+        break
+      case 'night':
+        this.book.lampWobble = 1
+        this.effects.glow(DESK_LAMP.x, DESK_Y + DESK_LAMP.h - 0.4, DESK_LAMP.z + 0.6, 2.6, 0.6, 'star', 'lampWarm', 2)
+        break
+      case 'rushStart':
+        // A rematch: no victory crowd, the camera as for any dragon page.
+        this.units.showCrowd(false)
+        this.desk.setZoom(1)
+        break
+      case 'rushDone':
+        for (let i = 0; i < 3; i++) fx.burst(-3 + i * 3, 3, -1, { count: 50, palette: 'dragon', speed: 5, up: 7 })
+        this.wordAt('rush', 0, 3, -1, 1.4, 'good')
         break
       case 'foldSnap': {
         const f = g.folds[e.a]
@@ -556,6 +610,65 @@ export class GameView {
     }
   }
 
+  /**
+   * A page secret went off (roadmap #15): a sparkle where it happened, and its
+   * own little show. Events only.
+   */
+  private secret(e: FoldEvent): void {
+    const fx = this.effects
+    const id = SECRET_IDS[e.a]
+    const def = this.game.secrets.def
+    const y = id === 'lamp' ? DESK_Y + DESK_LAMP.h : def && def.id === id ? def.y + 0.4 : 1
+    fx.glow(e.x, y, e.z, 3.2, 0.9, 'star', 'highlightHot', 3)
+    fx.burst(e.x, y, e.z, { count: e.b ? 40 : 18, palette: 'gold', speed: 3.5, up: 4 })
+    switch (id) {
+      case 'boat':
+        this.boatT = 3.4
+        this.boat.visible = true
+        this.wordAt('ahoy', -3, 1.2, -1.3, 1, 'good')
+        break
+      case 'fling':
+        for (let i = 0; i < 4; i++) fx.burst(-3 + i * 2, 3.5 + (i % 2), -5.2, { count: 36, palette: 'festive', speed: 5, up: 6 })
+        this.wordAt('doubleFling', 0, 3, -4.6, 1.2, 'combo')
+        break
+      case 'moat':
+        fx.burst(e.x, 0.2, e.z, { count: 44, palette: 'water', speed: 4, up: 6 })
+        fx.ring(e.x, e.z, 2.4, 0.6, 'waterLight')
+        this.wordAt('splash', e.x, 1.4, e.z, 1.1, 'snap')
+        break
+      case 'nap':
+        this.wordAt('snore', e.x, 3, e.z, 1.2, 'crease')
+        break
+      case 'hop':
+      case 'flap':
+        this.page?.finale?.trick()
+        this.wordAt(id === 'hop' ? 'hop' : 'flap', 0, 3, 0.6, 1.2, 'good')
+        break
+      case 'wave':
+        this.wordAt('hello', e.x, 2.4, e.z, 1.1, 'good')
+        fx.burst(e.x, 2, e.z, { count: 24, palette: 'hero', speed: 3, up: 4 })
+        break
+      case 'apples':
+        fx.burst(e.x, 1.4, e.z, { count: 30, palette: 'apple', speed: 2.2, up: 1.5, size: 1.3, settle: true })
+        this.wordAt('plop', e.x, 2.2, e.z, 1, 'snap')
+        break
+      case 'whirl':
+        this.page?.whirl()
+        this.wordAt('whoosh', e.x, 2.6, e.z, 1.1, 'snap')
+        break
+      case 'campfire':
+        for (let i = 0; i < 3; i++) fx.flame(e.x, 0.1, e.z, (i - 1) * 0.2, 1, 0, 10)
+        fx.burst(e.x, 0.4, e.z, { count: 40, palette: 'flame', speed: 3, up: 7, size: 0.7 })
+        this.wordAt('crackle', e.x, 1.6, e.z, 1, 'rip')
+        break
+      case 'bonk':
+        fx.burst(e.x, 1.4, e.z, { count: 30, palette: 'dragon', speed: 3.5, up: 4 })
+        this.wordAt('bonk', e.x, 2.8, e.z, 1.3, 'stamp')
+        this.desk.shake(0.1)
+        break
+    }
+  }
+
   // ─── Frame ───────────────────────────────────────────────────────────────
 
   update(dt: number): void {
@@ -662,6 +775,20 @@ export class GameView {
       this.wordAt(this.page?.def.finale === 'crane' ? 'flap' : 'ribbit', 0, 2.4, 0.6, 1.3, 'good')
     }
 
+    // The Ravine's paper boat sails down the folded ravine, bobbing.
+    if (this.boatT > 0) {
+      this.boatT = Math.max(0, this.boatT - dt)
+      const k = 1 - this.boatT / 3.4
+      const b = this.boat
+      b.position.set(-4.6 + k * 9.2, 0.12 + Math.sin(k * 25) * 0.05, -1.3 + Math.sin(k * 7) * 0.2)
+      b.rotation.set(Math.sin(k * 19) * 0.08, Math.PI / 2 + Math.sin(k * 7) * 0.2, Math.sin(k * 23) * 0.1)
+      b.scale.setScalar(0.9)
+      if (this.boatT <= 0 || g.pageId !== 2 || g.book !== 1) {
+        this.boatT = 0
+        b.visible = false
+      }
+    }
+    this.book.update(dt)
     this.effects.update(dt)
     // Out at the shelf or back at the book (real time, whatever the world's clock).
     this.desk.setShelf(g.shelf.open)
@@ -678,6 +805,17 @@ export class GameView {
     u.uFocus!.value += (focus - u.uFocus!.value) * Math.min(1, dt * 6)
     u.uDesat!.value += ((g.paused ? 0.75 : 0) - u.uDesat!.value) * Math.min(1, dt * 8)
     u.uPulse!.value = paperGlobals.uPulse.value
+    // Night mode (the lamp): eased in and out over a moment, the pool on the page centre.
+    const want = g.secrets.night ? 1 : 0
+    if (this.night !== want) {
+      this.night += (want - this.night) * Math.min(1, dt * 3.5)
+      if (Math.abs(want - this.night) < 0.002) this.night = want
+    }
+    u.uNight!.value = this.night
+    if (this.night > 0) {
+      this.project(0, 0, 0.8, this.sp)
+      u.uNightCentre!.value.set(this.sp.x / this.width, 1 - this.sp.y / this.height)
+    }
     if (g.phase !== this.lastPhase) this.lastPhase = g.phase
   }
 
@@ -686,6 +824,15 @@ export class GameView {
     const g = this.game
     const p = this.page
     if (!p) return
+    // A tap secret's target stands up off the page (a windmill, the hero on his keep):
+    // the finger lands where the eye sees it.
+    const sd = g.secrets.def
+    if (sd && sd.trigger === 'taps') {
+      this.tmp.set(sd.hero ? g.hero.x : sd.x, sd.y, sd.hero ? g.hero.z : sd.z)
+      this.groundOf(this.tmp, this.anchorOut)
+      g.secrets.spotX = this.anchorOut.x
+      g.secrets.spotZ = this.anchorOut.z
+    }
     if (p.castle) {
       for (const t of g.tears) {
         const a = p.castle.anchorOf(t.def.id)
@@ -749,6 +896,7 @@ export class GameView {
     this.effects.dispose()
     this.sheet.dispose()
     this.shelf.dispose()
+    this.boatMat.dispose()
     this.atlas.dispose()
     this.sprites.dispose()
     this.snapshotRT?.dispose()

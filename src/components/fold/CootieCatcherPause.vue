@@ -26,7 +26,7 @@ import PaperRibbon from '@/components/fold/PaperRibbon.vue'
 import StarTally from '@/components/fold/StarTally.vue'
 import { HIGHLIGHT_MODES, type BookId, type HighlightMode } from '@/fold/logic/types'
 import useUser from '@/use/useUser'
-import { foldSettings, setFoldSetting, starsForBook, type Quality } from '@/use/useFoldProgress'
+import { foldSettings, secretCount, setFoldSetting, starsForBook, type Quality } from '@/use/useFoldProgress'
 import { LANGUAGES, LANGUAGE_AUTONYMS } from '@/utils/enums'
 import { setI18nLocale } from '@/i18n'
 import useSounds from '@/use/useSound'
@@ -55,6 +55,8 @@ const title = computed(() =>
 const folded = ref(false)
 /** Stars per book, for the shelf rows (reactive on the saved stars). */
 const bookStars = computed(() => ({ 1: starsForBook(1), 2: starsForBook(2) }))
+/** Page secrets found over every book (roadmap #15), under the books. */
+const secrets = computed(() => secretCount())
 
 watch(() => props.open, (o) => {
   if (o) {
@@ -188,6 +190,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                 span.cootie__book-name {{ t(`fold.books.name${b}`) }}
                 span.cootie__book-sub {{ b === 2 && !unlocked ? t('fold.books.locked') : t(`fold.books.blurb${b}`) }}
               StarTally.cootie__book-stars(v-if="b === 1 || unlocked" :stars="bookStars[b]" compact :data-testid="`book-${b}-stars`")
+            p.cootie__secrets.flex.items-center.justify-center.gap-2(data-testid="pause-secrets")
+              OrigamiIcon(name="star" tone="purple")
+              span {{ t('fold.books.secrets', { n: secrets.found, total: secrets.total }) }}
             FButton(type="primary" size="md" block @click="click(() => (face = 'menu'))")
               span.flex.items-center.justify-center.gap-2
                 OrigamiIcon(name="left" tone="white")
@@ -394,6 +399,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 .cootie__book-icon
   flex: none
+
+// Secrets found: one quiet line under the books (no hint where they are).
+.cootie__secrets
+  color: #3a3142
+  font-size: clamp(0.75rem, 3vw, 0.9rem)
+  :deep(.origami-icon)
+    font-size: 1.3em
 
 // The book's stars, right-aligned; the text column takes what is left.
 .cootie__book-stars

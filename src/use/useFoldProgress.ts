@@ -1,7 +1,7 @@
 import { ref, watch, type Ref } from 'vue'
 import {
-  BEST2_KEY, BEST_KEY, BOOK_KEY, CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUN_KEY, RUNS_KEY, SETTINGS_KEY,
-  STARS_KEY, STATS_KEY, WINS2_KEY, WINS_KEY
+  BEST2_KEY, BEST_KEY, BOOK_KEY, CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUN_KEY, RUNS_KEY, RUSH_KEY,
+  SECRETS_KEY, SETTINGS_KEY, STARS_KEY, STATS_KEY, WINS2_KEY, WINS_KEY
 } from '@/keys'
 import { aethelState, getState, setState, setStates } from '@/use/useAethelState'
 import { saveDataVersion, flushSaveNow } from '@/use/useSaveStatus'
@@ -11,6 +11,8 @@ import { asStars, isRated, readStarRecord, starKey } from '@/fold/logic/stars'
 import { emptyStats, type GameStats } from '@/fold/logic/game'
 import { type KindMemory, readKindMemory } from '@/fold/logic/difficulty'
 import { bookUnlockedBy, type ShelfProgress } from '@/fold/logic/shelf'
+import { SECRET_TOTAL, countFound, readSecretList, secretsInBook, type SecretId } from '@/fold/logic/secrets'
+import { readRushRecord, rushKey, rushResult, type RushRecord, type RushResult } from '@/fold/logic/rush'
 
 /**
  * Aethel Fold progress — a module-level singleton view over the fields of
@@ -33,6 +35,8 @@ export interface FoldSettings {
   slowMode: boolean
   /** Accessibility: how actionable things are marked. */
   highlightMode: HighlightMode
+  /** Night mode — the desk lamp's secret (roadmap #15). Cosmetic: the lamp's pool on a periwinkle desk. */
+  night: boolean
 }
 
 export interface RunCheckpoint {
@@ -56,7 +60,7 @@ export interface Records {
 }
 
 const DEFAULT_SETTINGS: FoldSettings = {
-  haptics: true, shake: true, quality: 'auto', holdToFold: false, slowMode: false, highlightMode: 'standard'
+  haptics: true, shake: true, quality: 'auto', holdToFold: false, slowMode: false, highlightMode: 'standard', night: false
 }
 
 const num = (v: unknown, fallback = 0): number => {
@@ -82,6 +86,7 @@ const readSettings = (): FoldSettings => {
   s.holdToFold = s.holdToFold === true
   s.slowMode = s.slowMode === true
   if (!HIGHLIGHT_MODES.includes(s.highlightMode)) s.highlightMode = 'standard'
+  s.night = s.night === true
   return s
 }
 
@@ -132,6 +137,10 @@ export const foldSettings: Ref<FoldSettings> = ref(readSettings())
 export const runCheckpoint: Ref<RunCheckpoint | null> = ref(readCheckpoint())
 /** Best origami stars per page (roadmap #1), keyed `b<book>p<page>`. */
 export const pageStars: Ref<Record<string, Stars>> = ref(readStarRecord(getState(STARS_KEY)))
+/** Page secrets found (roadmap #15), in `SECRETS` order. */
+export const secretsFound: Ref<SecretId[]> = ref(readSecretList(getState(SECRETS_KEY)))
+/** Dragon Rush best times (roadmap #16), `b<book>` → seconds. */
+export const rushBest: Ref<RushRecord> = ref(readRushRecord(getState(RUSH_KEY)))
 /** Bumped when a cloud hydrate replaced the progress under a running game. */
 export const progressRevision = ref(0)
 
@@ -150,6 +159,8 @@ const refresh = (): void => {
   foldSettings.value = readSettings()
   runCheckpoint.value = readCheckpoint()
   pageStars.value = readStarRecord(getState(STARS_KEY))
+  secretsFound.value = readSecretList(getState(SECRETS_KEY))
+  rushBest.value = readRushRecord(getState(RUSH_KEY))
 }
 
 watch(aethelState, refresh, { deep: false })
@@ -301,7 +312,8 @@ export const starsForBook = (book: BookId): BookStars => {
 export const shelfProgress = (): ShelfProgress => ({
   wins: [wins.value, wins2.value],
   cleared: [pagesCleared.value, pagesCleared2.value],
-  stars: [starsForBook(1).pages, starsForBook(2).pages]
+  stars: [starsForBook(1).pages, starsForBook(2).pages],
+  rush: [rushBestOf(1), rushBestOf(2)]
 })
 
 /** Stars over every book. */
@@ -324,6 +336,49 @@ export const recordStars = (book: BookId, page: PageId, stars: number): boolean 
   pageStars.value = next
   setState(STARS_KEY, next)
   return true
+}
+
+// ─── Page secrets (roadmap #15) ────────────────────────────────────────────
+
+/**
+ * Bank a secret found for the first time. Returns true when it is new. The
+ * save is flushed at once: a secret is rare, and finding one is a moment the
+ * player remembers — it must not vanish with a closed tab.
+ */
+export const recordSecret = (id: SecretId): boolean => {
+  if (secretsFound.value.includes(id)) return false
+  const next = readSecretList([...secretsFound.value, id])
+  // Mirror at once (the aethelState watcher runs a tick later).
+  secretsFound.value = next
+  setState(SECRETS_KEY, next)
+  void flushSaveNow()
+  return true
+}
+
+/** Secrets found, over every book or in one, and how many there are. Reactive inside a `computed`. */
+export const secretCount = (book?: BookId): { found: number; total: number } => ({
+  found: countFound(secretsFound.value, book),
+  total: book === undefined ? SECRET_TOTAL : secretsInBook(book)
+})
+
+// ─── Dragon Rush (roadmap #16) ─────────────────────────────────────────────
+
+/** A book's best rush time, seconds (0 = never finished). */
+export const rushBestOf = (book: BookId): number => rushBest.value[rushKey(book)] ?? 0
+
+/**
+ * A finished rush: compare with the par and the saved best, keep a faster
+ * time. A new best is a hard checkpoint (`flushSaveNow`).
+ */
+export const recordRush = (book: BookId, time: number, par: number): RushResult => {
+  const res = rushResult(time, par, rushBestOf(book))
+  if (res.newBest) {
+    const next = { ...rushBest.value, [rushKey(book)]: res.time }
+    rushBest.value = next
+    setState(RUSH_KEY, next)
+    void flushSaveNow()
+  }
+  return res
 }
 
 export const setFoldSetting = <K extends keyof FoldSettings>(key: K, value: FoldSettings[K]): void => {

@@ -12,12 +12,12 @@
  */
 
 import { Group, Mesh, PlaneGeometry, RepeatWrapping, type Texture } from 'three'
-import { PAGE_HALF_D, PAGE_HALF_W } from '../../logic/config'
+import { DESK_LAMP, PAGE_HALF_D, PAGE_HALF_W } from '../../logic/config'
 import { HEX, css } from '../palette'
 import { makeCanvas, paperGrain, seeded, toTexture, edgeBurn, stains } from '../art/canvas'
 import { PaperBuilder } from '../paperGeometry'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
-import { boatGeometry, craneGeometry, pencilGeometry } from '../models'
+import { boatGeometry, craneGeometry, deskLampGeometry, pencilGeometry } from '../models'
 
 export const DESK_Y = -0.62
 const COVER_TOP = -0.44
@@ -119,6 +119,8 @@ export class BookView {
   private readonly titleTex: Texture
   private readonly deskTex: Texture
   private readonly materials: PaperMaterial[] = []
+  private readonly lampMat: PaperMaterial
+  private readonly lampMesh: Mesh
 
   constructor() {
     // Desk.
@@ -228,7 +230,28 @@ export class BookView {
     pencil2.rotation.y = 0.12
     pencil2.castShadow = true
     this.group.add(pencil2)
+    // The desk lamp behind the book: a secret (tap it: night mode). Its own
+    // paper id, and never the highlight bit — nothing tells the player it's there.
+    this.lampMat = createPaperMaterial({ vertexColors: true, grain: 0.05, doubleSided: true })
+    this.materials.push(this.lampMat)
+    this.lampMesh = new Mesh(deskLampGeometry(), this.lampMat)
+    this.lampMesh.position.set(DESK_LAMP.x, DESK_Y, DESK_LAMP.z)
+    this.lampMesh.rotation.y = -0.35
+    this.lampMesh.scale.setScalar(DESK_LAMP.scale)
+    this.lampMesh.castShadow = true
+    this.group.add(this.lampMesh)
     this.group.userData.perfTag = 'fold.book'
+  }
+
+  /** A little wobble when the lamp is tapped (1 → 0, eased by the caller's clock). */
+  lampWobble = 0
+
+  /** Per frame (no allocation): the tapped lamp rocks on its foot. */
+  update(dt: number): void {
+    if (this.lampWobble <= 0) return
+    this.lampWobble = Math.max(0, this.lampWobble - dt * 1.8)
+    const w = this.lampWobble
+    this.lampMesh.rotation.z = Math.sin((1 - w) * 22) * w * 0.12
   }
 
   /** Put the last turned page on the left-hand side. */

@@ -29,6 +29,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'again'): void
   (e: 'book', book: BookId): void
+  /** Dragon Rush: this book's dragon again, against the clock (roadmap #16). */
+  (e: 'rush', book: BookId): void
 }>()
 const { t } = useI18n()
 const showCard = ref(false)
@@ -95,6 +97,10 @@ const timeText = computed(() => {
             span.flex.items-center.justify-center.gap-2
               OrigamiIcon(name="book" tone="white")
               span {{ t('fold.victory.backToBook1') }}
+        FButton(type="danger" size="sm" block data-testid="victory-rush" @click="emit('rush', book)")
+          span.flex.items-center.justify-center.gap-2
+            OrigamiIcon(name="dragon" tone="yellow")
+            span {{ t('fold.victory.rush') }}
 </template>
 
 <style scoped lang="sass">

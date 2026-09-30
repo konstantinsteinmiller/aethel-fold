@@ -10,7 +10,7 @@ import { computed } from 'vue'
 export type OrigamiName =
   | 'gear' | 'speaker' | 'speakerMute' | 'heart' | 'heartEmpty' | 'crane' | 'star' | 'close'
   | 'play' | 'restart' | 'book' | 'hand' | 'trophy' | 'clock' | 'frog' | 'check' | 'pause'
-  | 'left' | 'right' | 'plus' | 'minus' | 'vibrate' | 'shake' | 'quality' | 'globe' | 'music' | 'shelf'
+  | 'left' | 'right' | 'plus' | 'minus' | 'vibrate' | 'shake' | 'quality' | 'globe' | 'music' | 'shelf' | 'dragon'
 
 const props = withDefaults(defineProps<{
   name: OrigamiName
@@ -122,6 +122,14 @@ const dark = computed(() => c.value[1])
       path(:fill="dark" stroke="none" opacity=".55" d="M24 6h10v10c0 6-4 10-10 10z")
       path(fill="none" d="M14 10H7c0 7 4 10 8 10M34 10h7c0 7-4 10-8 10")
       path(:fill="dark" d="M20 26h8v6h-8zM14 38h20v4H14zM17 32h14l3 6H14z")
+    //- ── Dragon (Dragon Rush): a folded head in profile, horn and wing ──
+    template(v-else-if="name === 'dragon'")
+      path(:fill="dark" d="M10 30L4 12l14 10z")
+      path(:fill="lit" d="M8 32l14-14 22 10-12 4-4 8z")
+      path(:fill="dark" stroke="none" opacity=".55" d="M22 18l22 10-12 4z")
+      path(:fill="lit" d="M20 20l-2-12 8 9z")
+      path(fill="none" d="M34 30l-2 4")
+      circle(cx="28" cy="24" r="2" fill="#1c1724" stroke="none")
     //- ── Clock ──
     template(v-else-if="name === 'clock'")
       path(:fill="lit" d="M24 4l14 6 6 14-6 14-14 6-14-6-6-14 6-14z")

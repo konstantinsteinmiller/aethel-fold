@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { FoldGame } from '@/fold/logic/game'
 import {
-  DEMO_FADE, DEMO_PERIOD, cancelDemo, createLessonState, sampleDemo, startDemo, stepDemo
+  DEMO_FADE, DEMO_HOLD_FOLD, DEMO_HOLD_WAIT, DEMO_PERIOD, HOLD_DEMO_LESSONS, cancelDemo, createLessonState, sampleDemo,
+  startDemo, stepDemo
 } from '@/fold/logic/lessons'
 import type { LessonId, PageId } from '@/fold/logic/types'
 
@@ -289,5 +290,52 @@ describe('lesson demonstrations in the game', () => {
     expect(g.sling!.aiming).toBe(false)
     expect(g.grabSling()).toBe(true)
     expect(d.phase).toBe('fade')
+  })
+})
+
+describe('hold to fold demonstrations (roadmap #14 follow-up)', () => {
+  it('hold: the finger stays put and presses; the ghost folds up progressively after the hold delay', () => {
+    const l = createLessonState()
+    l.id = 'swipe'
+    startDemo(l, 'hold', 'fold', 0, false)
+    let last = 0
+    let pressedAt = -1
+    let risingAt = -1
+    let fullAt = -1
+    for (let t = 0; t < DEMO_PERIOD.hold - DT; t += DT) {
+      stepDemo(l, DT)
+      const d = l.demo
+      expect(d.hand).toBe(0)
+      expect(d.glide).toBe(0)
+      // Progressive and never backwards within a loop.
+      expect(d.fold).toBeGreaterThanOrEqual(last - 1e-9)
+      last = d.fold
+      if (pressedAt < 0 && d.press >= 0.99) pressedAt = d.clock
+      if (risingAt < 0 && d.fold > 0.01) risingAt = d.clock
+      if (fullAt < 0 && d.fold >= 1) fullAt = d.clock
+      // The paper only moves under a pressed finger.
+      if (d.fold > 0 && d.fold < 1) expect(d.press).toBeGreaterThan(0.99)
+    }
+    expect(pressedAt).toBeGreaterThan(0)
+    // It waits for the hold to be recognised, then takes about HOLD_FOLD_MS to fold through.
+    expect(risingAt - pressedAt).toBeGreaterThan(DEMO_HOLD_WAIT - 2 * DT)
+    expect(fullAt - risingAt).toBeGreaterThan(DEMO_HOLD_FOLD * 0.9)
+    expect(fullAt - risingAt).toBeLessThan(DEMO_HOLD_FOLD * 1.1)
+  })
+
+  it('with hold to fold on, the first fold lessons demonstrate a press and hold instead of a swipe', () => {
+    const g = new FoldGame({ seed: 1 })
+    g.holdToFold = true
+    toLesson(g, 'swipe')
+    expect(g.lesson.demo.phase).toBe('show')
+    expect(g.lesson.demo.kind).toBe('hold')
+    expect(g.lesson.demo.on).toBe('fold')
+    // Off, the same lesson swipes.
+    const h = new FoldGame({ seed: 1 })
+    toLesson(h, 'swipe')
+    expect(h.lesson.demo.kind).toBe('swipe')
+    // Hold-demo lessons match the ghost hand's hold hints (the sling's is a tap and not demonstrated as a hold).
+    expect(HOLD_DEMO_LESSONS).not.toContain('sling')
+    expect(HOLD_DEMO_LESSONS).toContain('peel')
   })
 })

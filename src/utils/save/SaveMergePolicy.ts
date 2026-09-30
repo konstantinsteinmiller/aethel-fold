@@ -25,7 +25,9 @@
 //
 // Stars are also merged field-level: whichever side wins, `carryStars` folds
 // the loser's per-page best stars into the winner's blob (per-page maximum),
-// so a merge can never take a star away.
+// so a merge can never take a star away. It carries the other only-ever-better
+// records the same way: the page secrets found (union) and the Dragon Rush
+// best times (the faster per book).
 //
 // Conflict policy:
 //   - higher score wins
@@ -33,9 +35,13 @@
 //   - same time too → keep local (no needless writes)
 //   - Aethel Fold has no currency, so a remote win never pays a bonus.
 
-import { CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUNS_KEY, STARS_KEY, WINS2_KEY, WINS_KEY } from '@/keys'
+import {
+  CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUNS_KEY, RUSH_KEY, SECRETS_KEY, STARS_KEY, WINS2_KEY, WINS_KEY
+} from '@/keys'
 import { STATE_KEY } from '@/use/useAethelState'
 import { countStars, mergeStarRecords, readStarRecord } from '@/fold/logic/stars'
+import { mergeSecretLists, readSecretList } from '@/fold/logic/secrets'
+import { mergeRushRecords, readRushRecord } from '@/fold/logic/rush'
 
 /** Where the meta blob is stored in localStorage / on the remote backend.
  *  NOT prefixed with `__save_internal__` — this key needs to round-trip
@@ -248,7 +254,8 @@ export const decideMerge = (
 
 /**
  * Fold the other side's best stars into the winning side's `aethel_state`
- * blob (per-page maximum), so a whole-blob merge never loses a star.
+ * blob (per-page maximum), so a whole-blob merge never loses a star — and,
+ * the same way, its page secrets (union) and Dragon Rush bests (the faster).
  * `winnerRaw` / `otherRaw` are raw `aethel_state` strings (null = absent).
  * Returns the new winner blob, or null when nothing changes (no write needed,
  * or the winner blob is missing / unparseable — then it is left alone).
@@ -266,14 +273,44 @@ export const carryStars = (winnerRaw: string | null, otherRaw: string | null): s
   if (!winner || typeof winner !== 'object' || Array.isArray(winner)) return null
   if (!other || typeof other !== 'object' || Array.isArray(other)) return null
   const w = winner as Record<string, unknown>
-  const theirs = readStarRecord((other as Record<string, unknown>)[STARS_KEY])
-  if (Object.keys(theirs).length === 0) return null
-  const ours = readStarRecord(w[STARS_KEY])
-  const merged = mergeStarRecords(ours, theirs)
+  const o = other as Record<string, unknown>
+  const out: Record<string, unknown> = { ...w }
   let changed = false
-  for (const k of Object.keys(merged)) if (merged[k] !== ours[k]) changed = true
-  if (!changed) return null
-  return JSON.stringify({ ...w, [STARS_KEY]: merged })
+  // Stars: per-page maximum.
+  const theirs = readStarRecord(o[STARS_KEY])
+  if (Object.keys(theirs).length > 0) {
+    const ours = readStarRecord(w[STARS_KEY])
+    const merged = mergeStarRecords(ours, theirs)
+    let diff = false
+    for (const k of Object.keys(merged)) if (merged[k] !== ours[k]) diff = true
+    if (diff) {
+      out[STARS_KEY] = merged
+      changed = true
+    }
+  }
+  // Page secrets (roadmap #15): the union.
+  const theirSecrets = readSecretList(o[SECRETS_KEY])
+  if (theirSecrets.length > 0) {
+    const ours = readSecretList(w[SECRETS_KEY])
+    const merged = mergeSecretLists(ours, theirSecrets)
+    if (merged.length !== ours.length) {
+      out[SECRETS_KEY] = merged
+      changed = true
+    }
+  }
+  // Dragon Rush bests (roadmap #16): the faster per book.
+  const theirRush = readRushRecord(o[RUSH_KEY])
+  if (Object.keys(theirRush).length > 0) {
+    const ours = readRushRecord(w[RUSH_KEY])
+    const merged = mergeRushRecords(ours, theirRush)
+    let diff = false
+    for (const k of Object.keys(merged)) if (merged[k] !== ours[k]) diff = true
+    if (diff) {
+      out[RUSH_KEY] = merged
+      changed = true
+    }
+  }
+  return changed ? JSON.stringify(out) : null
 }
 
 /**

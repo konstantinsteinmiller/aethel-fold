@@ -187,3 +187,50 @@ test.describe('Aethel Fold — loading screen', () => {
     await expect(page.locator('.splash-progress')).toHaveCount(0, { timeout: 15_000 })
   })
 })
+
+test.describe('Aethel Fold — page secrets (roadmap #15)', () => {
+  test('a page secret: the desk lamp turns night on and off, is found once, and night mode survives a reload', async ({ page }) => {
+    const errors = collectErrors(page)
+    await seedState(page, { fold_lessons: ALL_LESSONS })
+    await page.goto('/')
+    await waitForGame(page)
+    let s = await state(page)
+    expect(s.secrets.found).toEqual([])
+    expect(s.secrets.night).toBe(false)
+    const score = s.score
+    // A real tap on the lamp behind the book (no highlight, no hint: it is a secret).
+    const lamp = await page.evaluate(() => window.__fold!.lampScreen())
+    await page.mouse.click(lamp.x, lamp.y)
+    await ff(page, 0.8)
+    s = await state(page)
+    expect(s.secrets.night).toBe(true)
+    expect(s.secrets.found).toEqual(['lamp'])
+    // The one-time bonus (and no fold, stamp or tap on the page happened).
+    expect(s.score).toBe(score + 250)
+    await page.screenshot({ path: 'test-results/secret-lamp-night.png' })
+    let save = await readSave(page)
+    expect(save?.fold_secrets).toEqual(['lamp'])
+    expect(save?.fold_settings?.night).toBe(true)
+    // Off again: no second bonus.
+    await page.mouse.click(lamp.x, lamp.y)
+    await ff(page, 0.5)
+    s = await state(page)
+    expect(s.secrets.night).toBe(false)
+    expect(s.score).toBe(score + 250)
+    expect((await readSave(page))?.fold_settings?.night).toBe(false)
+    // On, and a reload keeps it (and the find).
+    await page.mouse.click(lamp.x, lamp.y)
+    await ff(page, 0.5)
+    await page.waitForTimeout(600)
+    await page.reload()
+    await waitForGame(page)
+    s = await state(page)
+    expect(s.secrets.night).toBe(true)
+    expect(s.secrets.found).toEqual(['lamp'])
+    save = await readSave(page)
+    expect(save?.fold_secrets).toEqual(['lamp'])
+    // Only the one save key.
+    expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('fold') || k.includes('secret') || k.includes('night')))).toEqual([])
+    expect(errors).toEqual([])
+  })
+})

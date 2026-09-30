@@ -417,6 +417,11 @@ export interface Boss {
   slingHits: number
   /** 0…1 fold-down progress in collapse; frog progress in the finale. */
   collapse: number
+  /**
+   * Multiplies the paced `BOSS` timings (`bossTiming` in boss.ts): 1 in normal
+   * play, `RUSH.timing` in a Dragon Rush (roadmap #16). Survives `resetBoss`.
+   */
+  timing: number
   rev: number
 }
 
@@ -434,7 +439,24 @@ export type GamePhase =
   | 'boss'        // page 5 boss choreography (see Boss.phase)
   | 'finale'      // page 6: fold the dragon into a frog
   | 'victory'     // ribbon + confetti, run summary
+  | 'rushOver'    // Dragon Rush: the dragon is folded flat, the result card is up (roadmap #16)
   | 'paused'
+
+/**
+ * What a run is (roadmap #16): the story (pages in order, stars, checkpoints),
+ * or a Dragon Rush — a book's dragon alone, faster, against the clock.
+ */
+export type GameMode = 'story' | 'dragonRush'
+
+/** `FoldGame.startRun` in its object form. */
+export interface RunOptions {
+  mode?: GameMode
+  book?: BookId
+  /** Story only: the page to start on (default 1). */
+  page?: PageId
+  /** Story only: the score carried in (default 0). */
+  score?: number
+}
 
 /**
  * The actionable-highlight modes (roadmap #14, `FoldSettings.highlightMode`):

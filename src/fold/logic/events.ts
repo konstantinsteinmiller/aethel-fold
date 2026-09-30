@@ -58,6 +58,10 @@ export type FoldEventType =
   | 'shelf'         // the desk bookshelf: a = 1 camera out to it / 0 back to the book, b = reason (SHELF_REASONS)
   | 'shelfSelect'   // a = slot, b = 1 pulled out to inspect / 0 locked (it only shakes)
   | 'shelfBook'     // a book was opened from the shelf: a = book, b = 1 continue the current run / 0 start it on page 1
+  | 'secret'        // a page secret went off (roadmap #15): a = secret code (SECRET_IDS), b = 1 found for the first time / 0 again, x/z
+  | 'night'         // the desk lamp was tapped: a = 1 night mode on / 0 off
+  | 'rushStart'     // a Dragon Rush dragon drops (roadmap #16): a = book, b = par (s), c = attempt (1 = first)
+  | 'rushDone'      // the rush dragon is beaten: a = book, b = time (s), c = par (s)
 
 export const KILL_LAUNCH = 1
 export const KILL_CRUSH = 2

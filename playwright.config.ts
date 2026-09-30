@@ -12,6 +12,11 @@ import { defineConfig, devices } from '@playwright/test'
  * only burn time.
  */
 const GL_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
+/** Private ports (E2E_PORT / E2E_CG_PORT) keep a run off a dev server another checkout may have on 2050/2051. */
+const PORT = Number(process.env.E2E_PORT) || 2050
+const CG_PORT = Number(process.env.E2E_CG_PORT) || 2051
+/** E2E_PLAIN_ONLY=1: only the plain server (every spec but cloud-hydration), for memory-tight containers. */
+const PLAIN_ONLY = !!process.env.E2E_PLAIN_ONLY
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -21,7 +26,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:2050',
+    baseURL: `http://localhost:${PORT}`,
     launchOptions: { args: GL_ARGS },
     trace: 'retain-on-failure'
   },
@@ -30,17 +35,17 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'pnpm vite --port 2050 --strictPort --host localhost',
-      url: 'http://localhost:2050',
+      command: `pnpm vite --port ${PORT} --strictPort --host localhost`,
+      url: `http://localhost:${PORT}`,
       reuseExistingServer: true,
       timeout: 60_000
     },
-    {
-      command: 'pnpm vite --port 2051 --strictPort --host localhost',
-      url: 'http://localhost:2051',
+    ...(PLAIN_ONLY ? [] : [{
+      command: `pnpm vite --port ${CG_PORT} --strictPort --host localhost`,
+      url: `http://localhost:${CG_PORT}`,
       env: { VITE_APP_CRAZY_WEB: 'true' },
       reuseExistingServer: true,
       timeout: 60_000
-    }
+    }])
   ]
 })

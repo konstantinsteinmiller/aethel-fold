@@ -9,6 +9,7 @@
  */
 
 import type { ShelfSlot } from '../../logic/shelf'
+import { formatRushTime } from '../../logic/rush'
 import type { PaletteKey } from '../palette'
 import { HEX, css } from '../palette'
 import { makeCanvas, paperGrain, seeded } from './canvas'
@@ -240,6 +241,151 @@ export const paintStarCard = (ctx: CanvasRenderingContext2D, slot: ShelfSlot): v
     }
   }
 }
+
+/** A little stopwatch (the best time). */
+const stopwatch = (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void => {
+  ctx.lineWidth = 3
+  ctx.strokeStyle = HEX.ink
+  ctx.fillStyle = HEX.paperWhite
+  ctx.fillRect(cx - r * 0.2, cy - r * 1.35, r * 0.4, r * 0.3)
+  ctx.strokeRect(cx - r * 0.2, cy - r * 1.35, r * 0.4, r * 0.3)
+  ctx.beginPath()
+  ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(cx, cy)
+  ctx.lineTo(cx, cy - r * 0.7)
+  ctx.moveTo(cx, cy)
+  ctx.lineTo(cx + r * 0.5, cy + r * 0.2)
+  ctx.stroke()
+}
+
+/** A little pennant on a pole (the par). */
+const pennant = (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void => {
+  ctx.lineWidth = 3
+  ctx.strokeStyle = HEX.ink
+  ctx.beginPath()
+  ctx.moveTo(cx - r * 0.6, cy + r)
+  ctx.lineTo(cx - r * 0.6, cy - r)
+  ctx.stroke()
+  ctx.fillStyle = HEX.flagYellow
+  ctx.beginPath()
+  ctx.moveTo(cx - r * 0.6, cy - r)
+  ctx.lineTo(cx + r * 0.8, cy - r * 0.55)
+  ctx.lineTo(cx - r * 0.6, cy - r * 0.1)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+}
+
+/**
+ * A Dragon Rush figurine's card (roadmap #16): the book's number over a
+ * little dragon head, the best time by a stopwatch, the par by a pennant.
+ * Wordless; a gold star beside the best once it beats the par.
+ */
+export const paintRushCard = (ctx: CanvasRenderingContext2D, slot: ShelfSlot): void => {
+  const w = CARD_TEX_W
+  const h = CARD_TEX_H
+  ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = HEX.parchmentLight
+  ctx.fillRect(0, 0, w, h)
+  paperGrain(ctx, w, h, seeded(slot.book * 53 + 9), 0.4)
+  ctx.strokeStyle = HEX.ink
+  ctx.lineWidth = 5
+  ctx.strokeRect(4, 4, w - 8, h - 8)
+  ctx.fillStyle = slot.book === 2 ? HEX.dragonBlue : HEX.dragonRed
+  ctx.fillRect(8, 8, w - 16, 60)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  // A dragon's head in profile: a paper wedge with an eye and a horn.
+  ctx.save()
+  ctx.translate(46, 38)
+  ctx.fillStyle = HEX.dragonYellow
+  ctx.strokeStyle = HEX.ink
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.moveTo(-22, -12)
+  ctx.lineTo(24, 0)
+  ctx.lineTo(-22, 16)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(-16, -10)
+  ctx.lineTo(-24, -24)
+  ctx.lineTo(-8, -8)
+  ctx.stroke()
+  ctx.fillStyle = HEX.ink
+  ctx.beginPath()
+  ctx.arc(-6, -2, 3.5, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+  ctx.fillStyle = HEX.paperWhite
+  fitText(ctx, String(slot.book), 44, 80)
+  ctx.fillText(String(slot.book), w / 2 + 30, 40)
+  // Best time.
+  stopwatch(ctx, 50, 140, 26)
+  ctx.fillStyle = HEX.ink
+  const best = slot.best > 0 ? formatRushTime(slot.best) : '–:––'
+  fitText(ctx, best, 46, 150)
+  ctx.fillText(best, 160, 142)
+  if (slot.best > 0 && slot.best <= slot.par) star(ctx, w - 26, 112, 14, HEX.gold)
+  // Par.
+  ctx.strokeStyle = css('inkSoft', 0.4)
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(24, 196)
+  ctx.lineTo(w - 24, 196)
+  ctx.stroke()
+  pennant(ctx, 50, 250, 26)
+  ctx.fillStyle = HEX.inkSoft
+  const par = formatRushTime(slot.par).replace(/\.0$/, '')
+  fitText(ctx, par, 40, 150)
+  ctx.fillText(par, 160, 252)
+}
+
+/** The secrets counter's canvas size. */
+export const SECRETS_TEX_W = 192
+export const SECRETS_TEX_H = 138
+
+/** The secrets counter on the shelf's top board (roadmap #15): a sparkle and "found/total". Wordless. */
+export const paintSecretsCard = (ctx: CanvasRenderingContext2D, found: number, total: number): void => {
+  const w = SECRETS_TEX_W
+  const h = SECRETS_TEX_H
+  ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = HEX.parchmentLight
+  ctx.fillRect(0, 0, w, h)
+  paperGrain(ctx, w, h, seeded(271), 0.4)
+  ctx.strokeStyle = HEX.ink
+  ctx.lineWidth = 5
+  ctx.strokeRect(3, 3, w - 6, h - 6)
+  // A four-point sparkle, gold once anything is found.
+  ctx.save()
+  ctx.translate(46, h / 2)
+  ctx.fillStyle = found > 0 ? HEX.gold : HEX.parchmentShade
+  ctx.strokeStyle = HEX.ink
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  for (let i = 0; i < 8; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 4
+    const r = i % 2 ? 9 : 30
+    if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r)
+    else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r)
+  }
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+  ctx.restore()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = HEX.ink
+  const label = `${found}/${total}`
+  fitText(ctx, label, 50, 106)
+  ctx.fillText(label, 136, h / 2 + 3)
+}
+
+export const secretsCanvas = (): [HTMLCanvasElement, CanvasRenderingContext2D] => makeCanvas(SECRETS_TEX_W, SECRETS_TEX_H)
 
 /** Fresh canvases for one book (spine) or the inspect card. */
 export const spineCanvas = (): [HTMLCanvasElement, CanvasRenderingContext2D] => makeCanvas(SPINE_TEX_W, SPINE_TEX_H)

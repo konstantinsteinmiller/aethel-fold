@@ -341,5 +341,58 @@ export const SHELF = {
   /** Real-time constant of the camera's zoom out / in (seconds). */
   zoomTime: 0.32,
   /** Real seconds the ghost hand points the way to the shelf on a page intro. */
-  cueTime: 4
+  cueTime: 4,
+  /** Dragon Rush figurines on the top board (roadmap #16): shelf-local x per book, and their height. */
+  rushX: [0.3, 1.25] as readonly number[],
+  rushH: 0.9,
+  /** The secrets counter card on the top board (roadmap #15): shelf-local x. */
+  secretsX: -1.05
+} as const
+
+// ─── Dragon Rush (roadmap #16) ─────────────────────────────────────────────
+
+export const RUSH = {
+  /**
+   * The boss timing multiplier in a rematch: every paced `BOSS` timing (the
+   * intro, the idle beats, the breath charge, the breath and the stomp) × this.
+   * Normal play runs at 1, which is bit-for-bit the authored dragon.
+   */
+  timing: 0.7,
+  /**
+   * Par per book, in seconds from the page drop to the last weak point
+   * breaking. Measured against the frame-perfect bot at timing 0.7 over eight
+   * seeds: book 1 47.2–48.5 s (it crumpled on two of them — the fast dragon
+   * is a real fight), book 2 44.4–45.2 s (the sling bares weak points
+   * sooner). Par is about 1.35× the bot, rounded to 5 s: a clean human run
+   * makes it, a scrappy one doesn't. `tests/fold/rush.test.ts` keeps the bot
+   * at least 20 % under par.
+   */
+  par: [65, 60] as readonly number[],
+  /**
+   * Real seconds after a rush defeat before a fresh dragon drops by itself —
+   * quicker than the story's Almost! moment (`ALMOST.autoRetry`); the retry
+   * button shows from `ALMOST.button` on.
+   */
+  autoRetry: 4
+} as const
+
+// ─── Page secrets (roadmap #15) ────────────────────────────────────────────
+
+/**
+ * The desk lamp behind the book (page space, on the desk): the desk's secret.
+ * Behind the page's top edge, right of centre — on screen at every aspect
+ * (under the HUD strip in portrait, beside the score in landscape), never
+ * over the page. `h` is its height as drawn (the model × `scale`).
+ */
+export const DESK_LAMP = { x: 3.2, z: -9.9, h: 3.0, scale: 1.6 } as const
+
+export const SECRET = {
+  /** Points for finding a secret — once ever, and never counted toward a page's stars. */
+  bonus: 250,
+  /** Taps on a tap secret's target that set it off… */
+  taps: 3,
+  /** …each within this many real seconds of the last. */
+  tapGap: 1.2,
+  /** A pair secret: both folds snapped within this many real seconds. */
+  pairGap: 1.2
 } as const

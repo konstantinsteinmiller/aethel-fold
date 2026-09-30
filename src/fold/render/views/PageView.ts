@@ -18,6 +18,7 @@ import type { FoldState, PageDef } from '../../logic/types'
 import { acrossHinge, alongHinge, isStampable, onFootprint } from '../../logic/folds'
 import { clamp01, easeOutBack } from '../../logic/math'
 import { createRng } from '../../logic/rng'
+import { secretOnPage } from '../../logic/secrets'
 import { paintPage, type PageTextures } from '../art/pageArt'
 import type { SpriteTextures } from '../art/spriteArt'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
@@ -64,6 +65,9 @@ export class PageView {
   sling: SlingView | null = null
   caption: CaptionLabel | null = null
   private sails: Mesh | null = null
+  /** The mill's secret: the sails whirl (1 → 0), their angle accumulated in real time. */
+  private whirlK = 0
+  private sailAngle = 0
   private readonly pageMat: PaperMaterial
   private readonly propMat: PaperMaterial
   private readonly props: { mesh: InstancedMesh; items: PropInstance[] }[] = []
@@ -147,6 +151,17 @@ export class PageView {
       this.sails.position.set(4.3, 1.45, -0.83)
       this.sails.castShadow = true
       this.riser.add(tower, this.sails)
+    }
+    // The Orchard's secret stands by the keep: one big apple tree (tap it three times).
+    const secret = secretOnPage(def.book, def.id)
+    if (secret?.id === 'apples') {
+      const tree = new Mesh(appleTreeGeometry(), this.propMat)
+      tree.position.set(secret.x, 0, secret.z)
+      tree.rotation.y = 0.6
+      tree.scale.setScalar(0.95)
+      tree.castShadow = true
+      tree.receiveShadow = true
+      this.riser.add(tree)
     }
     const cz = captionZ(def)
     if (cz !== null) {
@@ -237,6 +252,9 @@ export class PageView {
     if (z > 5.2) return false
     if (def.sling && Math.hypot(x - def.sling.x, z - def.sling.z) < 2.2) return false
     if (def.theme === 'mill' && Math.hypot(x - 4.3, z + 1.4) < 1.4) return false
+    // A tap secret's target stays clear, so the finger finds it (roadmap #15).
+    const sd = secretOnPage(def.book, def.id)
+    if (sd && sd.trigger === 'taps' && !sd.hero && Math.hypot(x - sd.x, z - sd.z) < 1.2) return false
     // The caption label along the top edge.
     // (Standing props project up the screen, so keep well below it.)
     const cz = captionZ(def)
@@ -364,9 +382,18 @@ export class PageView {
     if (this.sling) {
       if (game.page === this.def) this.sling.update(game, time, dt)
     }
-    if (this.sails) this.sails.rotation.z = time * 0.9
+    if (this.sails) {
+      this.whirlK = Math.max(0, this.whirlK - dt * 0.45)
+      this.sailAngle += dt * (0.9 + this.whirlK * this.whirlK * 16)
+      this.sails.rotation.z = this.sailAngle
+    }
     const frogFold = this.foldStates.findIndex((f) => f.def.kind === 'frog')
     this.finale?.update(game, time, dt, frogFold >= 0 && this.foldStates[frogFold]!.phase === 'ready')
+  }
+
+  /** The mill's secret: the sails whirl round, then wind down. */
+  whirl(): void {
+    this.whirlK = 1
   }
 
   dispose(): void {

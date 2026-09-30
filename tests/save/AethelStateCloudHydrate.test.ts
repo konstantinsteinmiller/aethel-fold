@@ -172,7 +172,7 @@ describe('aethel_state cloud hydrate → composable refresh', () => {
     const p = await import('@/use/useFoldProgress')
     // A save from before the accessibility options (roadmap #14) gets their defaults.
     expect(p.foldSettings.value).toEqual({
-      haptics: false, shake: true, quality: 'low', holdToFold: false, slowMode: false, highlightMode: 'standard'
+      haptics: false, shake: true, quality: 'low', holdToFold: false, slowMode: false, highlightMode: 'standard', night: false
     })
   })
 
@@ -184,7 +184,7 @@ describe('aethel_state cloud hydrate → composable refresh', () => {
 
     const p = await import('@/use/useFoldProgress')
     expect(p.foldSettings.value).toEqual({
-      haptics: true, shake: false, quality: 'auto', holdToFold: true, slowMode: true, highlightMode: 'bold'
+      haptics: true, shake: false, quality: 'auto', holdToFold: true, slowMode: true, highlightMode: 'bold', night: false
     })
   })
 
@@ -231,7 +231,9 @@ describe('hydrate failure modes', () => {
     expect(cloudBlob.fold_cleared).toBe(3)
     expect(cloudBlob.fold_page).toBe(4)
     expect(cloudBlob.fold_best).toEqual({ score: 8450, time: 0 })
-    expect(cloudBlob.fold_settings).toEqual({ haptics: false, shake: false, quality: 'low', holdToFold: false, slowMode: false, highlightMode: 'standard' })
+    expect(cloudBlob.fold_settings).toEqual({
+      haptics: false, shake: false, quality: 'low', holdToFold: false, slowMode: false, highlightMode: 'standard', night: false
+    })
   })
 
   it('retries a transient SDK failure before letting a returning player boot fresh', async () => {

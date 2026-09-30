@@ -23,7 +23,8 @@ import {
   PAGE_HALF_D, PAGE_HALF_W, PAGE_TURN_TIME, PEEL_COMPLETE, SCORE, SPAWN_Z, TIME_SCALE_RATE, TORN_LINGER,
   FOLD_SNAP_THRESHOLD, LEAPER_HOP_EVERY, LEAPER_HOP_TIME, LEAPER_SHOT_CEILING, LEAPER_VAULT_LAND,
   LEAPER_VAULT_TIME, SLING_COOL, SLING_FLIGHT_BASE, SLING_FLIGHT_PER, SLING_GAIN, SLING_GRAB, SLING_MIN_PULL,
-  SLING_RADIUS, SLING_RANGE, SLOW_MODE_SCALE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED, ALMOST, DIFFICULTY, SHELF
+  SLING_RADIUS, SLING_RANGE, SLOW_MODE_SCALE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED, ALMOST, DIFFICULTY, SHELF,
+  RUSH, SECRET, DESK_LAMP
 } from './config'
 import {
   type KindMemory, createKindMemory, difficultyFor, extraPerWave, foldSlowmoOn, noteCrumple, notePageWon,
@@ -39,9 +40,14 @@ import {
   MAX_ENEMIES, createEnemyPool, createHero, createProjectilePool, isAlive, resetPools, spawnEnemy,
   spawnProjectile
 } from './entities'
-import { bossAwake, bossPhaseCode, brokenCount, createBoss, nextWeakPoint, resetBoss } from './boss'
+import { bossAwake, bossPhaseCode, bossTiming, brokenCount, createBoss, nextWeakPoint, resetBoss } from './boss'
+import { bossPageOf, createRushState, rushPar } from './rush'
 import {
-  LESSON_IDS, cancelDemo, clearLesson, createLessonState, lessonCode, setHand, startDemo, stepDemo,
+  countSecretTap, createSecretState, enterSecretPage, markFound, noteSecretSnap, readSecretList, secretById, secretCode,
+  slingSecretHit, type SecretDef, type SecretId
+} from './secrets'
+import {
+  HOLD_DEMO_LESSONS, LESSON_IDS, cancelDemo, clearLesson, createLessonState, lessonCode, setHand, startDemo, stepDemo,
   type DemoKind, type DemoOn
 } from './lessons'
 import { PAGE_COUNT, pageDef } from './pages'
@@ -53,8 +59,8 @@ import {
 import { createRng, type Rng } from './rng'
 import { G_PAPER, clamp, clamp01, damp, segmentDistance, segmentsCross, v2 } from './math'
 import type {
-  BookId, BossPhase, Enemy, EnemyType, FoldState, GamePhase, LessonId, PageDef, PageId, SlingState, SpawnDef,
-  Stars, TearState
+  BookId, BossPhase, Enemy, EnemyType, FoldState, GameMode, GamePhase, LessonId, PageDef, PageId, RunOptions, SlingState,
+  SpawnDef, Stars, TearState
 } from './types'
 
 const G = G_PAPER
@@ -104,6 +110,10 @@ export interface GameOptions {
   kind?: KindMemory
   /** Demonstrate each lesson on its first encounter (roadmap #4). Default true. */
   demos?: boolean
+  /** Page secrets already found (roadmap #15, the saved `fold_secrets`): they never pay out again. */
+  secrets?: readonly string[]
+  /** Night mode (the desk lamp secret), as saved. */
+  night?: boolean
 }
 
 const createTear = (def: PageDef['tears'][number]): TearState => ({
@@ -120,6 +130,19 @@ export class FoldGame {
   readonly lesson = createLessonState()
   /** The bookshelf on the desk (roadmap #2). */
   readonly shelf = createShelfState()
+  /** Story or Dragon Rush (roadmap #16). */
+  mode: GameMode = 'story'
+  /** The Dragon Rush clock and par (`active` only in a rush). */
+  readonly rush = createRushState()
+  /** Page secrets (roadmap #15): what has been found, and this page's counters. */
+  readonly secrets: ReturnType<typeof createSecretState>
+  /** Secret bonus points banked on this page: kept out of its star rating. */
+  private secretPoints = 0
+  /**
+   * Hold to fold is on (roadmap #14): the lesson demonstrations show a press
+   * and hold instead of a swipe. Set by the host with the gesture setting.
+   */
+  holdToFold = false
   private readonly anchor: ShelfPoint = { x: 0, y: 0, z: 0 }
   /** The page intro whose shelf cue already ran (one cue per page intro). */
   private shelfCuePage = -1
@@ -227,12 +250,32 @@ export class FoldGame {
     this.demoSeen = seen
     this.demos = opts.demos ?? true
     if (opts.book) this.book = opts.book
+    this.secrets = createSecretState(opts.secrets ?? [])
+    this.secrets.night = opts.night === true
   }
 
   // ─── Run / page lifecycle ────────────────────────────────────────────────
 
-  /** Start a run at `page` (a returning player resumes their saved page). */
-  startRun(page: PageId = 1, score = 0, book: BookId = this.book): void {
+  /**
+   * Start a run at `page` (a returning player resumes their saved page), or
+   * in the object form `{ mode, book, page, score }` — `mode: 'dragonRush'`
+   * starts that book's Dragon Rush on its dragon's page (roadmap #16).
+   */
+  startRun(pageOrOpts: PageId | RunOptions = 1, score = 0, book: BookId = this.book): void {
+    if (typeof pageOrOpts === 'object') {
+      const o = pageOrOpts
+      if (o.mode === 'dragonRush') {
+        this.startRush(o.book ?? this.book)
+        return
+      }
+      this.startRun(o.page ?? 1, o.score ?? 0, o.book ?? this.book)
+      return
+    }
+    const page = pageOrOpts
+    this.mode = 'story'
+    this.rush.active = false
+    this.rush.running = false
+    this.boss.timing = 1
     this.book = book
     this.score = score
     this.runHits = 0
@@ -253,15 +296,54 @@ export class FoldGame {
     this.loadPage(page)
   }
 
+  /**
+   * Dragon Rush: the book's dragon alone, its paced timings × `RUSH.timing`,
+   * against the clock. No stars, no checkpoint, no kindness memory: the
+   * story's run is left exactly as it was saved.
+   */
+  private startRush(book: BookId): void {
+    this.mode = 'dragonRush'
+    this.book = book
+    this.score = 0
+    this.runHits = 0
+    this.runTime = 0
+    this.pagesCleared = 0
+    this.pageStars = 0
+    this.stats = emptyStats()
+    const r = this.rush
+    r.active = true
+    r.book = book
+    r.par = rushPar(book)
+    r.attempts = 0
+    r.time = 0
+    r.done = false
+    this.boss.timing = RUSH.timing
+    resetBoss(this.boss)
+    const sh = this.shelf
+    sh.open = false
+    sh.finished = false
+    sh.selected = -1
+    sh.autoShown = true
+    refreshShelf(sh, book)
+    this.loadPage(bossPageOf(book))
+  }
+
+  /** Is a Dragon Rush the current run? */
+  get rushing(): boolean {
+    return this.mode === 'dragonRush'
+  }
+
   loadPage(id: PageId): void {
     this.pageId = id
     this.page = pageDef(this.book, id)
     this.folds = this.page.folds.map(createFold)
     this.tears = this.page.tears.map(createTear)
     const boss = this.page.exit === 'boss'
-    if (boss && shouldEaseBoss(this.kind, this.book, id)) this.kind.bossEase = true
-    this.difficulty = difficultyFor(this.kind, this.book, id, boss)
-    this.extraPerWave = extraPerWave(this.kind)
+    const rush = this.rushing
+    // A rush never reads or writes the kind book's memory: the dragon as authored, only faster.
+    if (!rush && boss && shouldEaseBoss(this.kind, this.book, id)) this.kind.bossEase = true
+    this.difficulty = rush ? 1 : difficultyFor(this.kind, this.book, id, boss)
+    this.extraPerWave = rush ? 0 : extraPerWave(this.kind)
     this.waveOrder = this.page.waves.map((w) => this.orderWave(w.spawns))
     resetPools(this.enemies, this.projectiles)
     const h = this.hero
@@ -300,6 +382,9 @@ export class FoldGame {
       : null
     clearLesson(this.lesson)
     this.pageSerial++
+    // Secrets are the story's: a rush page hides none (the desk lamp still works).
+    enterSecretPage(this.secrets, rush ? 0 : this.book, id)
+    this.secretPoints = 0
     for (const f of this.folds) if (f.def.fromWave === 0) revealFold(f)
     const exit = this.page.exit
     if (exit === 'boss') resetBoss(this.boss)
@@ -310,6 +395,14 @@ export class FoldGame {
     }
     this.setPhase(exit === 'boss' ? 'boss' : 'intro')
     this.events.emit('pageIntro', id)
+    if (rush) {
+      const r = this.rush
+      r.time = 0
+      r.running = true
+      r.done = false
+      r.attempts++
+      this.events.emit('rushStart', this.book, r.par, r.attempts)
+    }
   }
 
   /** A wave's spawns in time order, plus the perfect-streak extras (page load only: allocates). */
@@ -350,14 +443,15 @@ export class FoldGame {
     clearLesson(this.lesson)
     this.defeated = defeat
     this.kindSlowmo = 0
-    if (defeat) {
+    this.rush.running = false
+    if (defeat && !this.rushing) {
       this.crumpledFrom = this.phase
       noteCrumple(this.kind, this.book, this.pageId)
       // A continue picks up with the kinder pace straight away.
       this.setDifficulty(difficultyFor(this.kind, this.book, this.pageId, this.page.exit === 'boss'))
     }
     this.events.emit('crumple', this.enemiesLeft(), defeat ? 1 : 0, this.page.exit === 'boss' ? 1 : 0)
-    this.setPhase('crumple', defeat ? ALMOST.autoRetry : CRUMPLE_TIME)
+    this.setPhase('crumple', defeat ? (this.rushing ? RUSH.autoRetry : ALMOST.autoRetry) : CRUMPLE_TIME)
   }
 
   /** How far from a clear: enemies alive plus those still to come (the dragon: weak points left). */
@@ -384,7 +478,8 @@ export class FoldGame {
    */
   tryAgain(): boolean {
     if (!this.canTryAgain()) return false
-    if (this.continuesLeft <= 0) {
+    // A rush is a time attack: the retry is always a fresh dragon and a fresh clock.
+    if (this.continuesLeft <= 0 || this.rushing) {
       this.dropFresh()
       return true
     }
@@ -448,6 +543,9 @@ export class FoldGame {
     }
     const playing = this.phase === 'play' || this.phase === 'boss' || this.phase === 'intro' || this.phase === 'finale'
     if (playing && !atShelf) this.runTime += realDt
+    // The rush clock: real time on the dragon's page, hit-stop included, the shelf and pauses not.
+    if (this.rush.running && this.phase === 'boss' && !atShelf) this.rush.time += realDt
+    this.secrets.clock += realDt
 
     // Hit-stop freezes the world *completely* (GDD §5) — folds included.
     if (this.hitStop > 0) {
@@ -522,6 +620,9 @@ export class FoldGame {
           this.events.emit('victory')
         }
         break
+      case 'rushOver':
+        this.updateHero(simDt)
+        break
       case 'victory':
         this.updateHero(simDt)
         // After the ribbon has had its moment, the camera turns to the shelf by itself.
@@ -541,6 +642,7 @@ export class FoldGame {
    * itself still follows the finger in real time). Once per column.
    */
   private updateKindSlowmo(realDt: number): void {
+    if (this.rushing) return
     if (this.kindSlowmo > 0) {
       this.kindSlowmo -= realDt
       return
@@ -644,6 +746,11 @@ export class FoldGame {
     }
     this.events.emit('foldSnap', i, launched, 0, f.cx, f.cz)
     this.lessonEvent('snap', i)
+    if (noteSecretSnap(this.secrets, f.def.id)) {
+      const d = this.secrets.def!
+      // The boat sets sail down the ravine; the double fling bursts over the battlement.
+      this.discover(d, d.trigger === 'pair' ? 0 : f.cx, d.trigger === 'pair' ? -5.2 : f.cz)
+    }
   }
 
   private onFoldStamped(i: number): void {
@@ -771,8 +878,11 @@ export class FoldGame {
 
   /** A tap on the page: stamp whatever raised structure is under it. */
   tap(x: number, z: number): boolean {
-    if (!this.acceptsInput()) return false
+    // The frog and the crane can be tapped once they are folded (their secrets), after the page stops taking input.
+    if (!this.acceptsInput()) return this.finaleTap(x, z)
     this.touched()
+    // A secret tap never eats the tap: whatever else it hits still happens.
+    this.secretTap(x, z)
     let best = -1
     let bestD = Infinity
     for (let i = 0; i < this.folds.length; i++) {
@@ -795,6 +905,94 @@ export class FoldGame {
     if (this.fireBallista(x, z)) return true
     this.events.emit('tap', 0, 0, 0, x, z)
     return false
+  }
+
+  // ─── Page secrets (roadmap #15) ──────────────────────────────────────────
+
+  /** Can the page's secret go off now (its `when`)? */
+  private secretLive(d: SecretDef): boolean {
+    if (this.rushing) return false
+    const p = this.phase
+    if (d.when === 'finale') return p === 'finale' || p === 'victory'
+    if (d.when === 'asleep') {
+      const b = this.boss.phase
+      return p === 'boss' && (b === 'dormant' || b === 'rumble' || b === 'unfold')
+    }
+    return p === 'intro' || p === 'play' || p === 'cleared'
+  }
+
+  private secretTap(x: number, z: number): void {
+    const s = this.secrets
+    const d = s.def
+    if (!d || d.trigger !== 'taps' || !this.secretLive(d)) return
+    if (countSecretTap(s, x, z)) this.discover(d, s.spotX, s.spotZ)
+  }
+
+  /** Taps once the page stops taking input: only the finale's folded frog or crane listens. */
+  private finaleTap(x: number, z: number): boolean {
+    const d = this.secrets.def
+    if (this.paused || this.shelf.open || !d || d.when !== 'finale' || !this.secretLive(d)) return false
+    this.idle = 0
+    this.secretTap(x, z)
+    return false
+  }
+
+  /**
+   * A secret went off. The first time ever it pays `SECRET.bonus` (kept out
+   * of the page's stars); every time it plays its little show (`secret`).
+   */
+  private discover(d: SecretDef, x: number, z: number): void {
+    const fresh = markFound(this.secrets, d.id)
+    if (fresh) {
+      this.award(SECRET.bonus, x, z, 1)
+      this.secretPoints += SECRET.bonus
+    }
+    // Home: the hero waves back.
+    if (d.id === 'wave') {
+      this.hero.mood = 'cheer'
+      this.hero.moodTimer = 2.4
+    }
+    this.events.emit('secret', secretCode(d.id), fresh ? 1 : 0, 0, x, z)
+  }
+
+  /**
+   * The desk lamp (the desk's secret, on any page): night mode on or off.
+   * The first tap ever finds the secret. Returns the new state.
+   */
+  tapLamp(): boolean {
+    if (this.paused) return this.secrets.night
+    this.idle = 0
+    const s = this.secrets
+    s.night = !s.night
+    s.rev++
+    this.events.emit('night', s.night ? 1 : 0)
+    const d = secretById('lamp')
+    if (d) {
+      const fresh = markFound(s, 'lamp')
+      if (fresh) {
+        this.award(SECRET.bonus, DESK_LAMP.x, DESK_LAMP.z, 1)
+        this.secretPoints += SECRET.bonus
+      }
+      this.events.emit('secret', secretCode('lamp'), fresh ? 1 : 0, 0, DESK_LAMP.x, DESK_LAMP.z)
+    }
+    return s.night
+  }
+
+  /** Night mode as saved (the host, at boot and when the save changes). */
+  setNight(on: boolean): void {
+    if (this.secrets.night === on) return
+    this.secrets.night = on
+    this.secrets.rev++
+  }
+
+  /** Secrets found per the save (boot, a late cloud hydrate): added to what this session found. */
+  setSecretsFound(ids: readonly string[]): void {
+    for (const id of readSecretList(ids)) markFound(this.secrets, id as SecretId)
+  }
+
+  /** Ids found so far, in `SECRETS` order (allocates: events only). */
+  secretsFound(): SecretId[] {
+    return readSecretList(Object.keys(this.secrets.found))
   }
 
   /** Open ballista with bolts left, nearest to `x` (the tapped side), or -1. */
@@ -1086,6 +1284,8 @@ export class FoldGame {
     }
     this.stats.shotKills += n
     this.events.emit('impact', -1, 5, n, x, z)
+    const sd = this.secrets.def
+    if (sd && sd.trigger === 'sling' && this.secretLive(sd) && slingSecretHit(this.secrets, x, z)) this.discover(sd, x, z)
     // The dragon can be pelted too.
     const b = this.boss
     if (b.exposed >= 0 && b.phase === 'exposed') {
@@ -1109,7 +1309,7 @@ export class FoldGame {
         b.slingHits = 0
         this.exposeWeakPoint()
       } else if (choked) {
-        this.setBossPhase('idle', this.rng.range(BOSS.idleMin, BOSS.idleMax) * this.bossPace())
+        this.setBossPhase('idle', this.idleBeat())
       }
     }
   }
@@ -1286,7 +1486,9 @@ export class FoldGame {
    * continue was used. See `stars.ts`.
    */
   private ratePage(): Stars {
-    const stars = starsFor(this.hitsThisPage, this.score - this.pageStartScore, this.page.par, this.continuedThisPage)
+    // A secret's bonus is a gift, not play: it never lifts a page's rating.
+    const gathered = this.score - this.pageStartScore - this.secretPoints
+    const stars = starsFor(this.hitsThisPage, gathered, this.page.par, this.continuedThisPage)
     this.pageStars = stars
     this.stats.stars += stars
     return stars
@@ -1843,6 +2045,8 @@ export class FoldGame {
   // ─── Boss ────────────────────────────────────────────────────────────────
 
   private setBossPhase(p: BossPhase, timer: number): void {
+    // The last weak point is broken: the rush clock stops as the dragon folds down.
+    if (p === 'collapse') this.rush.running = false
     const b = this.boss
     b.phase = p
     b.timer = timer
@@ -1858,22 +2062,22 @@ export class FoldGame {
     b.timer -= dt
     switch (b.phase) {
       case 'dormant':
-        if (b.phaseTime > this.page.introDelay + 0.9) this.setBossPhase('rumble', BOSS.rumble)
+        if (b.phaseTime > this.page.introDelay + 0.9) this.setBossPhase('rumble', bossTiming(b, 'rumble'))
         break
       case 'rumble':
-        if (b.timer <= 0) this.setBossPhase('unfold', BOSS.unfold)
+        if (b.timer <= 0) this.setBossPhase('unfold', bossTiming(b, 'unfold'))
         break
       case 'unfold':
-        if (b.timer <= 0) this.setBossPhase('roar', BOSS.roar)
+        if (b.timer <= 0) this.setBossPhase('roar', bossTiming(b, 'roar'))
         break
       case 'roar':
-        if (b.timer <= 0) this.setBossPhase('idle', this.rng.range(BOSS.idleMin, BOSS.idleMax))
+        if (b.timer <= 0) this.setBossPhase('idle', this.rng.range(bossTiming(b, 'idleMin'), bossTiming(b, 'idleMax')))
         break
       case 'idle':
         if (b.timer <= 0) {
           if (b.attacks >= BOSS.attacksPerExposure) this.exposeWeakPoint()
           else if (b.attacks % 2 === 0) this.setBossPhase('breathCharge', this.breathCharge())
-          else this.setBossPhase('stomp', BOSS.stomp)
+          else this.setBossPhase('stomp', bossTiming(b, 'stomp'))
         }
         break
       case 'breathCharge': {
@@ -1884,11 +2088,11 @@ export class FoldGame {
           h.mood = 'cower'
           h.moodTimer = 0.6
         }
-        if (b.timer <= 0) this.setBossPhase('breath', BOSS.breath)
+        if (b.timer <= 0) this.setBossPhase('breath', bossTiming(b, 'breath'))
         break
       }
       case 'breath':
-        if (!this.bossActed && b.phaseTime >= 0.35) {
+        if (!this.bossActed && b.phaseTime >= 0.35 * b.timing) {
           this.bossActed = true
           this.events.emit('bossBreath', 0, 0, 0, b.aimX, b.aimZ)
           const blocker = this.barrierCrossing(0, -2.6, b.aimX, b.aimZ)
@@ -1903,11 +2107,11 @@ export class FoldGame {
         }
         if (b.timer <= 0) {
           b.attacks++
-          this.setBossPhase('idle', this.rng.range(BOSS.idleMin, BOSS.idleMax) * this.bossPace())
+          this.setBossPhase('idle', this.idleBeat())
         }
         break
       case 'stomp':
-        if (!this.bossActed && b.phaseTime >= 0.55) {
+        if (!this.bossActed && b.phaseTime >= 0.55 * b.timing) {
           this.bossActed = true
           const side = this.rng.next() < 0.5 ? -1 : 1
           this.events.emit('bossStomp', 0, 0, 0, side * 1.6, -1.6)
@@ -1930,7 +2134,7 @@ export class FoldGame {
         }
         if (b.timer <= 0) {
           b.attacks++
-          this.setBossPhase('idle', this.rng.range(BOSS.idleMin, BOSS.idleMax) * this.bossPace())
+          this.setBossPhase('idle', this.idleBeat())
         }
         break
       case 'exposed':
@@ -1954,6 +2158,10 @@ export class FoldGame {
           b.collapse = 1
           this.setBossPhase('flat', 0)
           this.pagesCleared = Math.max(this.pagesCleared, this.pageId)
+          if (this.rushing) {
+            this.finishRush()
+            break
+          }
           this.award(SCORE.boss, 0, -3, 1)
           if (this.hitsThisPage === 0) this.award(SCORE.perfectPage, 0, 0, 1)
           const stars = this.ratePage()
@@ -1972,8 +2180,36 @@ export class FoldGame {
     return (1 - brokenCount(this.boss) * 0.12) * (this.page.bossPace ?? 1)
   }
 
+  /** An idle beat between attacks: the paced range, quickened by lost limbs. */
+  private idleBeat(): number {
+    const b = this.boss
+    return this.rng.range(bossTiming(b, 'idleMin'), bossTiming(b, 'idleMax')) * this.bossPace()
+  }
+
   private breathCharge(): number {
-    return BOSS.breathCharge * (1 - brokenCount(this.boss) * 0.08) * (this.page.bossPace ?? 1)
+    return bossTiming(this.boss, 'breathCharge') * (1 - brokenCount(this.boss) * 0.08) * (this.page.bossPace ?? 1)
+  }
+
+  /**
+   * The rush dragon is folded flat: the clock is final. No boss points, no
+   * stars, no page clear — the host compares the time with the par and the
+   * saved best (`rushDone`).
+   */
+  private finishRush(): void {
+    const r = this.rush
+    r.running = false
+    r.done = true
+    this.hero.mood = 'cheer'
+    this.hero.moodTimer = 2.5
+    this.setPhase('rushOver')
+    this.events.emit('rushDone', this.book, r.time, r.par)
+  }
+
+  /** The rush result card's "again": a fresh dragon and a fresh clock. */
+  restartRush(): boolean {
+    if (!this.rushing) return false
+    this.startRush(this.book)
+    return true
   }
 
   private exposeWeakPoint(): void {
@@ -2082,6 +2318,8 @@ export class FoldGame {
         kind = 'tap'
         break
     }
+    // Hold to fold (roadmap #14): show the press and hold the hint names, not a swipe.
+    if (this.holdToFold && HOLD_DEMO_LESSONS.includes(id) && kind !== 'tap') kind = 'hold'
     startDemo(l, kind, on, target, this.reducedMotion, tx, tz)
   }
 
@@ -2680,7 +2918,7 @@ export class FoldGame {
     const s = this.shelf
     if (!s.available || s.open || this.paused) return false
     const p = this.phase
-    return p === 'intro' || p === 'play' || p === 'boss' || p === 'cleared' || p === 'peel' || p === 'victory'
+    return p === 'intro' || p === 'play' || p === 'boss' || p === 'cleared' || p === 'peel' || p === 'victory' || p === 'rushOver'
   }
 
   /**
@@ -2695,7 +2933,8 @@ export class FoldGame {
     s.open = true
     s.reason = reason
     s.autoShown = true
-    s.finished = this.phase === 'victory'
+    // After a win — or in a rush, which isn't a story run — no book "continues": each starts on page 1.
+    s.finished = this.phase === 'victory' || this.rushing
     refreshShelf(s, this.book)
     s.selected = -1
     if (select >= 0 && s.slots[select]) {
@@ -2755,6 +2994,12 @@ export class FoldGame {
     else if (!this.learned.shelf) {
       this.learned.shelf = true
       this.events.emit('lesson', lessonCode('shelf'), 0)
+    }
+    if (it.kind === 'rush') {
+      // The dragon figurine: straight into its book's Dragon Rush (no save involved).
+      this.closeShelf()
+      this.startRun({ mode: 'dragonRush', book: it.book as BookId })
+      return
     }
     const cont = it.state === 'current'
     this.closeShelf()

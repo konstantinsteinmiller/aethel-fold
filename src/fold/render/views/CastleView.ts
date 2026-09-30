@@ -15,6 +15,7 @@
 import { Group, Mesh, Vector3, type Scene } from 'three'
 import type { FoldGame } from '../../logic/game'
 import type { TearState } from '../../logic/types'
+import { bossClock } from '../../logic/boss'
 import { clamp01, easeInOutCubic } from '../../logic/math'
 import { PaperBuilder, type Col } from '../paperGeometry'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
@@ -300,10 +301,12 @@ export class CastleView {
       t.gear.set(0, 0, 0, 0, 0)
     }
     const b = game.boss
-    const shake = b.phase === 'rumble' ? 0.05 + (b.phaseTime / 2.6) * 0.07 : b.phase === 'unfold' ? 0.04 : 0
+    // Authored seconds: a faster rush dragon (roadmap #16) plays the same unfolding, faster.
+    const bt = bossClock(b)
+    const shake = b.phase === 'rumble' ? 0.05 + (bt / 2.6) * 0.07 : b.phase === 'unfold' ? 0.04 : 0
     this.group.position.set((Math.random() - 0.5) * shake, 0, (Math.random() - 0.5) * shake * 0.5)
     let unfold = 0
-    if (b.phase === 'unfold') unfold = clamp01(b.phaseTime / 3.0)
+    if (b.phase === 'unfold') unfold = clamp01(bt / 3.0)
     else if (b.phase !== 'dormant' && b.phase !== 'rumble') unfold = 1
     const all = [...this.pieces]
     for (const t of this.tearables.values()) all.push(...t.halves)
@@ -313,12 +316,12 @@ export class CastleView {
     })
     // Gears glowing through the seams.
     const seamPts = [[-1.3, 2.2, -5.5], [1.3, 2.2, -5.5], [0, 2.6, -5.5], [-2.6, 1.2, -4.4], [2.6, 1.2, -4.4], [-3.45, 1.4, -4.3], [3.45, 1.4, -4.3]]
-    const glow = b.phase === 'rumble' ? clamp01(b.phaseTime / 1.6) : b.phase === 'unfold' ? 1 - unfold * 0.8 : 0
+    const glow = b.phase === 'rumble' ? clamp01(bt / 1.6) : b.phase === 'unfold' ? 1 - unfold * 0.8 : 0
     this.seamGears.forEach((g, i) => {
       const p = seamPts[i]!
       g.set(p[0]!, p[1]!, p[2]!, 0.9 + Math.sin(time * 6 + i) * 0.15, glow * (0.7 + 0.3 * Math.sin(time * 9 + i)), time * (i % 2 ? 2.5 : -2.5))
     })
-    const core = b.phase === 'rumble' ? clamp01(b.phaseTime / 2.6) * 0.8 : b.phase === 'unfold' ? 1 : b.phase === 'roar' ? 1 - clamp01(b.phaseTime / 1.2) : 0
+    const core = b.phase === 'rumble' ? clamp01(bt / 2.6) * 0.8 : b.phase === 'unfold' ? 1 : b.phase === 'roar' ? 1 - clamp01(bt / 1.2) : 0
     this.coreGear.set(0, 1.4 + unfold * 0.8, -4.6, 2.6 + unfold * 2.2, core, time * 1.8)
     void dt
   }

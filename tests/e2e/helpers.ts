@@ -25,7 +25,14 @@ export interface FoldState {
     slots: string[]
     /** Camera blend toward the shelf pose, 0…1. */
     camera: number
+    /** Dragon Rush figurines, one per book: 'open' once the book is won, else 'hidden'. */
+    rush: string[]
   }
+  /** 'story' or 'dragonRush' (roadmap #16). */
+  mode: string
+  rush: { time: number; par: number; done: boolean; attempts: number }
+  /** Page secrets (roadmap #15): ids found, night mode, this page's secret. */
+  secrets: { found: string[]; night: boolean; page: string | null }
 }
 
 declare global {
@@ -38,6 +45,9 @@ declare global {
       screenOf(x: number, z: number, y?: number): { x: number; y: number }
       shelfScreen(slot: number): { x: number; y: number }
       toggleShelf(): boolean
+      startRush(book: number): void
+      lampScreen(): { x: number; y: number }
+      secretScreen(): { x: number; y: number }
       boot(): { boot_ms: number; first_input_ms: number; precompile_ms: number; precompile_parallel: boolean; stages: Record<number, number> }
       game: any
       engine: any

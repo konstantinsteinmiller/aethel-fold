@@ -48,7 +48,12 @@ export const createCompositeMaterial = (): ShaderMaterial =>
       uFlashColor: { value: new Color(HEX.danger) },
       uWhite: { value: 0 },
       uDesat: { value: 0 },
-      uFocus: { value: 0 }
+      uFocus: { value: 0 },
+      // Night mode (roadmap #15): 0…1 eased by the view, the pool centred on the page.
+      uNight: { value: 0 },
+      uNightTint: { value: new Color(HEX.night) },
+      uNightLamp: { value: new Color(HEX.nightLamp) },
+      uNightCentre: { value: new Vector2(0.5, 0.5) }
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -81,6 +86,10 @@ export const createCompositeMaterial = (): ShaderMaterial =>
       uniform float uWhite;
       uniform float uDesat;
       uniform float uFocus;
+      uniform float uNight;
+      uniform vec3 uNightTint;
+      uniform vec3 uNightLamp;
+      uniform vec2 uNightCentre;
       varying vec2 vUv;
 
       float linDepth(vec2 uv) {
@@ -219,6 +228,13 @@ export const createCompositeMaterial = (): ShaderMaterial =>
         vec2 q = uv - 0.5;
         float vig = smoothstep(0.85, 0.2, length(q * vec2(1.0, 0.85)));
         col *= mix(1.0 - uVignette, 1.0, vig);
+
+        // Night mode: the room falls to a periwinkle dusk, the lamp keeps a warm pool on the page.
+        if (uNight > 0.0) {
+          vec2 dn = (uv - uNightCentre) * uRes / min(uRes.x, uRes.y);
+          float pool = smoothstep(0.95, 0.22, length(dn * vec2(1.0, 0.8)));
+          col = mix(col, col * mix(uNightTint, uNightLamp, pool), uNight);
+        }
 
         // Hit flash from the edges inward.
         float edgeMask = smoothstep(0.25, 0.75, length(q) * 1.4);

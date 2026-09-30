@@ -147,8 +147,16 @@ export class FinaleView {
     this.group.userData.perfTag = 'fold.finale'
   }
 
+  /** The finale's secret (roadmap #15): the frog takes a big spinning hop, the crane a loop. */
+  trick(): void {
+    this.trickK = 1
+  }
+
+  private trickK = 0
+
   update(game: FoldGame, time: number, dt: number, highlight: boolean): void {
     this.popped = false
+    this.trickK = Math.max(0, this.trickK - dt * 1.25)
     const f = game.folds.find((o) => o.def.kind === 'frog')
     const topPivot = this.rightHalf.userData.topPivot as Group
     if (game.phase !== 'finale' && game.phase !== 'victory') {
@@ -215,12 +223,24 @@ export class FinaleView {
       this.frog.scale.set(base * 1.4, base * 1.4 * (1 + beat * 0.1 * rise), base * 1.4)
       // Tipped back toward the lens so its wings read from the steep camera.
       this.frog.rotation.set(0.9, Math.sin(time * 0.6) * 0.35, Math.sin(time * 0.9) * 0.1 * rise)
+      if (this.trickK > 0) {
+        // A loop-the-loop with fast wingbeats.
+        const k = 1 - this.trickK
+        this.frog.position.y += Math.sin(k * Math.PI) * 1.4
+        this.frog.rotation.x += k * Math.PI * 2
+        this.frog.scale.y *= 1 + Math.sin(time * 30) * 0.2 * this.trickK
+      }
       return
     }
     this.frog.position.set(0, hopY, 0.6)
     this.frog.scale.set(base * (1 + (hopY > 0 ? -0.08 : 0.06)), base * (1 + (hopY > 0 ? 0.12 : -0.08)), base)
     this.frog.rotation.y = Math.sin(time * 0.8) * 0.25
-    void dt
+    if (this.trickK > 0) {
+      // A big spinning hop.
+      const k = 1 - this.trickK
+      this.frog.position.y += Math.sin(k * Math.PI) * 2.2
+      this.frog.rotation.y += k * Math.PI * 2
+    }
   }
 
   dispose(): void {

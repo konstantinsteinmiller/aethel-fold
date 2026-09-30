@@ -17,6 +17,10 @@ export const HEX = {
   lampWarm: '#ffc774',
   shadow: '#6c6aa8',          // periwinkle-violet: shadows are never black
   shadowDeep: '#4a4078',
+  // Night mode (the desk lamp's secret, roadmap #15): the room falls to a
+  // periwinkle dusk (a multiply, never black), the lamp keeps a warm pool.
+  night: '#6a6aa6',
+  nightLamp: '#fff0d2',
 
   // Paper
   parchment: '#f4e7c9',

@@ -7,7 +7,7 @@ import { ALL_LESSONS, ff, state, waitForGame } from './helpers'
  * fake whose "cloud" lives in the test process, so it survives reloads and
  * can be slow or flaky on purpose.
  */
-const CG = 'http://localhost:2051/'
+const CG = `http://localhost:${Number(process.env.E2E_CG_PORT) || 2051}/`
 
 interface Cloud {
   store: Record<string, string>

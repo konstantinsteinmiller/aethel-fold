@@ -13,6 +13,7 @@
 import { Group, Mesh, Vector3, type BufferGeometry, type Scene } from 'three'
 import type { FoldGame } from '../../logic/game'
 import type { BossLimb } from '../../logic/types'
+import { bossClock } from '../../logic/boss'
 import { clamp01, easeOutBack } from '../../logic/math'
 import { PaperBuilder, shade, type Col } from '../paperGeometry'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
@@ -293,6 +294,8 @@ export class DragonView {
 
   update(game: FoldGame, time: number, dt: number): void {
     const b = game.boss
+    // Authored seconds: a faster rush dragon (roadmap #16) plays the same moves, faster.
+    const bt = bossClock(b)
     const ph = b.phase
     if (ph === 'dormant' || ph === 'rumble' || ph === 'flat') {
       this.group.visible = false
@@ -310,7 +313,7 @@ export class DragonView {
 
     // Emergence during the unfold.
     let emerge = 1
-    if (ph === 'unfold') emerge = clamp01((b.phaseTime - 1.2) / 2.0)
+    if (ph === 'unfold') emerge = clamp01((bt - 1.2) / 2.0)
     const e = easeOutBack(emerge, 1.4)
     this.rig.scale.set(Math.max(0.01, e), Math.max(0.01, e), Math.max(0.01, e))
 
@@ -333,11 +336,11 @@ export class DragonView {
     const breathe = Math.sin(time * 2.2) * 0.06
     let rear = 0
     let lift = 0
-    if (ph === 'breathCharge') rear = clamp01(b.phaseTime / 0.6)
-    else if (ph === 'breath') rear = 1 - clamp01(b.phaseTime / 0.25)
-    else if (ph === 'roar') rear = Math.sin(clamp01(b.phaseTime / 1.4) * Math.PI) * 0.9
+    if (ph === 'breathCharge') rear = clamp01(bt / 0.6)
+    else if (ph === 'breath') rear = 1 - clamp01(bt / 0.25)
+    else if (ph === 'roar') rear = Math.sin(clamp01(bt / 1.4) * Math.PI) * 0.9
     if (ph === 'stomp') {
-      const k = b.phaseTime
+      const k = bt
       lift = k < 0.55 ? Math.sin((k / 0.55) * Math.PI / 2) * 0.7 : Math.max(0, 0.7 - (k - 0.55) * 7)
     }
     const kneel = brokenLegs * 0.35
@@ -359,7 +362,7 @@ export class DragonView {
     const headPitch = rear * -0.7 + (ph === 'breath' ? 0.55 : 0) + neckDown * 0.6
     this.head.rotation.set(headPitch, look * 0.8, Math.sin(time * 1.4) * 0.05)
     let jawOpen = 0.08 + Math.max(0, Math.sin(time * 1.3)) * 0.05
-    if (ph === 'breathCharge') jawOpen = 0.15 + clamp01(b.phaseTime / 1.8) * 0.5
+    if (ph === 'breathCharge') jawOpen = 0.15 + clamp01(bt / 1.8) * 0.5
     if (ph === 'breath') jawOpen = 0.85
     if (ph === 'roar') jawOpen = 0.9
     if (ph === 'hurt') jawOpen = 0.6
@@ -372,7 +375,7 @@ export class DragonView {
     this.tmpA.set(0, 0, 0.95).applyEuler(this.head.rotation).add(this.head.position)
     this.rig.localToWorld(this.mouth.copy(this.tmpA))
     this.mouthDir.set(game.boss.aimX - this.mouth.x, -this.mouth.y, game.boss.aimZ - this.mouth.z).normalize()
-    const mouthGlow = ph === 'breathCharge' ? clamp01(b.phaseTime / 1.8) : ph === 'breath' ? 1 : 0
+    const mouthGlow = ph === 'breathCharge' ? clamp01(bt / 1.8) : ph === 'breath' ? 1 : 0
     this.mouthGlow.set(this.mouth.x, this.mouth.y, this.mouth.z, 0.6 + mouthGlow * 2.2, mouthGlow, 0)
 
     // Tail sway.

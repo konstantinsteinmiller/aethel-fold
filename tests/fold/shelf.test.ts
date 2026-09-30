@@ -69,14 +69,17 @@ describe('bookshelf rules (pure)', () => {
   })
 
   it('builds one slot per book plus the coming book, with each book\'s stars', () => {
-    const slots = buildSlots(progress([1, 0], [6, 1], [stars(3, 2, 1, 0, 0), stars(1, 0, 0, 0, 0)]), 1, false)
+    const all = buildSlots(progress([1, 0], [6, 1], [stars(3, 2, 1, 0, 0), stars(1, 0, 0, 0, 0)]), 1, false)
+    // After the books: one Dragon Rush figurine per book, standing once that book is won (roadmap #16).
+    expect(all.slice(3).map((s) => [s.kind, s.book, s.state])).toEqual([['rush', 1, 'open'], ['rush', 2, 'hidden']])
+    const slots = all.slice(0, 3)
     expect(slots.map((s) => s.state)).toEqual(['current', 'open', 'coming'])
     expect(slots.map((s) => [s.stars, s.max])).toEqual([[6, 15], [1, 15], [0, 0]])
     expect(slots[0]!.pages).toEqual([3, 2, 1, 0, 0])
     expect(slots[0]!.won).toBe(true)
-    expect(buildSlots(progress([0, 0]), 1, false).map((s) => s.state)).toEqual(['current', 'locked', 'coming'])
+    expect(buildSlots(progress([0, 0]), 1, false).map((s) => s.state)).toEqual(['current', 'locked', 'coming', 'hidden', 'hidden'])
     // A won book isn't "continued": every book starts fresh.
-    expect(buildSlots(progress([1, 0]), 1, true).map((s) => s.state)).toEqual(['open', 'open', 'coming'])
+    expect(buildSlots(progress([1, 0]), 1, true).map((s) => s.state)).toEqual(['open', 'open', 'coming', 'open', 'hidden'])
   })
 
   it('highlights the current book mid-run, and the newly unlocked one after a win', () => {
@@ -201,7 +204,7 @@ describe('bookshelf in the game', () => {
     expect(g.shelf.finished).toBe(true)
     expect(g.shelf.selected).toBe(-1)
     expect(g.shelf.highlight).toBe(1)
-    expect(g.shelf.slots.map((s) => s.state)).toEqual(['open', 'open', 'coming'])
+    expect(g.shelf.slots.map((s) => s.state)).toEqual(['open', 'open', 'coming', 'open', 'hidden'])
     // Closing it doesn't make it come back by itself.
     g.closeShelf()
     step(g, SHELF.afterVictory + 1)
@@ -213,7 +216,7 @@ describe('bookshelf in the game', () => {
     g.openShelf('button')
     g.startRun(1, 0, 2)
     expect(g.shelf.open).toBe(false)
-    expect(g.shelf.slots.map((s) => s.state)).toEqual(['open', 'current', 'coming'])
+    expect(g.shelf.slots.map((s) => s.state)).toEqual(['open', 'current', 'coming', 'open', 'hidden'])
     expect(g.shelf.highlight).toBe(1)
   })
 })

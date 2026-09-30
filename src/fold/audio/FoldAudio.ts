@@ -574,6 +574,23 @@ export class FoldAudio {
       case 'tap':
         this.tap()
         break
+      case 'secret':
+        // A found secret: a bright little glissando, a sparkle on top the first time (roadmap #15).
+        this.chime(true)
+        if (e.b) for (let i = 0; i < 4; i++) glock(this.sfx, this.now + 0.3 + i * 0.05, 91 + i * 2, 0.35, 0.6)
+        break
+      case 'night':
+        // The lamp's switch.
+        this.tap()
+        this.thunk()
+        break
+      case 'rushStart':
+        this.whoosh(0.5, 2200)
+        break
+      case 'rushDone':
+        this.victoryChord()
+        this.music.play('victory', 3.2)
+        break
       case 'bossHit':
         this.thunk()
         if (e.c) this.roar()

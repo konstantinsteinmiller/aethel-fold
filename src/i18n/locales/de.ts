@@ -181,7 +181,8 @@ export default {
       'name2': 'Buch 2: Die Heimatburg',
       'blurb1': 'Marschiere gegen die feindliche Burg.',
       'blurb2': 'Verteidige deine eigene Burg.',
-      'locked': 'Gewinne Buch 1, um es freizuschalten.'
+      'locked': 'Gewinne Buch 1, um es freizuschalten.',
+      'secrets': 'Geheimnisse gefunden: {n}/{total}'
     },
     'fx': {
       'snap': 'SCHNAPP!',
@@ -202,7 +203,18 @@ export default {
       'flap': 'FLATTER!',
       'almostTitle': 'FAST!',
       'almost': 'Nur noch {n} Soldat bis zum Sieg! | Nur noch {n} Soldaten bis zum Sieg!',
-      'almostBoss': 'Nur noch {n} Schwachstelle! | Nur noch {n} Schwachstellen!'
+      'almostBoss': 'Nur noch {n} Schwachstelle! | Nur noch {n} Schwachstellen!',
+      'ahoy': 'AHOI!',
+      'doubleFling': 'DOPPELSCHLEUDER!',
+      'splash': 'PLATSCH!',
+      'snore': 'ZZZ …',
+      'hop': 'HÜPF!',
+      'hello': 'HALLO!',
+      'plop': 'PLUMPS!',
+      'whoosh': 'WUSCH!',
+      'crackle': 'KNISTER!',
+      'bonk': 'BONK!',
+      'rush': 'DRACHE BESIEGT!'
     },
     'hint': {
       'swipe': 'Wische entlang des gepunkteten Pfeils, um das Papier zu falten',
@@ -269,7 +281,21 @@ export default {
       'story2': 'Deine Burg steht. Der Kranich fliegt in Frieden heim.',
       'nextBook': 'Buch 2: Die Heimatburg',
       'backToBook1': 'Buch 1 nochmal lesen',
-      'stars': 'Sterne'
+      'stars': 'Sterne',
+      'rush': 'Drachenjagd'
+    },
+    'rush': {
+      'title': 'DRACHENJAGD',
+      'time': 'Zeit',
+      'par': 'Par',
+      'best': 'Bestzeit',
+      'none': '—',
+      'newBest': 'Neue Bestzeit!',
+      'underPar': 'Unter Par!',
+      'overPar': 'Par ist {par}',
+      'again': 'Nochmal jagen',
+      'back': 'Zurück zur Geschichte',
+      'clock': 'Drachenjagd: {time}, Par {par}'
     },
     'a11y': {
       'board': 'Aethel Fold – ein Pop-up-Buch auf einem Schreibtisch',

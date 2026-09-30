@@ -185,7 +185,8 @@ export default {
       'name2': 'Book 2: The Homefront',
       'blurb1': 'March on the enemy castle.',
       'blurb2': 'Defend your own keep.',
-      'locked': 'Win book 1 to unlock.'
+      'locked': 'Win book 1 to unlock.',
+      'secrets': 'Secrets found: {n}/{total}'
     },
     'fx': {
       'snap': 'SNAP!',
@@ -206,7 +207,18 @@ export default {
       'flap': 'FLAP!',
       'almostTitle': 'ALMOST!',
       'almost': '{n} soldier from a clear! | {n} soldiers from a clear!',
-      'almostBoss': '{n} weak point to go! | {n} weak points to go!'
+      'almostBoss': '{n} weak point to go! | {n} weak points to go!',
+      'ahoy': 'AHOY!',
+      'doubleFling': 'DOUBLE FLING!',
+      'splash': 'SPLASH!',
+      'snore': 'ZZZ…',
+      'hop': 'HOP!',
+      'hello': 'HELLO!',
+      'plop': 'PLOP!',
+      'whoosh': 'WHOOSH!',
+      'crackle': 'CRACKLE!',
+      'bonk': 'BONK!',
+      'rush': 'DRAGON DOWN!'
     },
     'hint': {
       'swipe': 'Swipe along the dotted arrow to fold the page',
@@ -273,7 +285,21 @@ export default {
       'story2': 'Your keep stands. The crane flies home in peace.',
       'nextBook': 'Book 2: The Homefront',
       'backToBook1': 'Read book 1 again',
-      'stars': 'Stars'
+      'stars': 'Stars',
+      'rush': 'Dragon Rush'
+    },
+    'rush': {
+      'title': 'DRAGON RUSH',
+      'time': 'Time',
+      'par': 'Par',
+      'best': 'Best',
+      'none': '—',
+      'newBest': 'New best!',
+      'underPar': 'Under par!',
+      'overPar': 'Par is {par}',
+      'again': 'Rush again',
+      'back': 'Back to the story',
+      'clock': 'Dragon Rush: {time}, par {par}'
     },
     'a11y': {
       'board': 'Aethel Fold — a pop-up book on a desk',

@@ -19,6 +19,17 @@
  * itself after a win, or by folding the won book shut) and a book opened
  * there comes back as a `shelfBook` event. The pause menu's bookshelf face
  * stays as the accessible fallback.
+ *
+ * Dragon Rush (roadmap #16): after a book is won, its dragon alone, faster,
+ * against the clock — from the victory card or the dragon figurine on the
+ * shelf. The HUD's score tag becomes the rush clock; the result card compares
+ * the time with the par and the saved best. A rush writes nothing but its best
+ * time: no checkpoint, no stars, no kindness memory. "Back to the story"
+ * reopens the saved page.
+ *
+ * Page secrets (roadmap #15): the game reports each one (`secret`); the first
+ * find of each is saved (`fold_secrets`), night mode (the desk lamp) is a
+ * cosmetic setting.
  */
 import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -40,6 +51,9 @@ import GhostHand from '@/components/fold/GhostHand.vue'
 import CootieCatcherPause from '@/components/fold/CootieCatcherPause.vue'
 import VictoryPanel from '@/components/fold/VictoryPanel.vue'
 import AlmostRetry from '@/components/fold/AlmostRetry.vue'
+import RushClock from '@/components/fold/RushClock.vue'
+import RushResult from '@/components/fold/RushResult.vue'
+import { SECRET_IDS } from '@/fold/logic/secrets'
 import FMuteButton from '@/components/atoms/FMuteButton.vue'
 import FHudButton from '@/components/atoms/FHudButton.vue'
 import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
@@ -48,8 +62,9 @@ import { isGamePaused } from '@/use/useGamePause'
 import { syncGameplayLifecycle } from '@/use/useGameplayLifecycle'
 import {
   addStats, bankScore, bookUnlocked, checkpoint, foldSettings, learnLesson, lessons, pageStars, pagesCleared,
-  pagesCleared2, progressRevision, readKindness, recordStars, recordVictory, recordsFor, resumeBook, resumePage,
-  runCheckpoint, saveKindness, shelfProgress, startNewRun, wins, wins2, type FoldSettings
+  pagesCleared2, progressRevision, readKindness, recordRush, recordSecret, recordStars, recordVictory, recordsFor,
+  resumeBook, resumePage, runCheckpoint, rushBest, rushBestOf, saveKindness, secretsFound, setFoldSetting,
+  shelfProgress, startNewRun, wins, wins2, flushSaveNow, type FoldSettings
 } from '@/use/useFoldProgress'
 import { mobileCheck } from '@/utils/function'
 import { BOOT, bootSnapshot, bootStage, markFirstInput, markGameReady, markInteractive, markPrecompiled } from '@/use/useBoot'
@@ -85,7 +100,16 @@ const hud = reactive({
   /** The desk bookshelf: the zoom button is shown, the camera is out at it, the hand points at the button. */
   shelfButton: false,
   shelfOpen: false,
-  shelfCue: false
+  shelfCue: false,
+  /** Dragon Rush (roadmap #16): a rush is the run; its clock in tenths, par, and the saved best. */
+  rush: false,
+  rushTenths: 0,
+  rushPar: 0,
+  rushBest: 0,
+  /** The result card: this run's time, whether it beat the best before it. */
+  rushDone: false,
+  rushTime: 0,
+  rushNewBest: false
 })
 const pauseOpen = ref(false)
 const nameKey = computed(() => pageDef(hud.book, hud.page).nameKey)
@@ -131,8 +155,11 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       hud.maxHp = g.hero.maxHp
       hud.boss = g.page.exit === 'boss'
       hud.victory = false
-      // Checkpoint: a reload resumes on this page with this score.
-      checkpoint(e.a as PageId, { score: g.pageStartScore, hits: g.runHits, time: g.runTime }, g.pagesCleared, g.book)
+      hud.rush = g.rushing
+      // Checkpoint: a reload resumes on this page with this score. A rush is not the story: it never moves the bookmark.
+      if (!g.rushing) {
+        checkpoint(e.a as PageId, { score: g.pageStartScore, hits: g.runHits, time: g.runTime }, g.pagesCleared, g.book)
+      }
       break
     case 'pageCleared':
       // The stars fold in on the page-turn beat (c = 1…3); the best per page is
@@ -158,8 +185,46 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       break
     case 'shelfBook':
       // Opened from the desk bookshelf: another book starts on page 1 (the current one just carries on).
-      if (e.b === 0) pickBook(e.a as BookId)
+      // From a rush, the story's own book goes back to its saved page.
+      if (g.rushing && e.a === savedBook()) backToStory()
+      else if (e.b === 0) pickBook(e.a as BookId)
       break
+    case 'secret': {
+      // First find ever (b = 1): saved at once. A replay is only the little show.
+      const id = SECRET_IDS[e.a]
+      if (e.b === 1 && id) recordSecret(id)
+      break
+    }
+    case 'night':
+      // The desk lamp: night mode is a cosmetic setting, kept with the others.
+      if (foldSettings.value.night !== (e.a === 1)) {
+        setFoldSetting('night', e.a === 1)
+        // A tap on a lamp is rare and deliberate: keep it even if the tab closes right after.
+        void flushSaveNow()
+      }
+      break
+    case 'rushStart':
+      hud.rush = true
+      hud.rushDone = false
+      hud.victory = false
+      hud.retry = false
+      hud.rushTenths = 0
+      hud.rushPar = e.b
+      hud.rushBest = rushBestOf(e.a as BookId)
+      fx.value?.clearStars()
+      fx.value?.clearAlmost()
+      // The rush's own stats are never banked; the next story run counts from zero.
+      statsBase = zeroBase()
+      break
+    case 'rushDone': {
+      const res = recordRush(e.a as BookId, e.b, e.c)
+      hud.rushTime = res.time
+      hud.rushTenths = Math.round(res.time * 10)
+      hud.rushBest = res.best
+      hud.rushNewBest = res.newBest
+      hud.rushDone = true
+      break
+    }
     case 'victory': {
       bankStats(g)
       hud.book = g.book
@@ -172,9 +237,9 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       break
     }
     case 'crumple':
-      // A defeat (b = 1): remember it for the kind book, and show how close it was.
+      // A defeat (b = 1): remember it for the kind book (never in a rush), and show how close it was.
       if (e.b === 1) {
-        saveKindness(g.kind)
+        if (!g.rushing) saveKindness(g.kind)
         fx.value?.almost(e.a, e.c === 1)
       }
       break
@@ -221,6 +286,10 @@ const onFrame = (g: FoldGame): void => {
     markInteractive()
   }
   if (hud.score !== g.score) hud.score = g.score
+  if (g.rush.running) {
+    const tenths = Math.floor(g.rush.time * 10)
+    if (hud.rushTenths !== tenths) hud.rushTenths = tenths
+  }
   if (hud.hp !== g.hero.hp) hud.hp = g.hero.hp
   const retry = g.phase === 'crumple' && g.defeated && g.phaseTime >= ALMOST.button
   if (hud.retry !== retry) hud.retry = retry
@@ -295,7 +364,10 @@ onMounted(() => {
   if (page === 1) startNewRun(book)
   const eng = markRaw(new FoldEngine(
     c, { onEvent, word, onFrame, caption, onFirstInput: markFirstInput },
-    { learned: learnedMap(), startPage: page, startScore: score, book, kind: readKindness() }
+    {
+      learned: learnedMap(), startPage: page, startScore: score, book, kind: readKindness(),
+      secrets: secretsFound.value, night: foldSettings.value.night
+    }
   ))
   engine.value = eng
   eng.attach()
@@ -326,7 +398,7 @@ onMounted(() => {
 
 watch(locale, () => engine.value?.refreshCaptions())
 // The shelf shows the saved progress (wins unlock books, stars go on the spines).
-watch([wins, wins2, pagesCleared, pagesCleared2, pageStars], () => engine.value?.setShelfProgress(shelfProgress()))
+watch([wins, wins2, pagesCleared, pagesCleared2, pageStars, rushBest], () => engine.value?.setShelfProgress(shelfProgress()))
 
 onBeforeUnmount(() => {
   ro?.disconnect()
@@ -346,6 +418,7 @@ const applySettings = (eng: FoldEngine, s: FoldSettings): void => {
   eng.setHoldToFold(s.holdToFold)
   eng.setSlowMode(s.slowMode)
   eng.setHighlightMode(s.highlightMode)
+  eng.setNight(s.night)
 }
 watch(foldSettings, (s) => {
   const eng = engine.value
@@ -355,7 +428,7 @@ watch(foldSettings, (s) => {
 const paused = computed(() => pauseOpen.value || isGamePaused.value)
 watch(paused, (p) => engine.value?.setPaused(p))
 // Platform "gameplay" signal: live while the player is actually playing.
-const live = computed(() => !paused.value && !hud.victory && !hud.shelfOpen)
+const live = computed(() => !paused.value && !hud.victory && !hud.shelfOpen && !hud.rushDone)
 watch(live, (v) => syncGameplayLifecycle(v), { immediate: true })
 
 const openPause = (): void => {
@@ -386,9 +459,38 @@ const openBook = (book: BookId): void => {
   engine.value?.newRun(book)
 }
 const newGame = (): void => openBook(hud.book)
+
+// ─── Dragon Rush (roadmap #16) ───────────────────────────────────────────────
+
+/** The book the story's bookmark is in. */
+const savedBook = (): BookId => (resumeBook.value === 2 && bookUnlocked(2) ? 2 : 1)
+
+/** A book's Dragon Rush (the victory card's button; the shelf figurine starts it inside the game). */
+const startRush = (book: BookId): void => {
+  pauseOpen.value = false
+  hud.victory = false
+  fx.value?.clearStars()
+  engine.value?.startRush(book)
+}
+const rushAgain = (): void => {
+  hud.rushDone = false
+  engine.value?.restartRush()
+}
+/** Leave the rush: the story reopens on its saved page, exactly as the save has it. */
+const backToStory = (): void => {
+  const eng = engine.value
+  if (!eng) return
+  hud.rushDone = false
+  hud.rush = false
+  pauseOpen.value = false
+  statsBase = zeroBase()
+  const page = resumePage.value
+  eng.jumpTo(page, page > 1 ? runCheckpoint.value?.score ?? 0 : 0, savedBook())
+}
 const playAgain = (): void => openBook(hud.book)
 const pickBook = (book: BookId): void => {
   if (!bookUnlocked(book)) return
+  hud.rushDone = false
   openBook(book)
 }
 
@@ -403,6 +505,8 @@ const onKey = (e: KeyboardEvent): void => {
     openPause()
   } else if (e.key === 'Enter' && hud.victory) {
     playAgain()
+  } else if (e.key === 'Enter' && hud.rushDone) {
+    rushAgain()
   } else if ((e.key === 'Enter' || e.key === ' ') && hud.retry) {
     e.preventDefault()
     tryAgain()
@@ -424,6 +528,8 @@ watch(progressRevision, () => {
   if (!eng) return
   const g = eng.game
   for (const id of LESSON_IDS) if (lessons.value[id]) g.learned[id] = true
+  // Secrets found on another device count here too (a replay never pays twice).
+  eng.setSecretsFound(secretsFound.value)
   const saved = resumePage.value
   const savedBook: BookId = resumeBook.value === 2 && bookUnlocked(2) ? 2 : 1
   const early = g.book === 1 && g.pageId === 1 && g.runTime < 90 && g.pagesCleared === 0
@@ -458,6 +564,20 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       return { x: out.x, y: out.y }
     },
     tryAgain: () => eng.tryAgain(),
+    /** Dragon Rush (roadmap #16) and the page secrets (roadmap #15). */
+    startRush: (book: number) => eng.startRush(book === 2 ? 2 : 1),
+    lampScreen: () => {
+      const out = { x: 0, y: 0, visible: false }
+      eng.lampScreen(out)
+      return { x: out.x, y: out.y }
+    },
+    /** Screen point of this page's tap secret's target, as it appears (tests). */
+    secretScreen: () => {
+      const s = eng.game.secrets
+      const out = { x: 0, y: 0, visible: false }
+      eng.project(s.spotX, 0, s.spotZ, out)
+      return { x: out.x, y: out.y }
+    },
     /** Boot telemetry (roadmap #13): boot_ms, first_input_ms, precompile and stage times. */
     boot: () => bootSnapshot(),
     fastForward: (s: number) => eng.fastForward(s),
@@ -473,6 +593,9 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       enemies: eng.game.aliveCount(),
       enemiesLeft: eng.game.enemiesLeft(),
       difficulty: eng.game.difficulty,
+      mode: eng.game.mode,
+      rush: { time: eng.game.rush.time, par: eng.game.rush.par, done: eng.game.rush.done, attempts: eng.game.rush.attempts },
+      secrets: { found: eng.game.secretsFound(), night: eng.game.secrets.night, page: eng.game.secrets.def?.id ?? null },
       boss: eng.game.boss.phase,
       sling: eng.game.sling ? { x: eng.game.sling.def.x, z: eng.game.sling.def.z, cool: eng.game.sling.cool, shots: eng.game.sling.shots } : null,
       shelf: {
@@ -481,7 +604,8 @@ const publishDebugHandle = (eng: FoldEngine): void => {
         open: eng.game.shelf.open,
         selected: eng.game.shelf.selected,
         highlight: eng.game.shelf.highlight,
-        slots: eng.game.shelf.slots.map((s) => s.state),
+        slots: eng.game.shelf.slots.filter((s) => s.kind === 'book').map((s) => s.state),
+        rush: eng.game.shelf.slots.filter((s) => s.kind === 'rush').map((s) => s.state),
         camera: eng.view.desk.shelfK
       }
     }),
@@ -510,7 +634,8 @@ const pageAria = computed(() => t('fold.a11y.board'))
         PageBadge(:page="hud.page" :total="PAGE_COUNT" :name-key="nameKey" :boss="hud.boss" :book="hud.book")
         HeartsBadge(:hp="hud.hp" :max="hud.maxHp")
       div.hud-centre.flex.flex-col.items-center
-        ScoreBadge(:score="hud.score" :best="best")
+        RushClock(v-if="hud.rush" :tenths="hud.rushTenths" :par="hud.rushPar" :best="hud.rushBest")
+        ScoreBadge(v-else :score="hud.score" :best="best")
         BossMeter(v-if="hud.boss" :total="5" :broken="hud.bossBroken" :exposed="hud.bossExposed")
       div.hud-right
         div.hud-right__row.flex.items-start
@@ -539,6 +664,18 @@ const pageAria = computed(() => t('fold.a11y.board'))
       :new-best="hud.newBest"
       @again="playAgain"
       @book="pickBook"
+      @rush="startRush"
+    )
+
+    RushResult(
+      :open="hud.rushDone && !hud.shelfOpen && !pauseOpen"
+      :book="hud.book"
+      :time="hud.rushTime"
+      :par="hud.rushPar"
+      :best="hud.rushBest"
+      :new-best="hud.rushNewBest"
+      @again="rushAgain"
+      @back="backToStory"
     )
 
     AlmostRetry(:open="hud.retry && !pauseOpen" @retry="tryAgain")

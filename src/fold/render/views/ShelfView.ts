@@ -11,20 +11,30 @@
  * view (`group.visible = false`). Textures repaint only when the shelf's
  * `rev` changes; the per-frame update eases a few numbers.
  *
- * Room to grow: `extras` sits on the top board for later desk objects (a
- * secrets counter, a Dragon Rush entry).
+ * On the top board (`extras`): the Dragon Rush figurines (roadmap #16), one
+ * little folded dragon per won book — tapped like a book, their card shows
+ * the par and the best time — and the secrets counter (roadmap #15), a
+ * standing card with a sparkle and "found/total". Two to four more draws,
+ * still none while the shelf is out of view.
  */
 
 import { BufferGeometry, Group, Mesh, PlaneGeometry, type CanvasTexture } from 'three'
 import { SHELF } from '../../logic/config'
+import { SECRET_IDS, SECRET_TOTAL } from '../../logic/secrets'
 import type { FoldEvent } from '../../logic/events'
 import type { FoldGame } from '../../logic/game'
 import {
-  SHELF_CARD_H, SHELF_CARD_W, shelfCardPose, shelfHalfWidth, slotAnchor, slotX, type ShelfCardPose, type ShelfPoint, type ShelfState
+  SHELF_CARD_H, SHELF_CARD_W, isRushSlot, rushSlotOf, shelfCardPose, shelfHalfWidth, slotAnchor, slotX, type ShelfCardPose,
+  type ShelfPoint, type ShelfState
 } from '../../logic/shelf'
+import { BOOK_COUNT } from '../../logic/pages'
 import { PaperBuilder } from '../paperGeometry'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
-import { SPINE_UV, cardCanvas, paintSpine, paintStarCard, spineCanvas } from '../art/shelfArt'
+import {
+  SPINE_UV, cardCanvas, paintRushCard, paintSecretsCard, paintSpine, paintStarCard, secretsCanvas, spineCanvas
+} from '../art/shelfArt'
+import { rushDragonGeometry } from '../models'
+import type { PaletteKey } from '../palette'
 import { toTexture } from '../art/canvas'
 
 /** One standing book: a box whose faces sample the spine texture (spine art, cover and page swatches). */
@@ -69,6 +79,26 @@ const shelfGeometry = (): BufferGeometry => {
   return b.build()
 }
 
+/** Figurine colours per book: body, wings, plinth (book 3 gets its own when it arrives). */
+const FIGURE: Readonly<Record<number, [PaletteKey, PaletteKey, PaletteKey]>> = {
+  1: ['dragonRed', 'dragonRedDark', 'bookCover'],
+  2: ['dragonBlue', 'dragonBlueDark', 'heroBlue'],
+  3: ['dragonGreen', 'dragonGreenDark', 'forest']
+}
+
+/** The secrets counter card on the top board (shelf units). */
+const SECRETS_W = 1.0
+const SECRETS_H = 0.72
+
+interface Figure {
+  holder: Group
+  mesh: Mesh
+  mat: PaperMaterial
+  /** Eased 0…1 "pulled out" (it hops up and turns to face the player). */
+  pull: number
+  nope: number
+}
+
 interface Book {
   holder: Group
   mesh: Mesh
@@ -88,6 +118,14 @@ export class ShelfView {
   /** Room on the top board for later desk objects (roadmap #15, #16). */
   readonly extras = new Group()
   private readonly books: Book[] = []
+  /** Dragon Rush figurines, one per book of the game (slot `rushSlotOf(book)`). */
+  private readonly figures: Figure[] = []
+  private readonly secretsCard: Mesh
+  private readonly secretsMat: PaperMaterial
+  private readonly secretsTex: CanvasTexture
+  private readonly secretsCtx: CanvasRenderingContext2D
+  /** Found count the counter card was painted with (−1 = never). */
+  private secretsShown = -1
   private readonly body: Mesh
   private readonly bodyMat: PaperMaterial
   private readonly card: Mesh
@@ -131,6 +169,32 @@ export class ShelfView {
       this.books.push({ holder, mesh, mat, tex, ctx, pull: 0, nope: 0 })
     }
 
+    for (let book = 1; book <= BOOK_COUNT; book++) {
+      const [body, dark, plinth] = FIGURE[book] ?? FIGURE[3]!
+      const mat = createPaperMaterial({ vertexColors: true, grain: 0.05, doubleSided: true })
+      const mesh = new Mesh(rushDragonGeometry(body, dark, plinth), mat)
+      mesh.castShadow = true
+      const holder = new Group()
+      holder.position.set(slotX(rushSlotOf(book)), 0, 0.1)
+      holder.rotation.y = 0.35
+      holder.visible = false
+      holder.add(mesh)
+      this.extras.add(holder)
+      this.figures.push({ holder, mesh, mat, pull: 0, nope: 0 })
+    }
+    // The secrets counter: a little standing card, leaning back on its fold.
+    const [sc, sctx] = secretsCanvas()
+    this.secretsCtx = sctx
+    this.secretsTex = toTexture(sc)
+    this.secretsMat = createPaperMaterial({ map: this.secretsTex, grain: 0.04, doubleSided: true })
+    const sg = new PlaneGeometry(SECRETS_W, SECRETS_H)
+    sg.translate(0, SECRETS_H / 2, 0)
+    this.secretsCard = new Mesh(sg, this.secretsMat)
+    this.secretsCard.position.set(SHELF.secretsX, 0, 0.35)
+    this.secretsCard.rotation.set(-0.3, 0.25, 0)
+    this.secretsCard.castShadow = true
+    this.extras.add(this.secretsCard)
+
     const [cc, cctx] = cardCanvas()
     this.cardCtx = cctx
     this.cardTex = toTexture(cc)
@@ -160,7 +224,7 @@ export class ShelfView {
 
   onEvent(e: FoldEvent): void {
     if (e.type === 'shelfSelect' && e.b === 0) {
-      const b = this.books[e.a]
+      const b = isRushSlot(e.a) ? this.figures[e.a - SHELF.slots] : this.books[e.a]
       if (b) b.nope = 1
     }
   }
@@ -194,11 +258,38 @@ export class ShelfView {
       const hl = glow && i === s.highlight ? 1 : 0
       if (b.mat.uniforms.uHighlight.value !== hl) b.mat.uniforms.uHighlight.value = hl
     }
-    // The star card rises out of the pulled-out book.
+    // The rush figurines: standing once their book is won; picked, one hops up and turns to the player.
+    for (let k = 0; k < this.figures.length; k++) {
+      const f = this.figures[k]!
+      const slot = s.slots[SHELF.slots + k]
+      const on = !!slot && slot.state !== 'hidden'
+      if (f.holder.visible !== on) f.holder.visible = on
+      if (!on) continue
+      const want = s.open && s.selected === SHELF.slots + k ? 1 : 0
+      f.pull += (want - f.pull) * ease
+      if (Math.abs(want - f.pull) < 1e-4) f.pull = want
+      f.nope = Math.max(0, f.nope - dt * 2.4)
+      const h = f.holder
+      h.position.y = f.pull * 0.35 + Math.abs(Math.sin(this.time * 9)) * 0.06 * f.pull
+      h.rotation.y = 0.35 - f.pull * 0.35
+      h.rotation.z = Math.sin(this.time * 38) * f.nope * 0.12
+    }
+    // The secrets counter repaints when the count changes (a discovery, a save arriving).
+    let found = 0
+    const have = g.secrets.found
+    for (let i = 0; i < SECRET_IDS.length; i++) if (have[SECRET_IDS[i]!]) found++
+    if (found !== this.secretsShown) {
+      this.secretsShown = found
+      paintSecretsCard(this.secretsCtx, found, SECRET_TOTAL)
+      this.secretsTex.needsUpdate = true
+    }
+    // The star card rises out of the pulled-out book (a rush figurine's card shows its par and best).
     const sel = s.open ? s.selected : -1
     if (sel >= 0 && sel !== this.cardSlot && s.slots[sel]) {
       this.cardSlot = sel
-      paintStarCard(this.cardCtx, s.slots[sel]!)
+      const slot = s.slots[sel]!
+      if (slot.kind === 'rush') paintRushCard(this.cardCtx, slot)
+      else paintStarCard(this.cardCtx, slot)
       this.cardTex.needsUpdate = true
     }
     const wantCard = sel >= 0 ? 1 : 0
@@ -208,25 +299,31 @@ export class ShelfView {
     if (this.card.visible !== on) this.card.visible = on
     if (on) {
       // Portrait phones frame the shelf alone (no room beside the book): the card grows and faces the camera.
-      const c = shelfCardPose(this.cardSlot, this.books[this.cardSlot]!.pull, this.cardK, !s.inView, this.cardPose)
+      const c = shelfCardPose(this.cardSlot, this.pullOf(this.cardSlot), this.cardK, !s.inView, this.cardPose)
       this.card.position.set(c.x, c.y, c.z)
       this.card.rotation.x = c.tilt
       this.card.scale.setScalar(c.scale)
     }
   }
 
-  /** Eased pull of a slot (for picking). */
+  /** Eased pull of a slot (for picking). A rush figurine's card always stands in front of the shelf. */
   pullOf(i: number): number {
-    return this.books[i]?.pull ?? 0
+    return isRushSlot(i) ? 1 : this.books[i]?.pull ?? 0
+  }
+
+  /** Eased hop of a slot as drawn (the spine anchor; a figurine hops up instead of sliding out). */
+  private drawnPull(i: number): number {
+    return isRushSlot(i) ? this.figures[i - SHELF.slots]?.pull ?? 0 : this.books[i]?.pull ?? 0
   }
 
   /** Page-space point on a slot's spine (`up` 0 bottom … 1 top), as currently drawn. */
   anchorOf(i: number, up: number): ShelfPoint {
-    return slotAnchor(i, this.pt, this.pullOf(i), up)
+    return slotAnchor(i, this.pt, this.drawnPull(i), up)
   }
 
+  /** Slots drawn: the books, then the rush figurines. */
   get slots(): number {
-    return this.books.length
+    return this.books.length + this.figures.length
   }
 
   dispose(): void {
@@ -240,5 +337,9 @@ export class ShelfView {
     this.card.geometry.dispose()
     this.cardMat.dispose()
     this.cardTex.dispose()
+    for (const f of this.figures) f.mat.dispose()
+    this.secretsCard.geometry.dispose()
+    this.secretsMat.dispose()
+    this.secretsTex.dispose()
   }
 }

@@ -328,3 +328,75 @@ for (const vp of [{ width: 320, height: 658 }, { width: 390, height: 844 }]) {
     await page.screenshot({ path: `test-results/shelf-books-${vp.width}x${vp.height}.png` })
   })
 }
+
+// Dragon Rush (roadmap #16): the rush clock takes the score's place in the HUD
+// grid, and the result card fits under the HUD strip, both ways on the
+// smallest phone.
+for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }]) {
+  test(`the rush clock and result card fit at ${vp.width}×${vp.height}`, async ({ page }) => {
+    await page.setViewportSize(vp)
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('__seeded')) return
+      sessionStorage.setItem('__seeded', '1')
+      localStorage.setItem('aethel_state', JSON.stringify({ fold_wins: 1, fold_cleared: 6, fold_rush: { b1: 61.2 } }))
+    })
+    await page.goto('/')
+    await waitForGame(page)
+    await page.evaluate(() => window.__fold!.startRush(1))
+    await page.evaluate(() => window.__fold!.fastForward(2))
+    await expect(page.getByTestId('rush-clock')).toBeVisible()
+    await page.waitForTimeout(400)
+    const box = (sel: string) => page.evaluate((s) => {
+      const el = document.querySelector(s)
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      return { x: r.x, y: r.y, w: r.width, h: r.height }
+    }, sel)
+    const overlap = (a: any, b: any) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5
+    const clock = await box('.rush-clock__tag')
+    const badge = await box('.page-badge')
+    const hearts = await box('.hearts')
+    const right = await box('.hud-right')
+    for (const b of [clock, badge, hearts, right]) {
+      expect(b).not.toBeNull()
+      expect(b!.x).toBeGreaterThanOrEqual(0)
+      expect(b!.x + b!.w).toBeLessThanOrEqual(vp.width + 1)
+    }
+    expect(overlap(clock, badge)).toBe(false)
+    expect(overlap(clock, hearts)).toBe(false)
+    expect(overlap(clock, right)).toBe(false)
+    // Beat it: the result card drops under the HUD strip, inside the screen.
+    await page.evaluate(() => {
+      window.__fold!.clearPage()
+      window.__fold!.fastForward(4)
+    })
+    await expect(page.getByTestId('rush-again')).toBeVisible({ timeout: 10_000 })
+    // The card drops in with a transition: measure once it has landed.
+    await page.waitForFunction(() => {
+      const card = document.querySelector('.rush-result__card')
+      return !!card && !/card-enter/.test(card.className) && card.getAnimations().length === 0 &&
+        getComputedStyle(card).transform === 'none'
+    })
+    // The long title never ellipsizes.
+    expect(await page.evaluate(() => {
+      const t = document.querySelector('.rush-result__ribbon .ribbon__text, .rush-result__ribbon .ribbon') as HTMLElement
+      return t.scrollWidth <= t.clientWidth + 1
+    })).toBe(true)
+    const card = await box('.rush-result__card')
+    const hud = await box('.hud-top')
+    const ribbon = await box('.rush-result__ribbon')
+    expect(card!.x).toBeGreaterThanOrEqual(0)
+    expect(card!.x + card!.w).toBeLessThanOrEqual(vp.width + 1)
+    expect(card!.y).toBeGreaterThanOrEqual(hud!.y + hud!.h - 1)
+    expect(card!.y + card!.h).toBeLessThanOrEqual(vp.height + 1)
+    expect(overlap(card, ribbon)).toBe(false)
+    // Both ways on are reachable (the card scrolls in a short landscape if it must).
+    for (const id of ['rush-again', 'rush-back']) {
+      const b = page.getByTestId(id)
+      // The pulsing "attention" button is never "stable": scroll it by hand.
+      await b.evaluate((el) => el.scrollIntoView({ block: 'nearest' }))
+      await expect(b).toBeInViewport()
+    }
+    await page.screenshot({ path: `test-results/rush-result-${vp.width}x${vp.height}.png` })
+  })
+}

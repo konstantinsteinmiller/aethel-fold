@@ -509,3 +509,50 @@ export const disposeModelCache = (): void => {
   for (const g of cache.values()) g.dispose()
   cache.clear()
 }
+
+// ─── Desk lamp and shelf figurines (roadmap #15, #16) ──────────────────────
+
+/**
+ * The desk lamp behind the book (its secret: night mode). An anglepoise in
+ * paper-craft: a round foot, a post leaning back, an arm reaching over toward
+ * the page and a cone shade, open side down-forward, with a warm bulb in it.
+ * About `DESK_LAMP.h` tall.
+ */
+export const deskLampGeometry = (): BufferGeometry => cached('deskLamp', () => {
+  const b = new PaperBuilder()
+  b.push().drum(0.55, 0.14, 12, 'steelDark', 'enemySteel').pop()
+  // The post, leaning back: its top ends near (0, 1.41, -0.36).
+  b.push().translate(0, 0.14, -0.1).rotate(-0.2, 0, 0).box(0.13, 1.3, 0.13, 'steelDark').pop()
+  // A little hinge knuckle, then the arm up and over toward the book (+z).
+  b.push().translate(0, 1.36, -0.36).box(0.2, 0.12, 0.2, 'gold').pop()
+  b.push().translate(0, 1.41, -0.36).rotate(1.21, 0, 0).box(0.11, 0.97, 0.11, 'steelDark').pop()
+  // The shade: apex at the arm's end, open side down toward the page.
+  b.push().translate(0, 1.75, 0.55).rotate(-0.55, 0, 0).translate(0, -0.5, 0).cone(0.58, 0.5, 12, 'bookCover', 'bookCoverDark').pop()
+  b.push().translate(0, 1.75, 0.55).rotate(-0.55, 0, 0).translate(0, -0.54, 0).drum(0.6, 0.06, 12, 'bookCoverDark', 'lampWarm').pop()
+  b.push().translate(0, 1.75, 0.55).rotate(-0.55, 0, 0).translate(0, -0.5, 0).drum(0.24, 0.08, 10, 'lampWarm', 'lamp').pop()
+  return b.build()
+})
+
+/**
+ * A Dragon Rush figurine for the desk shelf: a little folded dragon on a
+ * paper plinth, head to +x, wings up, in its book's colours. About
+ * `SHELF.rushH` tall.
+ */
+export const rushDragonGeometry = (body: Col, dark: Col, plinth: Col): BufferGeometry => cached(`rushDragon:${String(body)}`, () => {
+  const b = new PaperBuilder()
+  b.push().box(0.82, 0.1, 0.56, plinth, 'parchmentLight').pop()
+  // Body: a folded diamond.
+  b.push().translate(0, 0.1, 0).pyramid(0.52, 0.34, 0.4, body).pop()
+  // Neck and head, reaching forward and up.
+  b.push().translate(0.14, 0.3, 0).rotate(0, 0, -0.55).box(0.1, 0.4, 0.1, body).pop()
+  b.push().translate(0.34, 0.6, 0).rotate(0, 0, -0.2).box(0.26, 0.13, 0.13, body, dark).pop()
+  // Wings: two paper triangles swept up and back.
+  b.tri(-0.1, 0.34, 0.06, 0.16, 0.36, 0.06, -0.26, 0.9, 0.3, dark)
+  b.tri(0.16, 0.36, 0.06, -0.1, 0.34, 0.06, -0.26, 0.9, 0.3, dark)
+  b.tri(0.16, 0.36, -0.06, -0.1, 0.34, -0.06, -0.26, 0.9, -0.3, dark)
+  b.tri(-0.1, 0.34, -0.06, 0.16, 0.36, -0.06, -0.26, 0.9, -0.3, dark)
+  // Tail.
+  b.tri(-0.22, 0.14, 0, -0.22, 0.26, 0, -0.52, 0.34, 0, body)
+  b.tri(-0.22, 0.26, 0, -0.22, 0.14, 0, -0.52, 0.34, 0, body)
+  return b.build()
+})

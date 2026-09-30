@@ -75,6 +75,11 @@ export class FoldEngine {
   private shelfY = 0
   private shelfT = 0
   private shelfHit = SHELF_NONE
+  /** A pointer that went down on the desk lamp (−1 none), and where and when. */
+  private lampPtr = -1
+  private lampX = 0
+  private lampY = 0
+  private lampT = 0
   private readonly onWheel = (e: WheelEvent) => {
     const r = this.canvas.getBoundingClientRect()
     if (this.gestures.wheel(e.clientX - r.left, e.clientY - r.top, e.deltaY)) e.preventDefault()
@@ -222,6 +227,8 @@ export class FoldEngine {
 
   /** Press and hold instead of swiping (swipes keep working too). */
   setHoldToFold(on: boolean): void {
+    // The lesson demonstrations show the press and hold too.
+    this.game.holdToFold = on
     if (this.gestures.holdToFold === on) return
     this.gestures.cancel()
     this.gestures.holdToFold = on
@@ -239,6 +246,36 @@ export class FoldEngine {
 
   project(x: number, y: number, z: number, out: ScreenPoint): ScreenPoint {
     return this.view.project(x, y, z, out)
+  }
+
+  // ─── Dragon Rush (roadmap #16) and page secrets (roadmap #15) ────────────
+
+  /** A book's Dragon Rush: its dragon alone, faster, against the clock. */
+  startRush(book: BookId): void {
+    this.gestures.cancel()
+    this.view.units.showCrowd(false)
+    this.game.startRun({ mode: 'dragonRush', book })
+  }
+
+  /** The rush result's "again". */
+  restartRush(): boolean {
+    this.gestures.cancel()
+    return this.game.restartRush()
+  }
+
+  /** Night mode as saved (the desk lamp's secret). */
+  setNight(on: boolean): void {
+    this.game.setNight(on)
+  }
+
+  /** The secrets the save says were found (boot, a late cloud hydrate). */
+  setSecretsFound(ids: readonly string[]): void {
+    this.game.setSecretsFound(ids)
+  }
+
+  /** Screen point (CSS px) of the desk lamp, as drawn (tests). */
+  lampScreen(out: ScreenPoint): ScreenPoint {
+    return this.view.lampScreen(out)
   }
 
   /** Start over from page 1 of a book (Play again / pick a book). */
@@ -410,6 +447,7 @@ export class FoldEngine {
       if (this.audio && this.audio.ctx.state === 'suspended') void this.audio.ctx.resume().catch(() => undefined)
     }
     if (this.shelfPointer(kind, e.pointerId, x, y, now)) return
+    if (this.lampPointer(kind, e.pointerId, x, y, now)) return
     if (kind === 'down') {
       try {
         this.canvas.setPointerCapture(e.pointerId)
@@ -461,6 +499,28 @@ export class FoldEngine {
       this.gestures.cancel()
       g.openShelf('tap', this.shelfHit)
     }
+    return true
+  }
+
+  /**
+   * A tap on the desk lamp (the desk's secret) goes to `tapLamp` instead of
+   * the gesture recognizer. The lamp stands behind the book, off the page, so
+   * it never takes a press meant for a fold. Returns true if taken.
+   */
+  private lampPointer(kind: 'down' | 'move' | 'up' | 'cancel', id: number, x: number, y: number, now: number): boolean {
+    if (kind === 'down') {
+      if (this.lampPtr !== -1 || this.game.shelf.open || this.game.paused || !this.view.pickLamp(x, y)) return false
+      this.lampPtr = id
+      this.lampX = x
+      this.lampY = y
+      this.lampT = now
+      return true
+    }
+    if (id !== this.lampPtr) return false
+    if (kind === 'move') return true
+    this.lampPtr = -1
+    const slop = Math.min(this.cssW, this.cssH) * 0.04
+    if (kind === 'up' && now - this.lampT < 700 && Math.hypot(x - this.lampX, y - this.lampY) < slop) this.game.tapLamp()
     return true
   }
 

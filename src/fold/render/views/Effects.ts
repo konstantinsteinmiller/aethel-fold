@@ -24,7 +24,7 @@ const MAX_CONFETTI = 1100
 const MAX_RINGS = 10
 const MAX_GLOWS = 40
 
-export type ConfettiPalette = 'festive' | 'paper' | 'flame' | 'gold' | 'ink' | 'hero' | 'enemy' | 'dragon'
+export type ConfettiPalette = 'festive' | 'paper' | 'flame' | 'gold' | 'ink' | 'hero' | 'enemy' | 'dragon' | 'water' | 'apple'
 
 const PALETTES: Record<ConfettiPalette, PaletteKey[]> = {
   festive: [...CONFETTI_KEYS],
@@ -34,7 +34,9 @@ const PALETTES: Record<ConfettiPalette, PaletteKey[]> = {
   ink: ['ink', 'inkSoft', 'parchmentShade'],
   hero: ['heroBlue', 'heroSteel', 'flagYellow'],
   enemy: ['enemyRed', 'enemySteel', 'gold', 'paperWhite'],
-  dragon: ['dragonRed', 'dragonBlue', 'dragonGreen', 'dragonYellow']
+  dragon: ['dragonRed', 'dragonBlue', 'dragonGreen', 'dragonYellow'],
+  water: ['water', 'waterLight', 'waterDark', 'paperWhite'],
+  apple: ['enemyRed', 'dragonRed', 'c1', 'forest']
 }
 
 export interface ConfettiOptions {

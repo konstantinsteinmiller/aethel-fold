@@ -50,7 +50,8 @@ const shelfCorners = (close = false): number[] => {
   const out: number[] = []
   const p: ShelfPoint = { x: 0, y: 0, z: 0 }
   const hw = shelfHalfWidth()
-  const top = SHELF.board * 2 + SHELF.bookH + (close ? 0.3 : 1.9)
+  // Close: the top board and what stands on it (the rush figurines, the secrets card).
+  const top = SHELF.board * 2 + SHELF.bookH + (close ? 0.3 + SHELF.rushH : 1.9)
   // The close-up hugs the boards (the back board is at −(bookD + 0.3) / 2); every pixel of width is book size.
   const front = SHELF.bookD / 2 + SHELF.pull + (close ? 0.08 : 0.2)
   const back = close ? -(SHELF.bookD + 0.3) / 2 : -SHELF.bookD / 2 - 0.2
