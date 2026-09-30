@@ -153,6 +153,61 @@ test.describe('Aethel Fold — book 3 (The Sea of Paper)', () => {
     expect(errors).toEqual([])
   })
 
+  test('C12: a shield-bearer marches onto a book-3 page, and a ballista bolt glances off its shield', async ({ page }) => {
+    const errors = collectErrors(page)
+    await seedState(page, { fold_lessons: ALL_LESSONS, ...WON_TWO })
+    await page.goto('/')
+    await waitForGame(page)
+    await page.evaluate(() => window.__fold!.jumpTo(2, 3))
+    await ff(page, 1)
+    // Wave 1 is a plain knight column; sweep it off so wave 2 (a shield-bearer at its head) comes on.
+    const bearerZ = (): Promise<number | null> => page.evaluate(() => {
+      const g = window.__fold!.game
+      for (const e of g.enemies) if (e.type === 'shieldBearer' && e.state === 'march') return e.z as number
+      for (const e of g.enemies) if (e.state === 'march') e.state = 'dead'
+      return null
+    })
+    let z: number | null = null
+    for (let i = 0; i < 40 && z === null; i++) {
+      z = await bearerZ()
+      if (z === null) await ff(page, 0.5)
+    }
+    expect(z).not.toBeNull()
+    // It walked in from the top edge (spawnZ), not out of the paper.
+    expect(z!).toBeLessThan(-4)
+    for (let i = 0; i < 20 && ((await bearerZ()) ?? -99) < -1.5; i++) await ff(page, 0.5)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await ff(page, 0.2)
+    // Open the ballista on its side and shoot straight at it: the bolt is spent on the shield.
+    const hit = await page.evaluate(() => {
+      const g = window.__fold!.game
+      const e = g.enemies.find((o: { type: string; state: string }) => o.type === 'shieldBearer' && o.state === 'march')
+      const i = g.folds.findIndex((f: { def: { id: string } }) => f.def.id === (e.x < 0 ? 'ballista-l' : 'ballista-r'))
+      g.foldNow(i)
+      return { slot: g.enemies.indexOf(e), i }
+    })
+    await ff(page, 0.3)
+    const fired = await page.evaluate(({ slot }) => {
+      const g = window.__fold!.game
+      const e = g.enemies[slot]
+      return g.fireBallista(e.x, e.z)
+    }, hit)
+    expect(fired).toBe(true)
+    // ~7 page units from the tower at 24 units/s.
+    await ff(page, 0.5)
+    const after = await page.evaluate(({ slot }) => {
+      const g = window.__fold!.game
+      return { state: g.enemies[slot].state as string, blocked: g.stats.boltsBlocked as number }
+    }, hit)
+    expect(after.state).toBe('march')
+    expect(after.blocked).toBeGreaterThanOrEqual(1)
+    await expect(page.locator('.fx-word', { hasText: 'BLOCKED!' }).first()).toBeAttached()
+    const shots = process.env.SHIELD_SHOTS
+    if (shots) await page.screenshot({ path: `${shots}/book3-shield-bearers-390x844.png` })
+    await page.waitForTimeout(500)
+    expect(errors).toEqual([])
+  })
+
   test('the Kraken Rush starts from the DEV handle and runs its clock', async ({ page }) => {
     const errors = collectErrors(page)
     await seedState(page, { fold_lessons: ALL_LESSONS, ...WON_TWO, fold_wins3: 1, fold_cleared3: 6 })

@@ -186,8 +186,12 @@ export interface TearState {
  * leaper — a grasshopper-knight on paper springs: zig-zags between lanes in
  *          hops and vaults clean over raised walls, so walls can't stop it —
  *          the sling, a valley or a launch flap can.
+ * shieldBearer — a chibi soldier behind a big round paper shield, at half a
+ *          knight's pace (C12). Ballista bolts glance off the shield and are
+ *          spent on it, so it screens the column queued behind it; sling
+ *          stones (they drop from above) and every fold kill it like a knight.
  */
-export type EnemyType = 'knight' | 'brute' | 'archer' | 'catapult' | 'runner' | 'leaper'
+export type EnemyType = 'knight' | 'brute' | 'archer' | 'catapult' | 'runner' | 'leaper' | 'shieldBearer'
 
 export type EnemyState =
   | 'dead'       // slot free

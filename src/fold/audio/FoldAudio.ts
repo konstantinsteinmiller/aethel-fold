@@ -13,7 +13,7 @@
  */
 
 import type { FoldEvent } from '../logic/events'
-import { KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_TEAR } from '../logic/events'
+import { BLOCK_BEARER, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_TEAR } from '../logic/events'
 import type { FoldGame } from '../logic/game'
 import { BOSS_PHASE_CODES } from '../logic/boss'
 import { OUTRO, STARS } from '../logic/config'
@@ -248,6 +248,16 @@ export class FoldAudio {
     const t = this.now
     tone(this.sfx, t, 'sawtooth', 190, 140, 0.16, 0.08)
     this.whoosh(0.22, 3000)
+  }
+
+  /** A ballista bolt glancing off a shield-bearer's shield (C12): a bright metal tink, no thud. */
+  tink(): void {
+    const b = this.sfx
+    const t = this.now
+    const p = this.r(0.08)
+    glock(b, t, 93, 0.55, 0.35)
+    tone(b, t, 'triangle', 2400 * p, 1900 * p, 0.09, 0.12, 0.001)
+    noise(b, t, 0.03, 0.12, 'highpass', 6000, 1)
   }
 
   creak(): void {
@@ -508,7 +518,8 @@ export class FoldAudio {
       case 'tearPull':
         break
       case 'blocked':
-        if (e.c === 3) this.stamp(false)
+        if (e.c === BLOCK_BEARER) this.tink()
+        else if (e.c === 3) this.stamp(false)
         else this.thunk()
         break
       case 'impact':

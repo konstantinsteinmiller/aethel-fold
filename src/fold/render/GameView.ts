@@ -21,7 +21,7 @@
 import { Box3, Color, Mesh, Scene, SpotLight, Vector3, type WebGLRenderTarget } from 'three'
 import type { FoldGame } from '../logic/game'
 import type { FoldEvent } from '../logic/events'
-import { KILL_BOLT, KILL_CAPSIZE, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from '../logic/events'
+import { BLOCK_BEARER, KILL_BOLT, KILL_CAPSIZE, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from '../logic/events'
 import { CASTLE, DESK_LAMP, PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME, PAGE_HALF_D, PAGE_HALF_W, SHELF } from '../logic/config'
 import { SECRET_IDS } from '../logic/secrets'
 import { PAGE_COUNT, pageDef } from '../logic/pages'
@@ -576,6 +576,13 @@ export class GameView {
         break
       }
       case 'blocked': {
+        if (e.c === BLOCK_BEARER) {
+          // A bolt glances off a shield-bearer's shield: sparks and a glint, BLOCKED! the first time on a page.
+          fx.burst(e.x, 0.8, e.z, { count: 12, palette: 'gold', speed: 3.5, up: 3, size: 0.6 })
+          fx.glow(e.x, 0.9, e.z + 0.1, 0.9, 0.25, 'star', 'highlightHot', 4)
+          this.wordAt(e.b ? 'blocked' : 'tink', e.x, 1.5, e.z, e.b ? 1.1 : 0.75, e.b ? 'good' : 'snap')
+          break
+        }
         // c = 3: the dragon's fire on a shield; c = 5: the kraken's ink.
         const big = e.c === 3 || e.c === 5
         fx.burst(e.x, 0.7, e.z, { count: big ? 30 : 8, palette: e.c === 3 ? 'flame' : e.c === 5 ? 'inkJet' : 'paper', speed: 3, up: 3, size: big ? 1.4 : 0.8 })

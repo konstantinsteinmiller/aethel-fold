@@ -30,7 +30,7 @@ import {
   type KindMemory, createKindMemory, difficultyFor, extraPerWave, foldSlowmoOn, noteCrumple, notePageWon,
   resetRunMemory, retryPenalty, shouldEaseBoss
 } from './difficulty'
-import { EventQueue, KILL_BOLT, KILL_CAPSIZE, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from './events'
+import { BLOCK_BEARER, EventQueue, KILL_BOLT, KILL_CAPSIZE, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from './events'
 import {
   FOLD_LOWERED, FOLD_READY, FOLD_SNAPPED, FOLD_SPRUNG, FOLD_STAMPED,
   abandonFold, acrossHinge, alongHinge, boatReaches, createFold, dragFold, flapPoint, grabFold, grabLength, inChannel, isBarrier,
@@ -65,7 +65,7 @@ import {
 import { createRng, type Rng } from './rng'
 import { G_PAPER, clamp, clamp01, damp, segmentDistance, segmentsCross, v2 } from './math'
 import type {
-  BookId, BossPhase, Enemy, EnemyType, FoldState, GameMode, GamePhase, LessonId, PageDef, PageId, RunOptions, SlingState,
+  BookId, BossPhase, Enemy, EnemyType, FoldState, GameMode, GamePhase, LessonId, PageDef, PageId, Projectile, RunOptions, SlingState,
   SpawnDef, Stars, TearState
 } from './types'
 
@@ -100,12 +100,16 @@ export interface GameStats {
   stars: number
   /** Book 3: marchers the boat capsized (pleat crushes count in `crushed`). */
   capsized: number
+  /** C12: shield-bearers taken down, and ballista bolts their shields stopped. */
+  shieldBearers: number
+  boltsBlocked: number
 }
 
 export const emptyStats = (): GameStats => ({
   launched: 0, crushed: 0, torn: 0, folds: 0, stamps: 0, blocks: 0,
   knights: 0, brutes: 0, archers: 0, catapults: 0, flung: 0, ridged: 0,
-  runners: 0, leapers: 0, shots: 0, shotKills: 0, bolts: 0, boltKills: 0, stars: 0, capsized: 0
+  runners: 0, leapers: 0, shots: 0, shotKills: 0, bolts: 0, boltKills: 0, stars: 0, capsized: 0,
+  shieldBearers: 0, boltsBlocked: 0
 })
 
 export interface GameOptions {
@@ -455,8 +459,10 @@ export class FoldGame {
     for (const s of order) if (s.lane >= 0 && ENEMY[s.type].speed > 0) last = s
     if (!last) return order
     const lanes = Math.max(1, this.page.lanes.length)
+    // A shield-bearer is an escort, not a column: the extra marcher is a knight of its column.
+    const type: EnemyType = last.type === 'shieldBearer' ? 'knight' : last.type
     for (let k = 0; k < this.extraPerWave; k++) {
-      order.push({ type: last.type, lane: (last.lane + k + 1) % lanes, at: last.at + 0.9 * (k + 1) })
+      order.push({ type, lane: (last.lane + k + 1) % lanes, at: last.at + 0.9 * (k + 1) })
     }
     return order
   }
@@ -1708,6 +1714,8 @@ export class FoldGame {
         return
       }
     }
+    // A shield-bearer's block pose (a bolt just glanced off) settles back into the march.
+    if (e.windup > 0) e.windup = Math.max(0, e.windup - dt * 2.5)
     const targetX = clamp(this.laneX(e.lane, e.z) + e.tx, -PAGE_HALF_W + 0.4, PAGE_HALF_W - 0.4)
     const nz = e.z + e.speed * dt * this.wade(e.x, e.z)
     const nx = damp(e.x, targetX, 2.4, dt)
@@ -2016,6 +2024,7 @@ export class FoldGame {
     else if (t === 'archer') this.stats.archers++
     else if (t === 'runner') this.stats.runners++
     else if (t === 'leaper') this.stats.leapers++
+    else if (t === 'shieldBearer') this.stats.shieldBearers++
     else this.stats.catapults++
   }
 
@@ -2078,21 +2087,58 @@ export class FoldGame {
 
   private readonly segOut = v2()
 
-  /** A ballista bolt flies flat and fast, piercing whoever is on its path. */
-  private boltStep(p: { x: number; z: number; vx: number; vz: number; age: number; life: number; alive: boolean; hits: number }, px: number, pz: number, dt: number): void {
+  /** Page serial of the last shield-bearer block (the first one on a page gets the big word). */
+  private bearerBlockPage = -1
+
+  /** Is enemy `e` on this frame's bolt segment? Leaves the distance / the position along it in `segOut`. */
+  private boltTouches(e: Enemy, px: number, pz: number, x: number, z: number): boolean {
+    if (!isAlive(e)) return false
+    if (e.state === 'leap' && e.y > LEAPER_SHOT_CEILING) return false
+    segmentDistance(e.x, e.z, px, pz, x, z, this.segOut)
+    return this.segOut.x <= BOLT_RADIUS + ENEMY[e.type].radius * 0.5
+  }
+
+  /**
+   * A ballista bolt flies flat and fast, piercing whoever is on its path — up
+   * to the first shield-bearer (C12). Its shield faces the castle the bolts
+   * come from, so the bolt glances off it: no damage, and the bolt is spent
+   * there, so the column queued behind the shield is screened too. Only those
+   * the bolt reaches before the shield (this frame's segment, in order along
+   * it) are hit.
+   */
+  private boltStep(p: Projectile, px: number, pz: number, dt: number): void {
     p.x += p.vx * dt
     p.z += p.vz * dt
+    let shield = -1
+    let shieldAt = 2
+    for (let j = 0; j < MAX_ENEMIES; j++) {
+      const e = this.enemies[j]!
+      if (e.type !== 'shieldBearer' || !this.boltTouches(e, px, pz, p.x, p.z)) continue
+      if (this.segOut.z < shieldAt) {
+        shieldAt = this.segOut.z
+        shield = j
+      }
+    }
     for (let j = 0; j < MAX_ENEMIES && p.hits < BOLT_PIERCE; j++) {
       const e = this.enemies[j]!
-      if (!isAlive(e)) continue
-      if (e.state === 'leap' && e.y > LEAPER_SHOT_CEILING) continue
-      segmentDistance(e.x, e.z, px, pz, p.x, p.z, this.segOut)
-      if (this.segOut.x > BOLT_RADIUS + ENEMY[e.type].radius * 0.5) continue
+      if (j === shield || !this.boltTouches(e, px, pz, p.x, p.z)) continue
+      if (shield >= 0 && this.segOut.z >= shieldAt) continue
       e.state = 'torn'
       e.age = 0
       e.y = 0
       this.kill(j, KILL_BOLT, p.hits++)
       this.stats.boltKills++
+    }
+    if (shield >= 0 && p.hits < BOLT_PIERCE) {
+      // Tink: the bolt glances off the shield and is spent.
+      const e = this.enemies[shield]!
+      e.windup = 1
+      p.alive = false
+      this.stats.boltsBlocked++
+      const first = this.bearerBlockPage !== this.pageSerial
+      this.bearerBlockPage = this.pageSerial
+      this.events.emit('blocked', p.id, first ? 1 : 0, BLOCK_BEARER, e.x, e.z + ENEMY.shieldBearer.radius * 0.5)
+      return
     }
     const out = p.z < -PAGE_HALF_D - 0.6 || p.x < -PAGE_HALF_W - 0.6 || p.x > PAGE_HALF_W + 0.6
     if (p.hits >= BOLT_PIERCE || out || p.age >= p.life) {

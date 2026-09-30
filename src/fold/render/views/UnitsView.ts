@@ -69,7 +69,8 @@ const FRAMES: Record<Enemy['type'], readonly [FrameName, FrameName, FrameName]> 
   archer: ['archer0', 'archer0', 'archerDraw'],
   catapult: ['knight0', 'knight1', 'knightFlail'],
   runner: ['runner0', 'runner1', 'runnerFlail'],
-  leaper: ['leaper0', 'leaper1', 'leaperFlail']
+  leaper: ['leaper0', 'leaper1', 'leaperFlail'],
+  shieldBearer: ['bearer0', 'bearer1', 'bearerFlail']
 }
 
 export class UnitsView {
@@ -227,7 +228,8 @@ export class UnitsView {
     const risePitch = (1 - easeOutBack(rise, 2)) * -1.4
     switch (e.state) {
       case 'march': {
-        F.setFrame(i, walkA ? walk0 : walk1)
+        // A shield-bearer's windup is its block pose: a bolt just glanced off the shield.
+        F.setFrame(i, e.type === 'shieldBearer' && e.windup > 0.25 ? 'bearerBlock' : walkA ? walk0 : walk1)
         const hop = Math.abs(Math.sin(e.phase)) * 0.09 * (isBrute ? 0.6 : 1)
         const roll = Math.sin(e.phase) * (isBrute ? 0.06 : 0.11)
         F.place(i, e.x, hop, e.z, yaw, roll, risePitch, size)
