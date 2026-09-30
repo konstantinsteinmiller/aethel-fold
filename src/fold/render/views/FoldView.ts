@@ -168,6 +168,11 @@ export class FoldView {
     this.group.userData.perfTag = `fold.${d.kind}`
   }
 
+  /** The page was repainted in another look (roadmap #6): the flap prints the new art. */
+  setArt(art: Texture): void {
+    this.artMat.uniforms.map!.value = art
+  }
+
   private buildStructure(): void {
     const f = this.f
     const d = f.def

@@ -51,6 +51,12 @@ export const SECRETS_KEY = 'fold_secrets'
  * `{ b1: 58.3 }`. Only ever lowered; a cloud merge keeps the faster.
  */
 export const RUSH_KEY = 'fold_rush'
+/**
+ * Paper cosmetics (roadmap #6): `{ owned: ['paper.graph', …], equipped:
+ * { paper, hero, confetti } }`. `owned` only grows (stars unlock it); a cloud
+ * merge keeps the union and the winning side's equipped items where owned.
+ */
+export const COSMETICS_KEY = 'fold_cosmetics'
 
 // ─── User settings (shared platform layer) ──────────────────────────────────
 

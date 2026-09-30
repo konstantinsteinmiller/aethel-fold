@@ -268,7 +268,30 @@ export default {
       'highlight': 'Highlight',
       'highlight_standard': 'Pulse',
       'highlight_steady': 'Steady',
-      'highlight_bold': 'Bold'
+      'highlight_bold': 'Bold',
+      'seasonal': 'Seasonal decorations'
+    },
+    'cosmetics': {
+      'title': 'Paper & style',
+      'paper': 'Paper',
+      'hero': 'Hero',
+      'confetti': 'Confetti',
+      'locked': '{name}: unlocks at {n} stars',
+      'items': {
+        'paper_plain': 'Parchment',
+        'paper_graph': 'Graph paper',
+        'paper_washi': 'Washi',
+        'paper_newsprint': 'Newsprint',
+        'paper_map': 'Old map',
+        'hero_classic': 'Classic',
+        'hero_scarf': 'Scarf',
+        'hero_sash': 'Royal sash',
+        'hero_crown': 'Crown',
+        'confetti_squares': 'Squares',
+        'confetti_stars': 'Stars',
+        'confetti_hearts': 'Hearts',
+        'confetti_cranes': 'Cranes'
+      }
     },
     'victory': {
       'title': 'VICTORY',

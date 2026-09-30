@@ -30,6 +30,13 @@
  * Page secrets (roadmap #15): the game reports each one (`secret`); the first
  * find of each is saved (`fold_secrets`), night mode (the desk lamp) is a
  * cosmetic setting.
+ *
+ * Looks (roadmaps #6, #17): the equipped paper cosmetics and the season's skin
+ * go to the engine as one `Look` (art only). A page clear whose stars unlock a
+ * cosmetic shows the wordless unlock card after the star ribbon; stars from
+ * another device (boot, a late hydrate) unlock silently. The season comes from
+ * the local date unless the player turned the decorations off; a DEV build
+ * can force one with `?season=halloween|winter|none` or `__fold.setSeason`.
  */
 import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -54,6 +61,8 @@ import AlmostRetry from '@/components/fold/AlmostRetry.vue'
 import RushClock from '@/components/fold/RushClock.vue'
 import RushResult from '@/components/fold/RushResult.vue'
 import { SECRET_IDS } from '@/fold/logic/secrets'
+import { activeSeason, parseSeason, type Season } from '@/fold/logic/seasons'
+import type { Look } from '@/fold/logic/cosmetics'
 import FMuteButton from '@/components/atoms/FMuteButton.vue'
 import FHudButton from '@/components/atoms/FHudButton.vue'
 import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
@@ -61,10 +70,10 @@ import useUser from '@/use/useUser'
 import { isGamePaused } from '@/use/useGamePause'
 import { syncGameplayLifecycle } from '@/use/useGameplayLifecycle'
 import {
-  addStats, bankScore, bookUnlocked, checkpoint, foldSettings, learnLesson, lessons, pageStars, pagesCleared,
-  pagesCleared2, progressRevision, readKindness, recordRush, recordSecret, recordStars, recordVictory, recordsFor,
-  resumeBook, resumePage, runCheckpoint, rushBest, rushBestOf, saveKindness, secretsFound, setFoldSetting,
-  shelfProgress, startNewRun, wins, wins2, flushSaveNow, type FoldSettings
+  addStats, bankScore, bookUnlocked, checkpoint, cosmetics, equipCosmetic, foldSettings, learnLesson, lessons, pageStars,
+  pagesCleared, pagesCleared2, progressRevision, readKindness, recordRush, recordSecret, recordStars, recordVictory,
+  recordsFor, resumeBook, resumePage, runCheckpoint, rushBest, rushBestOf, saveKindness, secretsFound, setFoldSetting,
+  shelfProgress, startNewRun, unlockCosmetics, wins, wins2, flushSaveNow, type FoldSettings
 } from '@/use/useFoldProgress'
 import { mobileCheck } from '@/utils/function'
 import { BOOT, bootSnapshot, bootStage, markFirstInput, markGameReady, markInteractive, markPrecompiled } from '@/use/useBoot'
@@ -115,6 +124,32 @@ const pauseOpen = ref(false)
 const nameKey = computed(() => pageDef(hud.book, hud.page).nameKey)
 const best = computed(() => recordsFor(hud.book).score)
 const book2Open = computed(() => bookUnlocked(2))
+
+// ─── Looks (roadmaps #6, #17) ───────────────────────────────────────────────
+
+/** Debug builds (and the cheat flag) may force a season. */
+const debugAllowed = (): boolean => {
+  if (import.meta.env.DEV) return true
+  try {
+    return localStorage.getItem('cheat') === 'true'
+  } catch {
+    return false
+  }
+}
+/** `?season=halloween` (before or inside the hash), DEV only. */
+const seasonFromUrl = (): Season | null => {
+  if (typeof window === 'undefined' || !debugAllowed()) return null
+  const hashQuery = window.location.hash.includes('?') ? window.location.hash.slice(window.location.hash.indexOf('?')) : ''
+  return parseSeason(new URLSearchParams(window.location.search).get('season'))
+    ?? parseSeason(new URLSearchParams(hashQuery).get('season'))
+}
+const seasonOverride = ref<Season | null>(seasonFromUrl())
+/** The local date the season is read from (once per session: a skin never flips mid-page). */
+const today = new Date()
+const look = computed<Look>(() => ({
+  ...cosmetics.value.equipped,
+  season: activeSeason(today, foldSettings.value.seasonal, seasonOverride.value)
+}))
 
 // ─── Engine hooks ────────────────────────────────────────────────────────────
 
@@ -167,6 +202,11 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
       roomForRibbon()
       fx.value?.stars(e.c)
       recordStars(g.book, e.a as PageId, e.c)
+      {
+        // New stars may unlock a paper cosmetic (roadmap #6): the wordless card follows the ribbon.
+        const fresh = unlockCosmetics()
+        if (fresh.length > 0) fx.value?.unlocked(fresh)
+      }
       bankStats(g)
       bankScore(g.score, g.book)
       // The kindness memory (streak, boss ease) first: the checkpoint keeps it.
@@ -362,11 +402,13 @@ onMounted(() => {
   bootStage(BOOT.scene)
   const { page, score, book } = bootPage()
   if (page === 1) startNewRun(book)
+  // Stars earned before this build (or on another device) unlock their cosmetics quietly.
+  unlockCosmetics()
   const eng = markRaw(new FoldEngine(
     c, { onEvent, word, onFrame, caption, onFirstInput: markFirstInput },
     {
       learned: learnedMap(), startPage: page, startScore: score, book, kind: readKindness(),
-      secrets: secretsFound.value, night: foldSettings.value.night
+      secrets: secretsFound.value, night: foldSettings.value.night, look: { ...look.value }
     }
   ))
   engine.value = eng
@@ -397,6 +439,8 @@ onMounted(() => {
 })
 
 watch(locale, () => engine.value?.refreshCaptions())
+// An equip on the settings face, the seasonal switch, or a cloud hydrate: the engine repaints without a hitch.
+watch(look, (l) => engine.value?.setLook({ ...l }))
 // The shelf shows the saved progress (wins unlock books, stars go on the spines).
 watch([wins, wins2, pagesCleared, pagesCleared2, pageStars, rushBest], () => engine.value?.setShelfProgress(shelfProgress()))
 
@@ -530,6 +574,8 @@ watch(progressRevision, () => {
   for (const id of LESSON_IDS) if (lessons.value[id]) g.learned[id] = true
   // Secrets found on another device count here too (a replay never pays twice).
   eng.setSecretsFound(secretsFound.value)
+  // …and stars from there unlock their cosmetics (quietly).
+  unlockCosmetics()
   const saved = resumePage.value
   const savedBook: BookId = resumeBook.value === 2 && bookUnlocked(2) ? 2 : 1
   const early = g.book === 1 && g.pageId === 1 && g.runTime < 90 && g.pagesCleared === 0
@@ -578,8 +624,15 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       eng.project(s.spotX, 0, s.spotZ, out)
       return { x: out.x, y: out.y }
     },
-    /** Boot telemetry (roadmap #13): boot_ms, first_input_ms, precompile and stage times. */
-    boot: () => bootSnapshot(),
+    /** Boot telemetry (roadmap #13): boot_ms, first_input_ms, precompile and stage times, and the atlas paints. */
+    boot: () => ({ ...bootSnapshot(), paint: { ...eng.view.paintMs } }),
+    /** Looks (roadmaps #6, #17): force a season ('halloween' | 'winter' | 'none', or null for the date's), equip an owned cosmetic, read what is shown. */
+    setSeason: (s: string | null) => {
+      seasonOverride.value = s === null ? null : parseSeason(s)
+      return look.value.season
+    },
+    equip: (id: string) => equipCosmetic(id),
+    look: () => ({ want: { ...eng.view.currentLook }, page: eng.view.printedLook, bats: eng.view.bats.group.visible, confetti: eng.view.effects.confettiShape }),
     fastForward: (s: number) => eng.fastForward(s),
     state: () => ({
       book: eng.game.book,

@@ -48,7 +48,20 @@ declare global {
       startRush(book: number): void
       lampScreen(): { x: number; y: number }
       secretScreen(): { x: number; y: number }
-      boot(): { boot_ms: number; first_input_ms: number; precompile_ms: number; precompile_parallel: boolean; stages: Record<number, number> }
+      boot(): {
+        boot_ms: number; first_input_ms: number; precompile_ms: number; precompile_parallel: boolean; stages: Record<number, number>
+        /** Standee atlas paint times (ms): at boot, the deferred frames, the season's bats, a hero repaint. */
+        paint: { atlasBoot: number; atlasDeferred: number; atlasSeason: number; atlasHero: number }
+      }
+      /** Looks (roadmaps #6, #17). */
+      setSeason(s: string | null): string
+      equip(id: string): boolean
+      look(): {
+        want: { paper: string; hero: string; confetti: string; season: string }
+        page: { paper: string; season: string } | null
+        bats: boolean
+        confetti: string
+      }
       game: any
       engine: any
     }

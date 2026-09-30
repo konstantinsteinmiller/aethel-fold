@@ -6,9 +6,19 @@
  * mirrors the simulation, turns simulation events into juice, projects
  * interactive anchors (tear creases, dragon weak points) back onto the page
  * plane for the gesture layer, and renders through the ink pipeline.
+ *
+ * Looks (roadmaps #6, #17) — what the player equipped and the season:
+ *   confetti chips   swapped at once (a geometry swap: free)
+ *   hero, bats       atlas cells repainted in `applyLook` (idle time, ~1–3 ms)
+ *   page paper       new pages are printed in the new look; the page in play is
+ *                    reprinted only while the game is paused (the equip happens
+ *                    in the pause menu, which hides the ~30 ms of canvas work),
+ *                    otherwise it keeps its paper until the next page is built;
+ *                    a hidden prebuilt page is reprinted in idle time, like the
+ *                    warm-up that built it.
  */
 
-import { Color, Mesh, Scene, SpotLight, Vector3, type WebGLRenderTarget } from 'three'
+import { Box3, Color, Mesh, Scene, SpotLight, Vector3, type WebGLRenderTarget } from 'three'
 import type { FoldGame } from '../logic/game'
 import type { FoldEvent } from '../logic/events'
 import { KILL_BOLT, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from '../logic/events'
@@ -35,6 +45,9 @@ import { createStandeeAtlas, type StandeeAtlas } from './art/standeeArt'
 import { createSpriteTextures, type SpriteTextures } from './art/spriteArt'
 import { paintPlainSheet } from './art/pageArt'
 import { boatGeometry, disposeModelCache } from './models'
+import { BatsView } from './views/BatsView'
+import { DEFAULT_LOOK, type Look } from '../logic/cosmetics'
+import type { PageLook } from './art/pageArt'
 
 export interface ScreenPoint {
   x: number
@@ -88,11 +101,20 @@ export class GameView {
   private readonly boat: Mesh
   private readonly boatMat: PaperMaterial
   private boatT = 0
+  /** Halloween's bat standees (roadmap #17). */
+  readonly bats: BatsView
+  /** The look new pages are printed in, and the atlas and effects follow (roadmaps #6, #17). */
+  private look: Look
+  /** Boot telemetry (roadmap #13): ms the standee atlas took at boot, and the deferred/seasonal paints since. */
+  readonly paintMs = { atlasBoot: 0, atlasDeferred: 0, atlasSeason: 0, atlasHero: 0 }
 
-  constructor(canvas: HTMLCanvasElement, private readonly game: FoldGame, private readonly signals: ViewSignals) {
+  constructor(canvas: HTMLCanvasElement, private readonly game: FoldGame, private readonly signals: ViewSignals, look: Look = DEFAULT_LOOK) {
     this.renderer = new FoldRenderer({ canvas })
     this.scene.background = new Color(HEX.deskDark)
-    this.atlas = createStandeeAtlas()
+    this.look = { ...look }
+    const t0 = performance.now()
+    this.atlas = createStandeeAtlas({ variant: look.hero, season: look.season })
+    this.paintMs.atlasBoot = performance.now() - t0
     this.sprites = createSpriteTextures()
 
     // The desk lamp: a warm spot straight above, hard shadows (GDD §2).
@@ -116,7 +138,10 @@ export class GameView {
     this.projectiles = new ProjectilesView()
     this.scene.add(this.projectiles.group)
     this.effects = new Effects(this.sprites, this.renderer.overlay)
+    this.effects.setConfettiShape(look.confetti)
     this.scene.add(this.effects.group)
+    this.bats = new BatsView(this.atlas)
+    this.scene.add(this.bats.group)
     this.sheet = new SheetView(paintPlainSheet(99))
     this.scene.add(this.sheet.mesh)
     this.shelf = new ShelfView()
@@ -230,25 +255,43 @@ export class GameView {
   }
 
   private readonly corner = new Vector3()
+  private readonly box = new Box3()
+  private readonly childBox = new Box3()
 
   /**
-   * Screen y (CSS px) of the desk bookshelf's top as drawn — the highest of
-   * its top board's four corners (`extras` sits on that board) — or +Infinity
-   * while it is hidden. Events and layout only (the star ribbon fits above it).
+   * Screen y (CSS px) of the top of the desk bookshelf as drawn — the highest
+   * point of its top board and of what stands on it (`extras`: the Dragon Rush
+   * figurines and the secrets card, when shown) — or +Infinity while the
+   * shelf is hidden. Events and layout only (the star ribbon fits above it,
+   * so it never covers a figurine or the card).
    */
   shelfTop(): number {
     const sh = this.shelf
     if (!sh.group.visible) return Infinity
-    sh.group.updateMatrixWorld()
+    sh.group.updateMatrixWorld(true)
     const hw = shelfHalfWidth()
     const d = (SHELF.bookD + 0.3) / 2
     let best = Infinity
     for (let i = 0; i < 4; i++) {
-      // The board itself: the little figurines and the secrets card on it may sit under the
-      // ribbon's tail for its short hang (desk props, not UI) — the ribbon keeps its size.
+      // The board itself.
       this.corner.set(i & 1 ? hw : -hw, 0, i & 2 ? d : -d)
       sh.extras.localToWorld(this.corner)
       best = Math.min(best, this.project(this.corner.x, this.corner.y, this.corner.z, this.sp).y)
+    }
+    // Everything standing on it that is shown: every corner of its world bounds.
+    const box = this.box.makeEmpty()
+    for (const c of sh.extras.children) {
+      if (!c.visible) continue
+      this.childBox.setFromObject(c)
+      if (!this.childBox.isEmpty()) box.union(this.childBox)
+    }
+    if (!box.isEmpty()) {
+      for (let i = 0; i < 8; i++) {
+        const x = i & 1 ? box.max.x : box.min.x
+        const y = i & 2 ? box.max.y : box.min.y
+        const z = i & 4 ? box.max.z : box.min.z
+        best = Math.min(best, this.project(x, y, z, this.sp).y)
+      }
     }
     return best
   }
@@ -264,8 +307,13 @@ export class GameView {
 
   // ─── Pages ───────────────────────────────────────────────────────────────
 
+  /** The paper and season pages are printed in. */
+  private get pageLook(): PageLook {
+    return { paper: this.look.paper, season: this.look.season }
+  }
+
   private buildPage(def: PageDef, folds = this.game.folds): PageView {
-    const v = new PageView(def, folds, this.sprites, this.renderer.overlay, this.signals.caption?.(def) ?? '')
+    const v = new PageView(def, folds, this.sprites, this.renderer.overlay, this.signals.caption?.(def) ?? '', this.pageLook)
     this.scene.add(v.group)
     return v
   }
@@ -523,7 +571,7 @@ export class GameView {
       }
       case 'pageIntro': {
         // Book 2's runners and leapers: their atlas frames must be painted before they can march on.
-        if (g.book === 2) this.atlas.paintDeferred()
+        if (g.book === 2) this.paintDeferred()
         if (this.transition === 'drop') break
         this.adoptPage()
         if (this.transition !== 'turn' && this.transition !== 'peel') this.transition = 'none'
@@ -596,7 +644,7 @@ export class GameView {
         this.desk.shake(0.08)
         break
       case 'victory': {
-        this.atlas.paintDeferred()
+        this.paintDeferred()
         this.units.showCrowd(true)
         for (let i = 0; i < 5; i++) fx.burst(-4 + i * 2, 3 + (i % 2), -1 + (i % 3), { count: 70, palette: 'festive', speed: 5.5, up: 8 })
         break
@@ -790,6 +838,8 @@ export class GameView {
     }
     this.book.update(dt)
     this.effects.update(dt)
+    this.bats.show(this.look.season === 'halloween' && !g.shelf.open)
+    this.bats.update(this.time)
     // Out at the shelf or back at the book (real time, whatever the world's clock).
     this.desk.setShelf(g.shelf.open)
     this.desk.update(dt)
@@ -875,9 +925,66 @@ export class GameView {
     return this.renderer.canCompileParallel()
   }
 
-  /** The art the first page doesn't need (the crowd's and book 2's standee frames). Idle time only. */
+  private paintDeferred(): void {
+    const t0 = performance.now()
+    if (this.atlas.paintDeferred()) this.paintMs.atlasDeferred = performance.now() - t0
+  }
+
+  /** The art the first page doesn't need (the crowd's and book 2's standee frames, the season's bats). Idle time only. */
   warmArt(): void {
-    this.atlas.paintDeferred()
+    this.paintDeferred()
+    const t0 = performance.now()
+    if (this.atlas.paintSeason(this.look.season)) this.paintMs.atlasSeason = performance.now() - t0
+  }
+
+  // ─── Looks (roadmaps #6, #17) ────────────────────────────────────────────
+
+  get currentLook(): Readonly<Look> {
+    return this.look
+  }
+
+  /** The paper the page in play is printed on (tests, debugging). */
+  get printedLook(): PageLook | null {
+    return this.page ? this.page.look : null
+  }
+
+  /**
+   * A new look: the confetti chips change at once; everything that costs
+   * canvas work waits for `applyLook` (see the file header). Returns true when
+   * there is such work.
+   */
+  setLook(look: Look): boolean {
+    const was = this.look
+    this.look = { ...look }
+    this.effects.setConfettiShape(look.confetti)
+    return was.hero !== look.hero || was.season !== look.season || was.paper !== look.paper || this.pageStale()
+  }
+
+  /** Does the page in play (or the one built ahead) still wear another look? */
+  pageStale(): boolean {
+    const want = this.look
+    const a = this.page
+    const b = this.incoming
+    if (a && (a.look.paper !== want.paper || a.look.season !== want.season)) return true
+    return !!b && (b.look.paper !== want.paper || b.look.season !== want.season)
+  }
+
+  /**
+   * The canvas work of a new look, in idle time: the hero's cells and the
+   * season's bats in the atlas, a hidden prebuilt page reprinted, and the page
+   * in play reprinted only when `paused` (the menu hides the hitch). Returns
+   * true when the page in play still wears an old look afterwards.
+   */
+  applyLook(paused: boolean): boolean {
+    const look = this.look
+    const t0 = performance.now()
+    if (this.atlas.setHero({ variant: look.hero, season: look.season })) this.paintMs.atlasHero = performance.now() - t0
+    // The bats only once the player is past the boot (warm-up), or right away when the season comes on later.
+    if (look.season === 'halloween' && !this.atlas.batsReady && this.atlas.complete) this.warmArt()
+    const want = this.pageLook
+    if (this.incoming && !this.incoming.group.visible) this.incoming.repaint(want)
+    if (this.page && paused) this.page.repaint(want)
+    return this.pageStale()
   }
 
   /** Prebuild a page's view off the hot path (idle time). */
@@ -897,6 +1004,7 @@ export class GameView {
     this.sheet.dispose()
     this.shelf.dispose()
     this.boatMat.dispose()
+    this.bats.dispose()
     this.atlas.dispose()
     this.sprites.dispose()
     this.snapshotRT?.dispose()

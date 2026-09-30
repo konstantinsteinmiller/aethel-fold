@@ -265,8 +265,9 @@ const page3: PageDef = withPar({
   lanes: [lane(0, 0.2, 0.3), lane(-3.3, 0.25, 1.5), lane(3.3, 0.25, 2.8)],
   folds: [
     wallLine('p3-shield', -2.3, 2.3, 4.25, 0.8, { structure: 'shield', lesson: 'shield' }),
-    launchFlap('p3-launch-l', -3.9, -1.3, -3.25, 1.7, { lesson: 'launch' }),
-    launchFlap('p3-launch-r', 1.3, 3.9, -3.25, 1.7, { lesson: 'launch' }),
+    // The flaps re-arm (like book 2's): the "fling" secret (both at once) can be tried again on one visit.
+    launchFlap('p3-launch-l', -3.9, -1.3, -3.25, 1.7, { lesson: 'launch', rearm: 5 }),
+    launchFlap('p3-launch-r', 1.3, 3.9, -3.25, 1.7, { lesson: 'launch', rearm: 5 }),
     ridgeLine('p3-ridge', -1.25, 1.25, 0.55, 0.85, { fromWave: 1, lesson: 'ridge' }),
     wallLine('p3-left', -4.4, -1.6, 2.4, 1.5, { structure: 'wall', fromWave: 1 }),
     wallLine('p3-right', 1.6, 4.4, 2.4, 1.5, { structure: 'wall', fromWave: 1 }),

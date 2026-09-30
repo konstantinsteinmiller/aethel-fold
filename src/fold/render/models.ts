@@ -4,8 +4,9 @@
  * Geometries are cached — every tower on every page shares one.
  */
 
-import { BufferGeometry, IcosahedronGeometry, Vector3 } from 'three'
+import { BufferAttribute, BufferGeometry, IcosahedronGeometry, Vector3 } from 'three'
 import { PaperBuilder, assertFinite, col, shade, type Col } from './paperGeometry'
+import type { Season } from '../logic/seasons'
 
 const cache = new Map<string, BufferGeometry>()
 const cached = (key: string, make: () => BufferGeometry): BufferGeometry => {
@@ -104,6 +105,46 @@ export const pineGeometry = (): BufferGeometry => cached('pine', () => {
   b.push().translate(0, 0.6, 0).cone(0.5, 0.72, 7, 'forest', 'forestDark').pop()
   b.push().translate(0, 0.98, 0).cone(0.36, 0.62, 7, 'meadowDark', 'forestDark').pop()
   return b.build()
+})
+
+/**
+ * Winter's version of a scenery prop (roadmap #17): every facet that faces the
+ * sky turns to snow (alternating with its blue shade, so the facets still
+ * read), and the pine gets a snow cap on each tier (its slopes are too steep
+ * for the facet rule). Cached per prop; the same material, so no new program.
+ */
+export const snowyGeometry = (base: BufferGeometry, name: string): BufferGeometry => cached(`snow:${name}`, () => {
+  const out = base.clone()
+  const n = out.getAttribute('normal')
+  const c = out.getAttribute('color')
+  const snow = col('snow')
+  const snowShade = col('snowShade')
+  for (let i = 0; i + 2 < n.count; i += 3) {
+    if (n.getY(i) < 0.7) continue
+    const k = (i / 3) % 2 ? snowShade : snow
+    for (let j = 0; j < 3; j++) c.setXYZ(i + j, k.r, k.g, k.b)
+  }
+  if (name !== 'pine') return out
+  // The pine: a cap on each of its three tiers (y0, r, h as in pineGeometry).
+  const b = new PaperBuilder()
+  for (const [y0, r, h] of [[0.22, 0.62, 0.8], [0.6, 0.5, 0.72], [0.98, 0.36, 0.62]] as const) {
+    b.push().translate(0, y0 + h * 0.5, 0).cone(r * 0.56, h * 0.52, 7, 'snow', 'snowShade').pop()
+  }
+  const caps = b.build()
+  const merged = new BufferGeometry()
+  for (const name of ['position', 'normal', 'color', 'uv'] as const) {
+    const a = out.getAttribute(name).array as Float32Array
+    const bb = caps.getAttribute(name).array as Float32Array
+    const joined = new Float32Array(a.length + bb.length)
+    joined.set(a, 0)
+    joined.set(bb, a.length)
+    merged.setAttribute(name, new BufferAttribute(joined, out.getAttribute(name).itemSize))
+  }
+  merged.computeBoundingSphere()
+  merged.computeBoundingBox()
+  out.dispose()
+  caps.dispose()
+  return merged
 })
 
 /** Round folded tree (a faceted ball on a trunk). */
@@ -344,6 +385,70 @@ export const castleBaileyGeometry = (): BufferGeometry => cached('castleBailey',
   b.push().translate(0.2, 2.2, kz).flag(0.7, 'heroBlue').pop()
   return b.build()
 })
+
+/** Where the player's castle has a cone roof: x, base y, z, cone radius and height (front towers, bailey, keep turrets). */
+const CASTLE_CONES: readonly (readonly [number, number, number, number, number])[] = [
+  [-4.72, 0.62, 6.62, 0.33, 0.36], [4.72, 0.62, 6.62, 0.33, 0.36],
+  [-4.72, 0.95, 10.7, 0.46, 0.55], [4.72, 0.95, 10.7, 0.46, 0.55],
+  [-1.12, 1.75, 8.13, 0.33, 0.5], [1.12, 1.75, 8.13, 0.33, 0.5], [-1.12, 1.75, 9.57, 0.33, 0.5], [1.12, 1.75, 9.57, 0.33, 0.5]
+]
+
+/** A carved paper pumpkin (base on y = 0) with a glowing gold face toward the camera (+z). */
+const pumpkinInto = (b: PaperBuilder, r: number, h: number): void => {
+  b.drum(r * 0.92, h * 0.22, 10, 'pumpkinDark', 'pumpkinDark')
+  b.push().translate(0, h * 0.2, 0).drum(r, h * 0.56, 10, 'pumpkin', 'pumpkin').pop()
+  b.push().translate(0, h * 0.74, 0).drum(r * 0.8, h * 0.2, 10, 'pumpkin', 'pumpkinDark').pop()
+  b.push().translate(0, h * 0.92, 0).box(r * 0.16, h * 0.24, r * 0.16, 'pumpkinStem').pop()
+  const z = r * 0.97
+  const e = r * 0.32
+  // Eyes and a zig-zag grin, cut into the front facet.
+  b.push().translate(0, h * 0.2, z)
+    .sheet([-e * 1.4, h * 0.34, -e * 0.5, h * 0.34, -e * 0.95, h * 0.52], 'gold')
+    .sheet([e * 0.5, h * 0.34, e * 1.4, h * 0.34, e * 0.95, h * 0.52], 'gold')
+    .sheet([-e * 1.5, h * 0.14, e * 1.5, h * 0.14, e * 0.8, h * 0.05, 0, h * 0.12, -e * 0.8, h * 0.05], 'gold')
+    .pop()
+}
+
+/**
+ * The season's dress for the player's castle (roadmap #17), one extra mesh on
+ * the castle's material: Halloween turns every cone-roofed tower into a
+ * pumpkin tower; Winter caps the roofs, the keep and the walls with snow.
+ * Nothing is taller than the roof it sits on by more than a few centimetres,
+ * so the castle stays as low as `CASTLE` wants it. Null outside a season.
+ */
+export const seasonCastleGeometry = (season: Season, keepZ: number, towerX: number, towerZ: number, keepTop: number, towerTop: number): BufferGeometry | null => {
+  if (season === 'none') return null
+  return cached(`seasonCastle:${season}:${keepZ}:${towerX}:${towerZ}`, () => {
+    const b = new PaperBuilder()
+    if (season === 'halloween') {
+      for (const [x, y, z, r, h] of CASTLE_CONES) {
+        b.push().translate(x, y - 0.02, z)
+        pumpkinInto(b, r * 1.12, h * 1.15)
+        b.pop()
+      }
+      // Two little pumpkins by the keep's door.
+      for (const s of [-1, 1]) {
+        b.push().translate(s * 0.42, 0, keepZ - 0.62)
+        pumpkinInto(b, 0.12, 0.16)
+        b.pop()
+      }
+    } else {
+      for (const [x, y, z, r, h] of CASTLE_CONES) {
+        b.push().translate(x, y + h * 0.42, z).cone(r * 0.64, h * 0.6, 10, 'snow', 'snowShade').pop()
+      }
+      // Flat tops: the keep's roof (the hero stands in it), the ballista towers, the curtain walls.
+      b.push().translate(0, keepTop, keepZ).box(1.3, 0.035, 0.86, 'snow', 'snow', 'snowShade', 'snowShade').pop()
+      for (const s of [-1, 1]) {
+        b.push().translate(s * towerX, towerTop, towerZ).drum(0.43, 0.035, 8, 'snowShade', 'snow').pop()
+        b.push().translate(s * (0.68 + towerX - 0.4) / 2, 0.4, 6.62).box(towerX - 0.4 - 0.68, 0.04, 0.3, 'snow', 'snow', 'snowShade', 'snowShade').pop()
+        // The upper half of each house roof (a pyramid's top half is the same pyramid at half size).
+        b.push().translate(s * 2.75, 0.5 + 0.45 * 0.5, 9.1).pyramid(0.62, 0.47, 0.245, 'snow').pop()
+      }
+      b.push().translate(0, 1.45 + 0.75 * 0.5, 8.85).pyramid(1.09, 0.68, 0.395, 'snow').pop()
+    }
+    return b.build()
+  })
+}
 
 /**
  * A paper ballista, standing on its mount (origin), shooting toward -z: a

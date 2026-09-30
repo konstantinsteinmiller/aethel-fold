@@ -6,9 +6,18 @@
  * drawn programmatically so the game ships without art; if a matching image
  * exists in `/public/images/fold/units/` (listed in its `manifest.json`), it
  * replaces the drawn frame at runtime — drop in art, no code change.
+ *
+ * Looks (roadmaps #6, #17) stay procedural: the hero's five cells are painted
+ * in the equipped variant (a scarf, a royal sash, a crown; Winter adds the
+ * scarf) — at boot in place of the classic ones, at the same cost — and
+ * repainted in idle time when the player equips another (`setHero`). The
+ * Halloween bats have their own two cells, painted only when that season is
+ * on and never at boot (`paintSeason`).
  */
 
 import type { CanvasTexture } from 'three'
+import type { HeroVariant } from '../../logic/cosmetics'
+import type { Season } from '../../logic/seasons'
 import { HEX, css } from '../palette'
 import { makeCanvas, toTexture } from './canvas'
 
@@ -29,13 +38,41 @@ export type FrameName =
   | 'personRed0' | 'personRed1' | 'personBlue0' | 'personBlue1'
   | 'personGreen0' | 'personGreen1' | 'personYellow0' | 'personYellow1'
   | 'crushed' | 'scrap'
+  | 'bat0' | 'bat1'
 
 const ORDER: FrameName[] = [
   'knight0', 'knight1', 'knightFlail', 'brute0', 'brute1', 'bruteFlail', 'archer0', 'archerDraw',
   'hero0', 'heroCheer', 'heroCower', 'heroHit', 'heroWalk', 'crushed', 'scrap',
   'personRed0', 'personRed1', 'personBlue0', 'personBlue1', 'personGreen0', 'personGreen1', 'personYellow0', 'personYellow1',
-  'runner0', 'runner1', 'runnerFlail', 'leaper0', 'leaper1', 'leaperJump', 'leaperFlail'
+  'runner0', 'runner1', 'runnerFlail', 'leaper0', 'leaper1', 'leaperJump', 'leaperFlail',
+  'bat0', 'bat1'
 ]
+
+/** The hero's cells: repainted together when the look changes. */
+export const HERO_FRAMES: readonly FrameName[] = ['hero0', 'heroCheer', 'heroCower', 'heroHit', 'heroWalk']
+
+/** Halloween's bat standees: painted only while that season is on, never at boot. */
+const SEASONAL: ReadonlySet<FrameName> = new Set<FrameName>(['bat0', 'bat1'])
+
+/** How the hero is dressed: the equipped variant and the season. */
+export interface HeroLook {
+  variant: HeroVariant
+  season: Season
+}
+
+export const CLASSIC_HERO: Readonly<HeroLook> = { variant: 'classic', season: 'none' }
+
+/** Accessories a look puts on the hero (Winter wraps a scarf round any variant). */
+export const heroAccessories = (look: HeroLook): { scarf: boolean; sash: boolean; crown: boolean } => ({
+  scarf: look.variant === 'scarf' || look.season === 'winter',
+  sash: look.variant === 'sash',
+  crown: look.variant === 'crown'
+})
+
+const heroKey = (look: HeroLook): string => {
+  const a = heroAccessories(look)
+  return `${a.scarf ? 's' : ''}${a.sash ? 'h' : ''}${a.crown ? 'c' : ''}`
+}
 
 /** UV rectangle (u0, v0, u1, v1) of a frame, ready for the `aFrame` attribute. */
 export interface FrameUV {
@@ -64,6 +101,12 @@ export interface StandeeAtlas {
   paintDeferred(): boolean
   /** Have the deferred frames been painted? */
   readonly complete: boolean
+  /** Repaint the hero's five cells for a look (idle time). Returns true if it painted (the look changed). */
+  setHero(look: HeroLook): boolean
+  /** Paint a season's own frames (Halloween's bats) if not yet painted. Returns true if it painted now. */
+  paintSeason(season: Season): boolean
+  /** Are Halloween's bat frames painted? */
+  readonly batsReady: boolean
   /** Try `/images/fold/units/manifest.json` overrides (non-blocking). */
   loadOverrides(baseUrl: string): Promise<number>
   dispose(): void
@@ -130,6 +173,10 @@ interface KnightStyle {
   springs?: number
   /** Grasshopper feelers on the helm (leapers). */
   feelers?: boolean
+  /** Hero looks (roadmap #6): a knitted scarf, a royal sash, a crown instead of the plume. */
+  scarf?: boolean
+  sash?: boolean
+  crown?: boolean
 }
 
 const spring = (ctx: CanvasRenderingContext2D, x: number, y0: number, y1: number): void => {
@@ -211,6 +258,18 @@ const knightFigure = (ctx: CanvasRenderingContext2D, pose: number, s: KnightStyl
   poly(ctx, [58, 96, 70, 96, 70, 148, 58, 148], s.tabardDark, 2.5)
   rrect(ctx, 38, 128, 52, 9, 3, HEX.woodDark, 3)
   ellipse(ctx, 64, 132.5, 4, 3.4, s.trim, 2)
+  if (s.sash) {
+    // A royal sash from the shoulder to the hip, with a gold star pinned on.
+    poly(ctx, [40, 104, 50, 96, 92, 138, 84, 147], HEX.sash, 2.6)
+    poly(ctx, [44, 101, 48, 98, 89, 139, 86, 142], HEX.sashDark, 0)
+    const pts: number[] = []
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i / 10) * Math.PI * 2
+      const r = i % 2 ? 3.2 : 7.5
+      pts.push(62 + Math.cos(a) * r, 118 + Math.sin(a) * r)
+    }
+    poly(ctx, pts, HEX.gold, 2)
+  }
   // Weapon arm (right, viewer's left).
   const swing = pose === 1 ? -0.25 : pose === 2 ? -0.9 : 0.1
   ctx.save()
@@ -300,7 +359,12 @@ const knightFigure = (ctx: CanvasRenderingContext2D, pose: number, s: KnightStyl
       poly(ctx, [40, 54, 18, 36, 26, 30, 44, 46], HEX.paperWhite)
       poly(ctx, [88, 54, 110, 36, 102, 30, 84, 46], HEX.paperWhite)
     }
-    if (s.plume) {
+    if (s.crown) {
+      // A paper crown instead of the plume, with two gems.
+      poly(ctx, [44, 44, 44, 24, 53, 34, 58, 16, 64, 30, 70, 16, 75, 34, 84, 24, 84, 44], HEX.gold, 3)
+      ellipse(ctx, 58, 38, 3.2, 3.2, HEX.c1, 1.8)
+      ellipse(ctx, 70, 38, 3.2, 3.2, HEX.c3, 1.8)
+    } else if (s.plume) {
       ctx.beginPath()
       ctx.moveTo(64, 38)
       ctx.quadraticCurveTo(58, 14, 80, 8)
@@ -308,6 +372,19 @@ const knightFigure = (ctx: CanvasRenderingContext2D, pose: number, s: KnightStyl
       ctx.quadraticCurveTo(70, 30, 64, 38)
       fillStroke(ctx, s.plume)
     }
+  }
+  if (s.scarf) {
+    // A knitted scarf round the neck; its tail blows out to the side.
+    // (Out to the viewer's left, so it never hides the shield's emblem.)
+    poly(ctx, [36, 96, 46, 97, 30, 126, 19, 121], HEX.scarfRed, 2.8)
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath()
+      ctx.moveTo(19 + i * 3, 122 + i * 1.3)
+      ctx.lineTo(16 + i * 3, 130 + i * 1.3)
+      stroke(ctx, 2)
+    }
+    rrect(ctx, 36, 88, 56, 12, 5, HEX.scarfRed, 2.8)
+    for (let x = 44; x < 90; x += 10) rrect(ctx, x, 89.5, 4, 9, 2, HEX.scarfRedDark, 0)
   }
   ctx.restore()
 }
@@ -335,6 +412,45 @@ const leaperStyle = (springs: number): KnightStyle => ({
 const HERO: KnightStyle = {
   tabard: HEX.heroBlue, tabardDark: HEX.heroBlueDark, steel: HEX.heroSteel, trim: HEX.gold, plume: HEX.flagYellow,
   scale: 0.95, weapon: 'sword', shield: HEX.heroBlue, emblem: 'star'
+}
+
+/** The hero's style for a look (a fresh object: painting only). */
+const heroStyle = (look: HeroLook): KnightStyle => ({ ...HERO, ...heroAccessories(look) })
+
+/** Painters of the hero's five cells, for one look. */
+const heroPainters = (look: HeroLook): Record<string, Painter> => {
+  const st = heroStyle(look)
+  return {
+    hero0: (c) => knightFigure(c, 0, st),
+    heroCheer: (c) => knightFigure(c, 0, st, 1, true),
+    heroCower: (c) => knightFigure(c, 2, st, -0.2),
+    heroHit: (c) => knightFigure(c, 2, st, 0.3, true),
+    heroWalk: (c) => knightFigure(c, 1, st)
+  }
+}
+
+/** A paper bat (Halloween), wings up (0) or down (1): plum paper, gold eyes. */
+const bat = (ctx: CanvasRenderingContext2D, down: boolean): void => {
+  ctx.save()
+  ctx.translate(64, 110)
+  const wy = down ? 22 : -26
+  for (const side of [-1, 1]) {
+    ctx.beginPath()
+    ctx.moveTo(side * 10, -6)
+    ctx.quadraticCurveTo(side * 34, wy - 10, side * 58, wy)
+    ctx.quadraticCurveTo(side * 48, wy + 12, side * 44, wy + 22)
+    ctx.quadraticCurveTo(side * 36, wy + 10, side * 28, wy + 22)
+    ctx.quadraticCurveTo(side * 20, wy + 8, side * 10, 12)
+    ctx.closePath()
+    fillStroke(ctx, HEX.batWing)
+  }
+  // Body and ears.
+  poly(ctx, [-12, -18, -8, -34, -2, -22, 2, -22, 8, -34, 12, -18], HEX.bat, 2.8)
+  ellipse(ctx, 0, 0, 16, 22, HEX.bat)
+  ellipse(ctx, -6, -8, 3.4, 3.8, HEX.gold, 1.6)
+  ellipse(ctx, 6, -8, 3.4, 3.8, HEX.gold, 1.6)
+  poly(ctx, [-4, 4, -2, 9, 0, 4, 2, 9, 4, 4], HEX.paperWhite, 1.4)
+  ctx.restore()
 }
 
 const person = (ctx: CanvasRenderingContext2D, body: string, armsUp: boolean): void => {
@@ -421,7 +537,9 @@ const PAINTERS: Record<FrameName, Painter> = {
   personYellow0: (c) => person(c, HEX.c2, false),
   personYellow1: (c) => person(c, HEX.c2, true),
   crushed,
-  scrap
+  scrap,
+  bat0: (c) => bat(c, false),
+  bat1: (c) => bat(c, true)
 }
 
 /** Draw `paint` into a cell with the die-cut white paper margin around it. */
@@ -479,15 +597,20 @@ const cutOut = (ctx: CanvasRenderingContext2D, x: number, y: number, paint: Pain
   ctx.drawImage(figC, x, y)
 }
 
-export const createStandeeAtlas = (): StandeeAtlas => {
+export const createStandeeAtlas = (hero: HeroLook = CLASSIC_HERO): StandeeAtlas => {
   const [canvas, ctx] = makeCanvas(ATLAS_W, ATLAS_H)
   const index = new Map<FrameName, number>()
+  let heroNow = heroKey(hero)
+  const heroPaint = heroPainters(hero)
   ORDER.forEach((name, i) => {
     index.set(name, i)
-    if (!DEFERRED.has(name)) cutOut(ctx, (i % COLS) * CELL_W, Math.floor(i / COLS) * CELL_H, PAINTERS[name])
+    if (DEFERRED.has(name) || SEASONAL.has(name)) return
+    // The hero is painted in the equipped look straight away (same five cells, same cost).
+    cutOut(ctx, (i % COLS) * CELL_W, Math.floor(i / COLS) * CELL_H, heroPaint[name] ?? PAINTERS[name])
   })
   const texture = toTexture(canvas, true)
   let complete = false
+  let batsReady = false
   /** Frames an override image replaced: a late paint must not draw over them. */
   const overridden = new Set<FrameName>()
   const frames = new Map<FrameName, FrameUV>()
@@ -514,6 +637,35 @@ export const createStandeeAtlas = (): StandeeAtlas => {
       complete = true
       for (const name of DEFERRED) {
         if (overridden.has(name)) continue
+        const i = index.get(name)!
+        cutOut(ctx, (i % COLS) * CELL_W, Math.floor(i / COLS) * CELL_H, PAINTERS[name])
+      }
+      texture.needsUpdate = true
+      return true
+    },
+    get batsReady() {
+      return batsReady
+    },
+    setHero(look: HeroLook): boolean {
+      const key = heroKey(look)
+      if (key === heroNow) return false
+      heroNow = key
+      const paint = heroPainters(look)
+      for (const name of HERO_FRAMES) {
+        if (overridden.has(name)) continue
+        const i = index.get(name)!
+        const x = (i % COLS) * CELL_W
+        const y = Math.floor(i / COLS) * CELL_H
+        ctx.clearRect(x, y, CELL_W, CELL_H)
+        cutOut(ctx, x, y, paint[name]!)
+      }
+      texture.needsUpdate = true
+      return true
+    },
+    paintSeason(season: Season): boolean {
+      if (season !== 'halloween' || batsReady) return false
+      batsReady = true
+      for (const name of SEASONAL) {
         const i = index.get(name)!
         cutOut(ctx, (i % COLS) * CELL_W, Math.floor(i / COLS) * CELL_H, PAINTERS[name])
       }

@@ -394,5 +394,11 @@ export const SECRET = {
   /** …each within this many real seconds of the last. */
   tapGap: 1.2,
   /** A pair secret: both folds snapped within this many real seconds. */
-  pairGap: 1.2
+  pairGap: 1.2,
+  /**
+   * A tap within this share of a hero secret's reach is clearly on the hero:
+   * it counts for the secret and does not also fire a ballista bolt. The rest
+   * of the reach (the rim, where a shot past him is as likely meant) still fires.
+   */
+  heroClear: 0.6
 } as const

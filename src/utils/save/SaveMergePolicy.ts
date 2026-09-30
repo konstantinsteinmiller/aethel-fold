@@ -26,8 +26,9 @@
 // Stars are also merged field-level: whichever side wins, `carryStars` folds
 // the loser's per-page best stars into the winner's blob (per-page maximum),
 // so a merge can never take a star away. It carries the other only-ever-better
-// records the same way: the page secrets found (union) and the Dragon Rush
-// best times (the faster per book).
+// records the same way: the page secrets found (union), the Dragon Rush
+// best times (the faster per book) and the paper cosmetics owned (union; the
+// winner keeps its equipped items, which it owns — `mergeCosmetics`).
 //
 // Conflict policy:
 //   - higher score wins
@@ -36,12 +37,13 @@
 //   - Aethel Fold has no currency, so a remote win never pays a bonus.
 
 import {
-  CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUNS_KEY, RUSH_KEY, SECRETS_KEY, STARS_KEY, WINS2_KEY, WINS_KEY
+  CLEARED2_KEY, CLEARED_KEY, COSMETICS_KEY, LESSONS_KEY, PAGE_KEY, RUNS_KEY, RUSH_KEY, SECRETS_KEY, STARS_KEY, WINS2_KEY, WINS_KEY
 } from '@/keys'
 import { STATE_KEY } from '@/use/useAethelState'
 import { countStars, mergeStarRecords, readStarRecord } from '@/fold/logic/stars'
 import { mergeSecretLists, readSecretList } from '@/fold/logic/secrets'
 import { mergeRushRecords, readRushRecord } from '@/fold/logic/rush'
+import { mergeCosmetics, readCosmetics } from '@/fold/logic/cosmetics'
 
 /** Where the meta blob is stored in localStorage / on the remote backend.
  *  NOT prefixed with `__save_internal__` — this key needs to round-trip
@@ -255,7 +257,8 @@ export const decideMerge = (
 /**
  * Fold the other side's best stars into the winning side's `aethel_state`
  * blob (per-page maximum), so a whole-blob merge never loses a star — and,
- * the same way, its page secrets (union) and Dragon Rush bests (the faster).
+ * the same way, its page secrets (union), Dragon Rush bests (the faster) and
+ * owned paper cosmetics (union).
  * `winnerRaw` / `otherRaw` are raw `aethel_state` strings (null = absent).
  * Returns the new winner blob, or null when nothing changes (no write needed,
  * or the winner blob is missing / unparseable — then it is left alone).
@@ -307,6 +310,16 @@ export const carryStars = (winnerRaw: string | null, otherRaw: string | null): s
     for (const k of Object.keys(merged)) if (merged[k] !== ours[k]) diff = true
     if (diff) {
       out[RUSH_KEY] = merged
+      changed = true
+    }
+  }
+  // Paper cosmetics (roadmap #6): the union of owned; the winner's equipped items stay.
+  const theirLooks = readCosmetics(o[COSMETICS_KEY])
+  if (theirLooks.owned.length > 0) {
+    const ours = readCosmetics(w[COSMETICS_KEY])
+    const merged = mergeCosmetics(w[COSMETICS_KEY], o[COSMETICS_KEY])
+    if (merged.owned.length !== ours.owned.length) {
+      out[COSMETICS_KEY] = merged
       changed = true
     }
   }

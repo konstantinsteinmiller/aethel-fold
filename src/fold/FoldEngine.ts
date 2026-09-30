@@ -20,6 +20,7 @@ import { haptics } from './haptics'
 import { getAudioContext } from '@/use/useAssets'
 import { SHELF_NONE, type ShelfProgress } from './logic/shelf'
 import { SLOW_MODE_SCALE } from './logic/config'
+import type { Look } from './logic/cosmetics'
 
 export interface EngineHooks {
   /** Every simulation event, after the view and audio have reacted. */
@@ -44,6 +45,8 @@ const WARM_UNTOUCHED = 6000
 export interface EngineOptions extends GameOptions {
   startPage?: PageId
   startScore?: number
+  /** The equipped cosmetics and the season (roadmaps #6, #17): art only, the game never sees it. */
+  look?: Look
 }
 
 export class FoldEngine {
@@ -65,6 +68,9 @@ export class FoldEngine {
   /** The page the next warm-up builds (0 = none). */
   private warmPage: PageId | 0 = 0
   private disposed = false
+  /** A new look's canvas work is waiting for idle time (or for a pause, for the page in play). */
+  private lookPending = false
+  private lookQueued = false
   private readonly onPointerDown = (e: PointerEvent) => this.pointer('down', e)
   private readonly onPointerMove = (e: PointerEvent) => this.pointer('move', e)
   private readonly onPointerUp = (e: PointerEvent) => this.pointer('up', e)
@@ -91,7 +97,7 @@ export class FoldEngine {
     this.view = new GameView(canvas, this.game, {
       word: (key, x, y, size = 1, tone = 'default') => hooks.word(key, x, y, size, tone),
       caption: (def) => hooks.caption?.(def) ?? ''
-    })
+    }, opts.look)
     const ctx = getAudioContext()
     this.audio = ctx ? new FoldAudio(ctx) : null
     this.gestures = new GestureRecognizer(this.game, {
@@ -201,6 +207,35 @@ export class FoldEngine {
     this.game.paused = p
     if (p) this.gestures.cancel()
     this.audio?.muffle(p ? 0.85 : 0)
+    // A page still printed in an old look is reprinted behind the menu.
+    if (p && this.lookPending) this.queueLook()
+  }
+
+  // ─── Looks (roadmaps #6, #17) ────────────────────────────────────────────
+
+  /**
+   * The equipped cosmetics or the season changed. The confetti changes at
+   * once; the atlas and page repaints run in idle time, and the page in play
+   * only while paused (see `GameView`'s header) — so an equip never hitches
+   * a fold.
+   */
+  setLook(look: Look): void {
+    if (!this.view.setLook(look)) return
+    this.lookPending = true
+    this.queueLook()
+  }
+
+  private queueLook(): void {
+    if (this.lookQueued || this.disposed) return
+    this.lookQueued = true
+    const run = (): void => {
+      this.lookQueued = false
+      if (this.disposed) return
+      this.lookPending = this.view.applyLook(this.game.paused)
+    }
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback
+    if (ric) ric(run, { timeout: 600 })
+    else setTimeout(run, 50)
   }
 
   setVolumes(sfx: number, music: number): void {

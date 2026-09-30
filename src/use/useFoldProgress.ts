@@ -1,7 +1,7 @@
 import { ref, watch, type Ref } from 'vue'
 import {
   BEST2_KEY, BEST_KEY, BOOK_KEY, CLEARED2_KEY, CLEARED_KEY, LESSONS_KEY, PAGE_KEY, RUN_KEY, RUNS_KEY, RUSH_KEY,
-  SECRETS_KEY, SETTINGS_KEY, STARS_KEY, STATS_KEY, WINS2_KEY, WINS_KEY
+  SECRETS_KEY, SETTINGS_KEY, STARS_KEY, STATS_KEY, WINS2_KEY, WINS_KEY, COSMETICS_KEY
 } from '@/keys'
 import { aethelState, getState, setState, setStates } from '@/use/useAethelState'
 import { saveDataVersion, flushSaveNow } from '@/use/useSaveStatus'
@@ -13,6 +13,7 @@ import { type KindMemory, readKindMemory } from '@/fold/logic/difficulty'
 import { bookUnlockedBy, type ShelfProgress } from '@/fold/logic/shelf'
 import { SECRET_TOTAL, countFound, readSecretList, secretsInBook, type SecretId } from '@/fold/logic/secrets'
 import { readRushRecord, rushKey, rushResult, type RushRecord, type RushResult } from '@/fold/logic/rush'
+import { equip, newUnlocks, readCosmetics, withUnlocks, type CosmeticId, type CosmeticsRecord } from '@/fold/logic/cosmetics'
 
 /**
  * Aethel Fold progress — a module-level singleton view over the fields of
@@ -37,6 +38,8 @@ export interface FoldSettings {
   highlightMode: HighlightMode
   /** Night mode — the desk lamp's secret (roadmap #15). Cosmetic: the lamp's pool on a periwinkle desk. */
   night: boolean
+  /** Seasonal page skins (roadmap #17): Halloween and Winter decorations by date. On unless turned off. */
+  seasonal: boolean
 }
 
 export interface RunCheckpoint {
@@ -60,7 +63,7 @@ export interface Records {
 }
 
 const DEFAULT_SETTINGS: FoldSettings = {
-  haptics: true, shake: true, quality: 'auto', holdToFold: false, slowMode: false, highlightMode: 'standard', night: false
+  haptics: true, shake: true, quality: 'auto', holdToFold: false, slowMode: false, highlightMode: 'standard', night: false, seasonal: true
 }
 
 const num = (v: unknown, fallback = 0): number => {
@@ -87,6 +90,7 @@ const readSettings = (): FoldSettings => {
   s.slowMode = s.slowMode === true
   if (!HIGHLIGHT_MODES.includes(s.highlightMode)) s.highlightMode = 'standard'
   s.night = s.night === true
+  s.seasonal = s.seasonal !== false
   return s
 }
 
@@ -141,6 +145,8 @@ export const pageStars: Ref<Record<string, Stars>> = ref(readStarRecord(getState
 export const secretsFound: Ref<SecretId[]> = ref(readSecretList(getState(SECRETS_KEY)))
 /** Dragon Rush best times (roadmap #16), `b<book>` → seconds. */
 export const rushBest: Ref<RushRecord> = ref(readRushRecord(getState(RUSH_KEY)))
+/** Paper cosmetics (roadmap #6): what the stars have unlocked, and what is equipped. */
+export const cosmetics: Ref<CosmeticsRecord> = ref(readCosmetics(getState(COSMETICS_KEY)))
 /** Bumped when a cloud hydrate replaced the progress under a running game. */
 export const progressRevision = ref(0)
 
@@ -161,6 +167,7 @@ const refresh = (): void => {
   pageStars.value = readStarRecord(getState(STARS_KEY))
   secretsFound.value = readSecretList(getState(SECRETS_KEY))
   rushBest.value = readRushRecord(getState(RUSH_KEY))
+  cosmetics.value = readCosmetics(getState(COSMETICS_KEY))
 }
 
 watch(aethelState, refresh, { deep: false })
@@ -379,6 +386,39 @@ export const recordRush = (book: BookId, time: number, par: number): RushResult 
     void flushSaveNow()
   }
   return res
+}
+
+// ─── Paper cosmetics (roadmap #6) ──────────────────────────────────────────
+
+/**
+ * Add whatever the current star total unlocks to the owned list. Returns the
+ * ids that are new (empty when nothing changed, and then nothing is written).
+ * Called right after `recordStars` on a page clear, so the page-clear
+ * checkpoint's `flushSaveNow` carries it to the cloud. Also safe at boot: a
+ * save whose stars came from another device (merge) catches up silently.
+ */
+export const unlockCosmetics = (): CosmeticId[] => {
+  const stars = totalStars().earned
+  const fresh = newUnlocks(cosmetics.value, stars)
+  if (fresh.length === 0) return fresh
+  const next = withUnlocks(cosmetics.value, stars)
+  // Mirror at once (the aethelState watcher runs a tick later).
+  cosmetics.value = next
+  setState(COSMETICS_KEY, next)
+  return fresh
+}
+
+/** Equip an owned cosmetic (the pause's settings face). Returns false when it isn't owned. */
+export const equipCosmetic = (id: string): boolean => {
+  const next = equip(cosmetics.value, id)
+  if (!next) return false
+  const e = cosmetics.value.equipped
+  if (next.equipped.paper === e.paper && next.equipped.hero === e.hero && next.equipped.confetti === e.confetti) return true
+  cosmetics.value = next
+  setState(COSMETICS_KEY, next)
+  // A deliberate pick in a menu: keep it even if the tab closes right after.
+  void flushSaveNow()
+  return true
 }
 
 export const setFoldSetting = <K extends keyof FoldSettings>(key: K, value: FoldSettings[K]): void => {

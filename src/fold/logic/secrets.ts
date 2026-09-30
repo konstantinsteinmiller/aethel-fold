@@ -17,7 +17,9 @@
  * his keep): the view writes where it *appears* on the page plane into
  * `spotX/spotZ` each frame (like the tear anchors), so the finger lands on
  * what the eye sees. A secret tap never eats the tap: whatever else it does
- * (a stamp, a ballista bolt) still happens.
+ * (a stamp) still happens — except that a tap clearly on the hero
+ * (`SECRET.heroClear` of the target's reach) doesn't also loose a ballista
+ * bolt past him.
  *
  * Adding book 3: append six more `SECRETS` with `book: 3`. Codes are the index
  * in `SECRET_IDS` (append-only); every counter derives from the list.
@@ -209,6 +211,19 @@ export const countSecretTap = (s: SecretState, x: number, z: number): boolean =>
   s.taps = 0
   s.lastTap = -1e9
   return true
+}
+
+/**
+ * Is a tap within `k` × the target's reach of where it appears (`spotX/Z`)?
+ * `k` < 1 asks for a tap clearly on the target, not just near it.
+ */
+export const tapOnSpot = (s: SecretState, x: number, z: number, k = 1): boolean => {
+  const d = s.def
+  if (!d) return false
+  const dx = x - s.spotX
+  const dz = z - s.spotZ
+  const r = d.r * k
+  return dx * dx + dz * dz <= r * r
 }
 
 /** A fold snapped (by `FoldDef.id`): true when it completes the page's fold or pair secret. */

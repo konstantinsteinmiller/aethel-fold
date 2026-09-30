@@ -11,13 +11,24 @@
  *
  * Page space (x ∈ [-5, 5], z ∈ [-7, 7]) maps to canvas pixels linearly;
  * `v = 1 - (z + 7) / 14` in texture space (CanvasTexture flips Y).
+ *
+ * The look (`PageLook`) picks the paper the map is printed on (roadmap #6:
+ * plain parchment, graph, washi, newsprint, map) and the season's skin
+ * (roadmap #17: Halloween dusk with pumpkins and bats, Winter snow). Both are
+ * pale prints under the illustration plus a faint veil over it, drawn with
+ * their own random stream so the page's layout (meadows, rocks, flowers) is
+ * the same on every paper. The under-flap layer carries the same motif, so a
+ * raised flap reveals the paper it was cut from. Seasonal marks stay clear of
+ * the lanes, so marchers and roads read the same in every season.
  */
 
 import type { CanvasTexture } from 'three'
 import { PAGE_D, PAGE_HALF_D, PAGE_HALF_W, PAGE_W } from '../../logic/config'
 import type { FoldDef, PageDef } from '../../logic/types'
 import type { Rng } from '../../logic/rng'
-import { HEX, css } from '../palette'
+import type { PaperPattern } from '../../logic/cosmetics'
+import type { Season } from '../../logic/seasons'
+import { HEX, css, type PaletteKey } from '../palette'
 import { blob, edgeBurn, inkLine, makeCanvas, paperGrain, seeded, smoothPath, stains, toTexture } from './canvas'
 
 export const PAGE_TEX_W = 1024
@@ -26,6 +37,14 @@ export const PAGE_TEX_H = Math.round((PAGE_TEX_W * PAGE_D) / PAGE_W)
 const PX = PAGE_TEX_W / PAGE_W
 const px = (x: number): number => (x + PAGE_HALF_W) * PX
 const py = (z: number): number => (z + PAGE_HALF_D) * PX
+
+/** What a page is printed on: the equipped paper and the season's skin. */
+export interface PageLook {
+  paper: PaperPattern
+  season: Season
+}
+
+export const PLAIN_LOOK: Readonly<PageLook> = { paper: 'plain', season: 'none' }
 
 export interface PageTextures {
   art: CanvasTexture
@@ -65,7 +84,7 @@ const polyPath = (ctx: CanvasRenderingContext2D, p: number[]): void => {
 
 // ─── Shared motifs ─────────────────────────────────────────────────────────
 
-const parchmentBase = (ctx: CanvasRenderingContext2D, rng: Rng, tint = HEX.parchment): void => {
+const parchmentBase = (ctx: CanvasRenderingContext2D, rng: Rng, tint: string = HEX.parchment): void => {
   const w = PAGE_TEX_W
   const h = PAGE_TEX_H
   ctx.fillStyle = tint
@@ -664,38 +683,456 @@ const keepGrounds = (ctx: CanvasRenderingContext2D): void => {
   ctx.restore()
 }
 
-// ─── Underlayer ────────────────────────────────────────────────────────────
+// ─── Papers (roadmap #6) ───────────────────────────────────────────────────
 
-const underlayerPattern = (ctx: CanvasRenderingContext2D, rng: Rng, dark = false): void => {
-  ctx.fillStyle = dark ? HEX.ravine : HEX.underlayer
+/** Base stock of each paper; Winter prints plain maps on snow-white paper. */
+const PAPER_TINT: Record<PaperPattern, PaletteKey> = {
+  plain: 'parchment',
+  graph: 'graphPaper',
+  washi: 'washi',
+  newsprint: 'newsprint',
+  map: 'mapPaper'
+}
+
+/** A small repeating tile as a canvas pattern (one fill for the whole sheet). */
+const tile = (ctx: CanvasRenderingContext2D, size: number, draw: (t: CanvasRenderingContext2D) => void): CanvasPattern | null => {
+  const [c, t] = makeCanvas(size, size)
+  draw(t)
+  return ctx.createPattern(c, 'repeat')
+}
+
+const fillTile = (ctx: CanvasRenderingContext2D, pat: CanvasPattern | null): void => {
+  if (!pat) return
+  ctx.save()
+  ctx.fillStyle = pat
   ctx.fillRect(0, 0, PAGE_TEX_W, PAGE_TEX_H)
-  ctx.strokeStyle = dark ? css('ink', 0.35) : css('blueprint', 0.6)
+  ctx.restore()
+}
+
+const gridTile = (ctx: CanvasRenderingContext2D, alphaMinor: number, alphaMajor: number): CanvasPattern | null =>
+  tile(ctx, 80, (t) => {
+    t.strokeStyle = css('graphLine', alphaMinor)
+    t.lineWidth = 1
+    for (let i = 0; i < 80; i += 16) {
+      t.beginPath()
+      t.moveTo(i + 0.5, 0)
+      t.lineTo(i + 0.5, 80)
+      t.moveTo(0, i + 0.5)
+      t.lineTo(80, i + 0.5)
+      t.stroke()
+    }
+    t.strokeStyle = css('graphLine', alphaMajor)
+    t.lineWidth = 1.6
+    t.beginPath()
+    t.moveTo(0.8, 0)
+    t.lineTo(0.8, 80)
+    t.moveTo(0, 0.8)
+    t.lineTo(80, 0.8)
+    t.stroke()
+  })
+
+const halftoneTile = (ctx: CanvasRenderingContext2D, alpha: number): CanvasPattern | null =>
+  tile(ctx, 12, (t) => {
+    t.fillStyle = css('newsInk', alpha)
+    t.beginPath()
+    t.arc(3, 3, 1.3, 0, Math.PI * 2)
+    t.arc(9, 9, 1.3, 0, Math.PI * 2)
+    t.fill()
+  })
+
+/** Kozo fibres: long, soft, slightly curved strands. */
+const washiFibres = (ctx: CanvasRenderingContext2D, rng: Rng, count: number, alpha: number): void => {
+  ctx.save()
+  ctx.lineCap = 'round'
+  for (let i = 0; i < count; i++) {
+    const x = rng.next() * PAGE_TEX_W
+    const y = rng.next() * PAGE_TEX_H
+    const len = 20 + rng.next() * 50
+    const a = rng.next() * Math.PI
+    const bend = (rng.next() - 0.5) * 18
+    ctx.strokeStyle = css('washiFibre', alpha)
+    ctx.lineWidth = 0.7 + rng.next() * 1
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.quadraticCurveTo(x + Math.cos(a) * len * 0.5 - Math.sin(a) * bend, y + Math.sin(a) * len * 0.5 + Math.cos(a) * bend, x + Math.cos(a) * len, y + Math.sin(a) * len)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+/** Seigaiha: rows of overlapping wave arcs, printed very faint. */
+const seigaiha = (ctx: CanvasRenderingContext2D, alpha: number): void => {
+  ctx.save()
+  ctx.strokeStyle = css('washiPrint', alpha)
+  ctx.lineWidth = 1.4
+  const r = 30
+  for (let row = 0, y = 0; y < PAGE_TEX_H + r; row++, y += r * 0.5) {
+    const off = row % 2 ? r : 0
+    for (let x = -r + off; x < PAGE_TEX_W + r; x += r * 2) {
+      for (const k of [1, 0.66, 0.33]) {
+        ctx.beginPath()
+        ctx.arc(x, y, r * k, Math.PI, Math.PI * 2)
+        ctx.stroke()
+      }
+    }
+  }
+  ctx.restore()
+}
+
+/** Newsprint: columns of grey "type", a few headline bars, a halftone photo block. */
+const newsColumns = (ctx: CanvasRenderingContext2D, rng: Rng, alpha: number): void => {
+  ctx.save()
+  const colW = 150
+  for (let x = 44; x + colW < PAGE_TEX_W - 30; x += colW + 22) {
+    let y = 50
+    while (y < PAGE_TEX_H - 50) {
+      if (rng.next() < 0.06) {
+        // A headline bar and a gap.
+        ctx.fillStyle = css('newsInk', alpha * 1.5)
+        ctx.fillRect(x, y, colW * (0.6 + rng.next() * 0.4), 9)
+        y += 22
+        continue
+      }
+      if (rng.next() < 0.025) {
+        // A halftone photo block.
+        const h = 70 + rng.next() * 60
+        ctx.fillStyle = css('newsInk', alpha * 0.6)
+        ctx.fillRect(x, y, colW, h)
+        y += h + 12
+        continue
+      }
+      ctx.fillStyle = css('newsInk', alpha)
+      ctx.fillRect(x, y, colW * (0.7 + rng.next() * 0.3), 3)
+      y += 11
+    }
+  }
+  // Column rules.
+  ctx.strokeStyle = css('newsInk', alpha)
+  ctx.lineWidth = 1
+  for (let x = 44 + colW + 11; x < PAGE_TEX_W - 30; x += colW + 22) {
+    ctx.beginPath()
+    ctx.moveTo(x, 40)
+    ctx.lineTo(x, PAGE_TEX_H - 40)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+/** Survey map: contour rings around a few hills, and a dashed graticule. */
+const contours = (ctx: CanvasRenderingContext2D, rng: Rng, alpha: number, key: PaletteKey = 'mapLine'): void => {
+  ctx.save()
+  ctx.strokeStyle = css(key, alpha)
+  ctx.lineWidth = 1.3
+  for (let i = 0; i < 6; i++) {
+    const cx = rng.next() * PAGE_TEX_W
+    const cy = rng.next() * PAGE_TEX_H
+    const rings = 5 + Math.floor(rng.next() * 4)
+    const rx = 90 + rng.next() * 90
+    const ry = 70 + rng.next() * 70
+    for (let k = 1; k <= rings; k++) {
+      blob(ctx, cx, cy, (rx * k) / rings, (ry * k) / rings, rng, 10, 0.12)
+      ctx.stroke()
+    }
+  }
+  ctx.restore()
+}
+
+const graticule = (ctx: CanvasRenderingContext2D, alpha: number, key: PaletteKey = 'mapLine'): void => {
+  ctx.save()
+  ctx.strokeStyle = css(key, alpha)
   ctx.lineWidth = 1.2
-  for (let x = 0; x < PAGE_TEX_W; x += 24) {
+  ctx.setLineDash([10, 7])
+  for (let x = 128; x < PAGE_TEX_W; x += 128) {
     ctx.beginPath()
     ctx.moveTo(x, 0)
     ctx.lineTo(x, PAGE_TEX_H)
     ctx.stroke()
   }
-  for (let y = 0; y < PAGE_TEX_H; y += 24) {
+  for (let y = 128; y < PAGE_TEX_H; y += 128) {
     ctx.beginPath()
     ctx.moveTo(0, y)
     ctx.lineTo(PAGE_TEX_W, y)
     ctx.stroke()
+  }
+  ctx.restore()
+}
+
+/** The paper's own print, under the illustration (full strength, but pale). */
+const paperUnder = (ctx: CanvasRenderingContext2D, paper: PaperPattern, rng: Rng): void => {
+  switch (paper) {
+    case 'graph':
+      fillTile(ctx, gridTile(ctx, 0.35, 0.6))
+      break
+    case 'washi':
+      seigaiha(ctx, 0.14)
+      washiFibres(ctx, rng, 420, 0.4)
+      break
+    case 'newsprint':
+      newsColumns(ctx, rng, 0.16)
+      break
+    case 'map':
+      contours(ctx, rng, 0.38)
+      graticule(ctx, 0.32)
+      break
+  }
+}
+
+/**
+ * A faint veil of the same print over the illustration, so the paper shows
+ * through the meadows too. Light enough that roads, folds and cut lines keep
+ * their contrast (≤ 0.12 alpha of a pale colour).
+ */
+const paperOver = (ctx: CanvasRenderingContext2D, paper: PaperPattern, rng: Rng): void => {
+  switch (paper) {
+    case 'graph':
+      fillTile(ctx, gridTile(ctx, 0.06, 0.12))
+      break
+    case 'washi':
+      washiFibres(ctx, rng, 160, 0.2)
+      break
+    case 'newsprint':
+      fillTile(ctx, halftoneTile(ctx, 0.07))
+      break
+    case 'map':
+      graticule(ctx, 0.1)
+      break
+  }
+}
+
+// ─── Seasons (roadmap #17) ─────────────────────────────────────────────────
+
+/** Lane x at z (the lane's polyline, clamped at its ends). */
+const laneX = (points: readonly number[], z: number): number => {
+  if (z <= points[1]!) return points[0]!
+  for (let i = 2; i < points.length; i += 2) {
+    if (z <= points[i + 1]!) {
+      const t = (z - points[i - 1]!) / (points[i + 1]! - points[i - 1]! || 1)
+      return points[i - 2]! + (points[i]! - points[i - 2]!) * t
+    }
+  }
+  return points[points.length - 2]!
+}
+
+/** Is a page point clear of every lane (by `margin` page units) and of the keep's grounds? */
+const offLane = (page: PageDef, x: number, z: number, margin: number): boolean => {
+  if (z > 5.6) return false
+  for (const l of page.lanes) if (Math.abs(laneX(l.points, z) - x) < margin) return false
+  return true
+}
+
+/** A page point clear of the lanes (tries a few times; null if none found). */
+const spotOffLane = (page: PageDef, rng: Rng, margin: number): [number, number] | null => {
+  for (let k = 0; k < 12; k++) {
+    const x = -4.6 + rng.next() * 9.2
+    const z = -6.5 + rng.next() * 12
+    if (offLane(page, x, z, margin)) return [x, z]
+  }
+  return null
+}
+
+const pumpkin = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void => {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.fillStyle = HEX.pumpkin
+  ctx.strokeStyle = css('ink', 0.6)
+  ctx.lineWidth = 1.6
+  for (const dx of [-0.45, 0.45, 0]) {
+    ctx.beginPath()
+    ctx.ellipse(dx * r, 0, r * 0.62, r * 0.8, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  }
+  ctx.strokeStyle = css('pumpkinDark', 0.9)
+  ctx.beginPath()
+  ctx.moveTo(0, -r * 0.7)
+  ctx.lineTo(0, r * 0.7)
+  ctx.stroke()
+  ctx.fillStyle = HEX.pumpkinStem
+  ctx.fillRect(-r * 0.12, -r * 1.05, r * 0.24, r * 0.35)
+  ctx.restore()
+}
+
+const printedBat = (ctx: CanvasRenderingContext2D, x: number, y: number, s: number, rot: number): void => {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(rot)
+  ctx.scale(s, s)
+  ctx.fillStyle = css('bat', 0.75)
+  ctx.beginPath()
+  ctx.moveTo(0, -4)
+  ctx.quadraticCurveTo(8, -12, 20, -6)
+  ctx.quadraticCurveTo(15, -2, 16, 4)
+  ctx.quadraticCurveTo(10, 0, 6, 5)
+  ctx.lineTo(0, 3)
+  ctx.lineTo(-6, 5)
+  ctx.quadraticCurveTo(-10, 0, -16, 4)
+  ctx.quadraticCurveTo(-15, -2, -20, -6)
+  ctx.quadraticCurveTo(-8, -12, 0, -4)
+  ctx.fill()
+  ctx.restore()
+}
+
+const cobweb = (ctx: CanvasRenderingContext2D, cx: number, cy: number, sx: number, sy: number): void => {
+  ctx.save()
+  ctx.strokeStyle = css('inkSoft', 0.35)
+  ctx.lineWidth = 1.1
+  const R = 120
+  for (let i = 0; i <= 5; i++) {
+    const a = (i / 5) * (Math.PI / 2)
+    ctx.beginPath()
+    ctx.moveTo(cx, cy)
+    ctx.lineTo(cx + sx * Math.cos(a) * R, cy + sy * Math.sin(a) * R)
+    ctx.stroke()
+  }
+  for (let k = 1; k <= 4; k++) {
+    const r = (k / 4) * R
+    ctx.beginPath()
+    for (let i = 0; i <= 5; i++) {
+      const a = (i / 5) * (Math.PI / 2)
+      const px0 = cx + sx * Math.cos(a) * r
+      const py0 = cy + sy * Math.sin(a) * r
+      if (i === 0) ctx.moveTo(px0, py0)
+      else ctx.quadraticCurveTo(cx + sx * Math.cos(a - 0.16) * r * 0.86, cy + sy * Math.sin(a - 0.16) * r * 0.86, px0, py0)
+    }
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+const snowflake = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void => {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.strokeStyle = css('iceBlue', 0.85)
+  ctx.lineWidth = 1.6
+  ctx.lineCap = 'round'
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2
+    const c = Math.cos(a)
+    const sn = Math.sin(a)
+    ctx.beginPath()
+    ctx.moveTo(0, 0)
+    ctx.lineTo(c * r, sn * r)
+    ctx.moveTo(c * r * 0.55, sn * r * 0.55)
+    ctx.lineTo(c * r * 0.55 + Math.cos(a + 0.8) * r * 0.3, sn * r * 0.55 + Math.sin(a + 0.8) * r * 0.3)
+    ctx.moveTo(c * r * 0.55, sn * r * 0.55)
+    ctx.lineTo(c * r * 0.55 + Math.cos(a - 0.8) * r * 0.3, sn * r * 0.55 + Math.sin(a - 0.8) * r * 0.3)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+/** The season's print over the illustration (under the frame and the cut lines). */
+const seasonOver = (ctx: CanvasRenderingContext2D, page: PageDef, season: Season, rng: Rng): void => {
+  if (season === 'halloween') {
+    // A dusk wash: plum at the top where the enemy comes from, warm pumpkin light by the keep.
+    const g = ctx.createLinearGradient(0, 0, 0, PAGE_TEX_H)
+    g.addColorStop(0, css('duskPurple', 0.18))
+    g.addColorStop(0.55, css('duskPurple', 0.06))
+    g.addColorStop(1, css('duskOrange', 0.14))
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, PAGE_TEX_W, PAGE_TEX_H)
+    for (let i = 0; i < 9; i++) {
+      const p = spotOffLane(page, rng, 1.1)
+      if (p) pumpkin(ctx, px(p[0]), py(p[1]), 12 + rng.next() * 8)
+    }
+    for (let i = 0; i < 8; i++) {
+      const p = spotOffLane(page, rng, 0.9)
+      if (p) printedBat(ctx, px(p[0]), py(p[1]), 0.8 + rng.next() * 0.6, (rng.next() - 0.5) * 0.6)
+    }
+    cobweb(ctx, 28, 28, 1, 1)
+    cobweb(ctx, PAGE_TEX_W - 28, 28, -1, 1)
+  } else if (season === 'winter') {
+    // Snow paper: a white veil, drifts off the lanes, and printed flakes.
+    ctx.fillStyle = css('snow', 0.3)
+    ctx.fillRect(0, 0, PAGE_TEX_W, PAGE_TEX_H)
+    for (let i = 0; i < 24; i++) {
+      const p = spotOffLane(page, rng, 1.05)
+      if (!p) continue
+      blob(ctx, px(p[0]), py(p[1]), 40 + rng.next() * 46, 24 + rng.next() * 26, rng, 9, 0.25)
+      ctx.fillStyle = css('snow', 0.88)
+      ctx.fill()
+      ctx.strokeStyle = css('snowShade', 0.95)
+      ctx.lineWidth = 2
+      ctx.stroke()
+    }
+    for (let i = 0; i < 36; i++) {
+      const p = spotOffLane(page, rng, 0.8)
+      if (p) snowflake(ctx, px(p[0]), py(p[1]), 5 + rng.next() * 6)
+    }
+  }
+}
+
+// ─── Underlayer ────────────────────────────────────────────────────────────
+
+/**
+ * The layer under the flaps (darker kraft, or the ravine's shadowed floor),
+ * with the equipped paper's motif in place of the blueprint grid — so a raised
+ * flap shows the back of the same paper it was cut from — and the season's
+ * tint on its lines. `rng` is the page's main stream (grain), `motif` the
+ * look's own stream.
+ */
+const underlayerPattern = (ctx: CanvasRenderingContext2D, rng: Rng, dark: boolean, look: PageLook, motif: Rng): void => {
+  ctx.fillStyle = dark ? HEX.ravine : HEX.underlayer
+  ctx.fillRect(0, 0, PAGE_TEX_W, PAGE_TEX_H)
+  const seasonKey: PaletteKey | null = look.season === 'winter' ? 'iceBlue' : look.season === 'halloween' ? 'duskPurple' : null
+  const lineKey: PaletteKey = dark ? 'ink' : seasonKey ?? 'blueprint'
+  const alpha = dark ? 0.35 : 0.6
+  switch (look.paper) {
+    case 'washi':
+      washiFibres(ctx, motif, 260, dark ? 0.25 : 0.55)
+      break
+    case 'newsprint': {
+      ctx.fillStyle = css(dark ? 'ink' : seasonKey ?? 'newsInk', dark ? 0.2 : 0.3)
+      for (let y = 30; y < PAGE_TEX_H - 30; y += 12) {
+        for (let x = 30; x < PAGE_TEX_W - 30; x += 160) ctx.fillRect(x, y, 130 * (0.7 + motif.next() * 0.3), 3)
+      }
+      break
+    }
+    case 'map':
+      contours(ctx, motif, alpha, dark ? 'ink' : seasonKey ?? 'underlayerInk')
+      break
+    default: {
+      // Plain and graph: the blueprint grid (graph paper's back is a finer one).
+      const step = look.paper === 'graph' ? 16 : 24
+      ctx.strokeStyle = css(lineKey, alpha)
+      ctx.lineWidth = look.paper === 'graph' ? 1 : 1.2
+      for (let x = 0; x < PAGE_TEX_W; x += step) {
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, PAGE_TEX_H)
+        ctx.stroke()
+      }
+      for (let y = 0; y < PAGE_TEX_H; y += step) {
+        ctx.beginPath()
+        ctx.moveTo(0, y)
+        ctx.lineTo(PAGE_TEX_W, y)
+        ctx.stroke()
+      }
+    }
   }
   paperGrain(ctx, PAGE_TEX_W, PAGE_TEX_H, rng, 0.35)
 }
 
 // ─── Entry point ───────────────────────────────────────────────────────────
 
-export const paintPage = (page: PageDef): PageTextures => {
+/** Paper ids `paintPage` can print on (tests: every one paints). */
+export const PAGE_PAPERS: readonly PaperPattern[] = ['plain', 'graph', 'washi', 'newsprint', 'map']
+
+export const paintPage = (page: PageDef, look: PageLook = PLAIN_LOOK): PageTextures => {
   const rng = seeded(page.book * 104729 + page.id * 7919 + 17)
+  // The look's own stream: the layout (meadows, rocks…) is the same on every paper.
+  const motif = seeded(page.book * 104729 + page.id * 7919 + 31337)
+  const paper: PaperPattern = PAPER_TINT[look.paper] ? look.paper : 'plain'
   const [artC, art] = makeCanvas(PAGE_TEX_W, PAGE_TEX_H)
-  parchmentBase(art, rng)
+  const tint = paper === 'plain' && look.season === 'winter' ? HEX.snow : HEX[PAPER_TINT[paper]]
+  parchmentBase(art, rng, tint)
+  paperUnder(art, paper, motif)
   paperGrain(art, PAGE_TEX_W, PAGE_TEX_H, rng)
   PAINTERS[page.theme](art, page, rng)
   keepGrounds(art)
   stains(art, PAGE_TEX_W, PAGE_TEX_H, rng, 5)
+  paperOver(art, paper, motif)
+  seasonOver(art, page, look.season, motif)
   mapFrame(art)
   // (Ballistas fold on the towers, not out of the page: no cut.)
   for (const f of page.folds) if (f.kind !== 'frog' && f.kind !== 'ballista') cutLine(art, f)
@@ -705,9 +1142,9 @@ export const paintPage = (page: PageDef): PageTextures => {
   const [pageC, pg] = makeCanvas(PAGE_TEX_W, PAGE_TEX_H)
   pg.drawImage(artC, 0, 0)
   const [underC, under] = makeCanvas(PAGE_TEX_W, PAGE_TEX_H)
-  underlayerPattern(under, rng)
+  underlayerPattern(under, rng, false, { paper, season: look.season }, motif)
   const [ravineC, rav] = makeCanvas(PAGE_TEX_W, PAGE_TEX_H)
-  underlayerPattern(rav, rng, true)
+  underlayerPattern(rav, rng, true, { paper, season: look.season }, motif)
   for (const f of page.folds) {
     if (f.kind === 'frog' || f.kind === 'ballista') continue
     pg.save()

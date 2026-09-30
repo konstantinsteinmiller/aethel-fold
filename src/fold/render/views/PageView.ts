@@ -9,6 +9,12 @@
  * a page built under a turning (or peeling) sheet is held flat and unfolds as
  * the sheet uncovers it, the way a pop-up book opens — instead of its towers
  * poking through the page that is still turning over them.
+ *
+ * The page is printed in the current look (roadmaps #6, #17): the equipped
+ * paper and the season's skin, plus the season's dress on the player's castle
+ * (pumpkin towers, snow caps). `repaint` reprints it in another look — about
+ * 30 ms of canvas work, so the host only calls it where a hitch can't show
+ * (behind the pause menu, or in idle time off the page in play).
  */
 
 import { Group, InstancedMesh, Mesh, PlaneGeometry, type BufferGeometry, type Scene, type Texture } from 'three'
@@ -19,14 +25,14 @@ import { acrossHinge, alongHinge, isStampable, onFootprint } from '../../logic/f
 import { clamp01, easeOutBack } from '../../logic/math'
 import { createRng } from '../../logic/rng'
 import { secretOnPage } from '../../logic/secrets'
-import { paintPage, type PageTextures } from '../art/pageArt'
+import { PLAIN_LOOK, paintPage, type PageLook, type PageTextures } from '../art/pageArt'
 import type { SpriteTextures } from '../art/spriteArt'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
 import { TMP } from '../paperGeometry'
 import {
   appleTreeGeometry, battlementGeometry, bushGeometry, castleBaileyGeometry, millSailsGeometry, millTowerGeometry,
   playerCastleGeometry, pineGeometry,
-  rockGeometry, roundTreeGeometry, tentGeometry
+  rockGeometry, roundTreeGeometry, seasonCastleGeometry, snowyGeometry, tentGeometry
 } from '../models'
 import { FoldView } from './FoldView'
 import { CastleView } from './CastleView'
@@ -58,7 +64,11 @@ const laneXAt = (page: PageDef, lane: number, z: number): number => {
 export class PageView {
   readonly group = new Group()
   readonly folds: FoldView[] = []
-  readonly textures: PageTextures
+  textures: PageTextures
+  /** The look the page is printed in. */
+  look: PageLook
+  /** The season's dress on the player's castle (null outside a season). */
+  private seasonCastle: Mesh | null = null
   castle: CastleView | null = null
   dragon: DragonView | null = null
   finale: FinaleView | null = null
@@ -70,7 +80,8 @@ export class PageView {
   private sailAngle = 0
   private readonly pageMat: PaperMaterial
   private readonly propMat: PaperMaterial
-  private readonly props: { mesh: InstancedMesh; items: PropInstance[] }[] = []
+  /** Scenery, one instanced mesh per prop kind; `geo` is its everyday geometry, `snow` its Winter one. */
+  private readonly props: { mesh: InstancedMesh; items: PropInstance[]; geo: BufferGeometry; snow: BufferGeometry }[] = []
   private battlement: Mesh | null = null
   /** The player's castle (own material so it can flash when it is hit). */
   private readonly castleMat: PaperMaterial
@@ -85,9 +96,13 @@ export class PageView {
   intro = 0
   private foldStates: FoldState[]
 
-  constructor(readonly def: PageDef, folds: FoldState[], sprites: SpriteTextures, overlay: Scene, captionText = '') {
+  constructor(
+    readonly def: PageDef, folds: FoldState[], sprites: SpriteTextures, overlay: Scene, captionText = '',
+    look: PageLook = PLAIN_LOOK
+  ) {
     this.foldStates = folds
-    this.textures = paintPage(def)
+    this.look = { paper: look.paper, season: look.season }
+    this.textures = paintPage(def, this.look)
     this.pageMat = createPaperMaterial({ map: this.textures.page, grain: 0.05 })
     const plane = new PlaneGeometry(PAGE_HALF_W * 2, PAGE_HALF_D * 2)
     plane.rotateX(-Math.PI / 2)
@@ -118,6 +133,7 @@ export class PageView {
     bailey.castShadow = true
     bailey.receiveShadow = true
     this.riser.add(bailey)
+    this.dressCastle(this.look.season)
 
     if (def.theme === 'siege') {
       this.battlement = new Mesh(battlementGeometry(9.2), this.propMat)
@@ -172,6 +188,41 @@ export class PageView {
     this.group.userData.perfTag = `fold.book${def.book}.page${def.id}`
   }
 
+  /** Put the season's dress on the castle and the scenery (or take it off). */
+  private dressCastle(season: PageLook['season']): void {
+    for (const p of this.props) p.mesh.geometry = season === 'winter' ? p.snow : p.geo
+    const geo = seasonCastleGeometry(season, CASTLE.keepZ, CASTLE.towerX, CASTLE.towerZ, CASTLE.keepTop, CASTLE.towerTop)
+    if (this.seasonCastle && this.seasonCastle.geometry === geo) return
+    if (this.seasonCastle) {
+      this.seasonCastle.removeFromParent()
+      this.seasonCastle = null
+    }
+    if (!geo) return
+    const m = new Mesh(geo, this.castleMat)
+    m.castShadow = true
+    m.receiveShadow = true
+    this.seasonCastle = m
+    this.riser.add(m)
+  }
+
+  /**
+   * Reprint the page in another look (roadmap #6/#17): new canvases for the
+   * sheet and every flap, the castle's seasonal dress swapped. Returns false
+   * when the look is the one it already has. ~30 ms: never mid-play (see the
+   * file header).
+   */
+  repaint(look: PageLook): boolean {
+    if (look.paper === this.look.paper && look.season === this.look.season) return false
+    this.look = { paper: look.paper, season: look.season }
+    const old = this.textures
+    this.textures = paintPage(this.def, this.look)
+    this.pageMat.uniforms.map!.value = this.textures.page
+    for (const f of this.folds) f.setArt(this.textures.art)
+    old.dispose()
+    this.dressCastle(this.look.season)
+    return true
+  }
+
   get artTexture(): Texture {
     return this.textures.art
   }
@@ -179,23 +230,23 @@ export class PageView {
   private placeProps(): void {
     const def = this.def
     const rng = createRng(def.book * 977 + def.id * 131 + 7)
-    const types: { geo: BufferGeometry; weight: number; scale: [number, number] }[] = def.theme === 'orchard'
+    const types: { geo: BufferGeometry; name: string; weight: number; scale: [number, number] }[] = def.theme === 'orchard'
       ? [
-          { geo: appleTreeGeometry(), weight: 0.6, scale: [0.55, 0.78] },
-          { geo: roundTreeGeometry(), weight: 0.15, scale: [0.5, 0.7] },
-          { geo: bushGeometry(), weight: 0.25, scale: [0.7, 1] }
+          { geo: appleTreeGeometry(), name: 'appleTree', weight: 0.6, scale: [0.55, 0.78] },
+          { geo: roundTreeGeometry(), name: 'roundTree', weight: 0.15, scale: [0.5, 0.7] },
+          { geo: bushGeometry(), name: 'bush', weight: 0.25, scale: [0.7, 1] }
         ]
       : def.theme === 'camp'
         ? [
-            { geo: tentGeometry(), weight: 0.5, scale: [0.8, 1.05] },
-            { geo: pineGeometry(), weight: 0.3, scale: [0.55, 0.8] },
-            { geo: rockGeometry(), weight: 0.2, scale: [0.6, 0.95] }
+            { geo: tentGeometry(), name: 'tent', weight: 0.5, scale: [0.8, 1.05] },
+            { geo: pineGeometry(), name: 'pine', weight: 0.3, scale: [0.55, 0.8] },
+            { geo: rockGeometry(), name: 'rock', weight: 0.2, scale: [0.6, 0.95] }
           ]
         : [
-            { geo: pineGeometry(), weight: 0.42, scale: [0.55, 0.8] },
-            { geo: roundTreeGeometry(), weight: 0.28, scale: [0.5, 0.72] },
-            { geo: bushGeometry(), weight: 0.18, scale: [0.7, 1] },
-            { geo: rockGeometry(), weight: 0.12, scale: [0.6, 0.95] }
+            { geo: pineGeometry(), name: 'pine', weight: 0.42, scale: [0.55, 0.8] },
+            { geo: roundTreeGeometry(), name: 'roundTree', weight: 0.28, scale: [0.5, 0.72] },
+            { geo: bushGeometry(), name: 'bush', weight: 0.18, scale: [0.7, 1] },
+            { geo: rockGeometry(), name: 'rock', weight: 0.12, scale: [0.6, 0.95] }
           ]
     const buckets: PropInstance[][] = types.map(() => [])
     const tries = 260
@@ -218,10 +269,11 @@ export class PageView {
     types.forEach((ty, i) => {
       const items = buckets[i]!
       if (items.length === 0) return
-      const mesh = new InstancedMesh(ty.geo, this.propMat, items.length)
+      const snow = snowyGeometry(ty.geo, ty.name)
+      const mesh = new InstancedMesh(this.look.season === 'winter' ? snow : ty.geo, this.propMat, items.length)
       mesh.castShadow = true
       mesh.receiveShadow = true
-      this.props.push({ mesh, items })
+      this.props.push({ mesh, items, geo: ty.geo, snow })
       this.riser.add(mesh)
     })
     this.applyProps(0)

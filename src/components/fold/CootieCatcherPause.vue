@@ -6,7 +6,9 @@
  *
  * Faces: the menu (resume / restart page / settings / books / start over),
  * the settings (music, effects, vibration, screen shake, hold to fold, slow
- * mode, highlight, graphics, language),
+ * mode, highlight, graphics, language, seasonal decorations, and the paper
+ * cosmetics picker — roadmap #6: small swatches per kind, locked ones as
+ * periwinkle silhouettes with the stars they need),
  * the bookshelf (pick book 1 or, once it has been won, book 2, each with the
  * origami stars earned in it) and a confirm.
  *
@@ -24,9 +26,13 @@ import FSelect from '@/components/atoms/FSelect.vue'
 import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
 import PaperRibbon from '@/components/fold/PaperRibbon.vue'
 import StarTally from '@/components/fold/StarTally.vue'
+import CosmeticSwatch from '@/components/fold/CosmeticSwatch.vue'
+import { cosmeticsOf, owns, type CosmeticDef, type CosmeticKind } from '@/fold/logic/cosmetics'
 import { HIGHLIGHT_MODES, type BookId, type HighlightMode } from '@/fold/logic/types'
 import useUser from '@/use/useUser'
-import { foldSettings, secretCount, setFoldSetting, starsForBook, type Quality } from '@/use/useFoldProgress'
+import {
+  cosmetics, equipCosmetic, foldSettings, secretCount, setFoldSetting, starsForBook, totalStars, type Quality
+} from '@/use/useFoldProgress'
 import { LANGUAGES, LANGUAGE_AUTONYMS } from '@/utils/enums'
 import { setI18nLocale } from '@/i18n'
 import useSounds from '@/use/useSound'
@@ -106,6 +112,28 @@ const qualityOptions = computed(() => [
   { value: 'high', label: t('fold.settings.qualityHigh') },
   { value: 'low', label: t('fold.settings.qualityLow') }
 ])
+const seasonal = computed({
+  get: () => foldSettings.value.seasonal,
+  set: (v: boolean) => setFoldSetting('seasonal', v)
+})
+
+// ─── Paper cosmetics (roadmap #6) ───────────────────────────────────────────
+const LOOK_KINDS: readonly CosmeticKind[] = ['paper', 'hero', 'confetti']
+const lookName = (c: Pick<CosmeticDef, 'id'>): string => t(`fold.cosmetics.items.${c.id.replace('.', '_')}`)
+/** One row per kind: every item, owned or not, and which is equipped. */
+const looks = computed(() => LOOK_KINDS.map((kind) => {
+  const items = cosmeticsOf(kind).map((c) => ({
+    ...c, owned: owns(cosmetics.value, c.id), on: cosmetics.value.equipped[kind] === c.value
+  }))
+  const on = items.find((c) => c.on) ?? items[0]!
+  return { kind, items, current: lookName(on) }
+}))
+const starTotal = computed(() => totalStars())
+const pickLook = (c: { id: string; owned: boolean; on: boolean }): void => {
+  if (!c.owned || c.on) return
+  click(() => equipCosmetic(c.id))
+}
+
 const languageOptions = computed(() => LANGUAGES.map((code) => ({ value: code, label: LANGUAGE_AUTONYMS[code] ?? code })))
 const language = computed({
   get: () => userLanguage.value,
@@ -245,6 +273,44 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                 OrigamiIcon(name="globe" tone="green")
                 span {{ t('fold.settings.language') }}
               FSelect(v-model="language" :options="languageOptions")
+            //- Seasonal page skins (roadmap #17).
+            div.cootie__row.cootie__row--toggle
+              span.cootie__row-label.flex.items-center.gap-2
+                OrigamiIcon(name="crane" tone="red")
+                span {{ t('fold.settings.seasonal') }}
+              FSwitch(v-model="seasonal" data-testid="setting-seasonal")
+            //- Paper cosmetics (roadmap #6): earned with stars.
+            div.cootie__looks(data-testid="cosmetics")
+              div.cootie__looks-head
+                span.cootie__row-label.flex.items-center.gap-2
+                  OrigamiIcon(name="crane" tone="purple")
+                  span {{ t('fold.cosmetics.title') }}
+                span.cootie__looks-stars.flex.items-center.gap-1(role="img" :aria-label="t('fold.a11y.stars', { n: starTotal.earned, max: starTotal.max })")
+                  OrigamiIcon(name="star" tone="yellow")
+                  span {{ starTotal.earned }}/{{ starTotal.max }}
+              div.cootie__look(v-for="row in looks" :key="row.kind" :data-testid="`looks-${row.kind}`")
+                span.cootie__look-name
+                  | {{ t(`fold.cosmetics.${row.kind}`) }}:
+                  |
+                  span.cootie__look-current {{ row.current }}
+                div.cootie__swatches(role="radiogroup" :aria-label="t(`fold.cosmetics.${row.kind}`)")
+                  button.cootie__swatch(
+                    v-for="c in row.items"
+                    :key="c.id"
+                    type="button"
+                    role="radio"
+                    :aria-checked="c.on"
+                    :aria-disabled="!c.owned"
+                    :aria-label="c.owned ? lookName(c) : t('fold.cosmetics.locked', { name: lookName(c), n: c.stars })"
+                    :title="c.owned ? lookName(c) : t('fold.cosmetics.locked', { name: lookName(c), n: c.stars })"
+                    :class="{ 'cootie__swatch--on': c.on, 'cootie__swatch--locked': !c.owned }"
+                    :data-testid="`look-${c.id}`"
+                    @click="pickLook(c)"
+                  )
+                    CosmeticSwatch.cootie__swatch-art(:id="c.id" :locked="!c.owned")
+                    span.cootie__swatch-req(v-if="!c.owned")
+                      OrigamiIcon(name="star" tone="paper")
+                      span {{ c.stars }}
             FButton(type="primary" size="md" block @click="click(() => (face = 'menu'))")
               span.flex.items-center.justify-center.gap-2
                 OrigamiIcon(name="left" tone="white")
@@ -424,7 +490,100 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   color: #3a3142
   font-size: clamp(0.7rem, 2.8vw, 0.85rem)
 
+// The cosmetics picker: a heading with the star total, then a row of swatches per kind.
+.cootie__looks
+  display: flex
+  flex-direction: column
+  gap: clamp(0.3rem, 1.2vh, 0.5rem)
+  padding-top: clamp(0.3rem, 1.2vh, 0.5rem)
+  border-top: 2px dashed rgba(58, 49, 66, 0.35)
+  min-width: 0
+
+.cootie__looks-head
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 0.5rem
+  color: #1c1724
+
+.cootie__looks-stars
+  flex: none
+  font-size: clamp(0.8rem, 3.2vw, 0.95rem)
+  :deep(.origami-icon)
+    font-size: 1.3em
+
+.cootie__look
+  display: flex
+  flex-direction: column
+  gap: 0.2rem
+  min-width: 0
+
+.cootie__look-name
+  color: #3a3142
+  font-size: clamp(0.72rem, 2.9vw, 0.88rem)
+  white-space: nowrap
+  overflow: hidden
+  text-overflow: ellipsis
+
+.cootie__look-current
+  color: #1c1724
+
+.cootie__swatches
+  display: flex
+  flex-wrap: wrap
+  gap: clamp(0.3rem, 1.6vw, 0.5rem)
+  // Room for the star badges that hang under locked swatches.
+  padding-bottom: 0.45rem
+
+.cootie__swatch
+  position: relative
+  display: inline-flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  width: clamp(2.1rem, 9.5vw, 2.6rem)
+  height: clamp(2.1rem, 9.5vw, 2.6rem)
+  padding: 0.2rem
+  font-size: clamp(1.5rem, 6.8vw, 1.9rem)
+  background: rgba(255, 255, 255, 0.65)
+  border: 2px solid #1c1724
+  border-radius: 0.45rem
+  box-shadow: 0 3px 0 rgba(76, 64, 120, 0.4)
+  cursor: pointer
+  transition: transform 0.12s
+  &:hover:not(.cootie__swatch--locked)
+    transform: translateY(-2px)
+  &--on
+    background: linear-gradient(135deg, #fff2b8 0 55%, #ffe38a 55% 100%)
+    outline: 3px solid #ffd23f
+    outline-offset: 1px
+  &--locked
+    cursor: not-allowed
+    background: rgba(108, 106, 168, 0.18)
+    border-color: #4a4078
+
+// The stars a locked item needs, pinned under its silhouette.
+.cootie__swatch-req
+  position: absolute
+  left: 50%
+  bottom: -0.35rem
+  transform: translateX(-50%)
+  display: inline-flex
+  align-items: center
+  gap: 0.05rem
+  padding: 0 0.2rem
+  font-size: clamp(0.55rem, 2.3vw, 0.68rem)
+  line-height: 1.2
+  color: #fff6e3
+  background: #4a4078
+  border-radius: 0.3rem
+  white-space: nowrap
+  :deep(.origami-icon)
+    font-size: 1.1em
+
 @media (max-height: 520px)
+  .cootie__looks
+    grid-column: 1 / -1
   .cootie__card
     width: min(94vw, 40rem)
   // Short landscape screens: the menu as two columns so nothing needs scrolling.

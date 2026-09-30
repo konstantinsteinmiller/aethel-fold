@@ -264,7 +264,30 @@ export default {
       'highlight': 'Markierung',
       'highlight_standard': 'Pulsierend',
       'highlight_steady': 'Ruhig',
-      'highlight_bold': 'Kräftig'
+      'highlight_bold': 'Kräftig',
+      'seasonal': 'Saisonale Deko'
+    },
+    'cosmetics': {
+      'title': 'Papier & Stil',
+      'paper': 'Papier',
+      'hero': 'Held',
+      'confetti': 'Konfetti',
+      'locked': '{name}: ab {n} Sternen',
+      'items': {
+        'paper_plain': 'Pergament',
+        'paper_graph': 'Karopapier',
+        'paper_washi': 'Washi',
+        'paper_newsprint': 'Zeitungspapier',
+        'paper_map': 'Alte Karte',
+        'hero_classic': 'Klassisch',
+        'hero_scarf': 'Schal',
+        'hero_sash': 'Königsschärpe',
+        'hero_crown': 'Krone',
+        'confetti_squares': 'Vierecke',
+        'confetti_stars': 'Sterne',
+        'confetti_hearts': 'Herzen',
+        'confetti_cranes': 'Kraniche'
+      }
     },
     'victory': {
       'title': 'SIEG',

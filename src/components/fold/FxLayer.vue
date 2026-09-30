@@ -12,17 +12,20 @@
  * crumple (roadmap #9): ALMOST! over how close the player was, held ~2 s.
  *
  * `stars` drives the StarRibbon (roadmap #1): a cleared page's origami stars
- * fold in one by one on the page-turn beat.
+ * fold in one by one on the page-turn beat. `unlocked` follows it with the
+ * wordless "new paper!" card (roadmap #6) when those stars unlocked a cosmetic.
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import StarRibbon from '@/components/fold/StarRibbon.vue'
+import UnlockCue from '@/components/fold/UnlockCue.vue'
 
 const POP_POOL = 28
 const WORD_POOL = 8
 
 const root = ref<HTMLDivElement | null>(null)
 const ribbon = ref<InstanceType<typeof StarRibbon> | null>(null)
+const cue = ref<InstanceType<typeof UnlockCue> | null>(null)
 const pops: HTMLDivElement[] = []
 const words: HTMLDivElement[] = []
 let almostEl: HTMLDivElement | null = null
@@ -121,17 +124,24 @@ const stars = (n: number): void => {
   ribbon.value?.play(n)
 }
 
-/** Take the star ribbon down (a new run or a jump). */
-const clearStars = (): void => {
-  ribbon.value?.clear()
+/** Cosmetics the page's stars just unlocked: the "new paper!" card, after the ribbon. */
+const unlocked = (ids: readonly string[]): void => {
+  cue.value?.play(ids)
 }
 
-defineExpose({ pop, word, almost, clearAlmost, stars, clearStars })
+/** Take the star ribbon (and an unlock card) down (a new run or a jump). */
+const clearStars = (): void => {
+  ribbon.value?.clear()
+  cue.value?.clear()
+}
+
+defineExpose({ pop, word, almost, clearAlmost, stars, unlocked, clearStars })
 </script>
 
 <template lang="pug">
   div.fx-layer(ref="root" aria-hidden="true")
     StarRibbon(ref="ribbon")
+    UnlockCue(ref="cue")
 </template>
 
 <style scoped lang="sass">

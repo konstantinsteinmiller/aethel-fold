@@ -101,6 +101,32 @@ export const HEX = {
   frogDark: '#3b9442',
   frogBelly: '#d8f0a0',
 
+  // Paper patterns (roadmap #6) — pale stocks, so lanes, folds and standees stay the loudest thing on the page.
+  washi: '#f6e6d6',          // kozo paper, faintly rosy
+  washiFibre: '#d9b9a4',
+  washiPrint: '#c98a8a',     // the faded seigaiha waves
+  graphPaper: '#eef0e6',     // engineer's pad: a cool off-white
+  graphLine: '#9cc3dc',
+  newsprint: '#e7e1d0',      // grey-beige pulp
+  newsInk: '#6e6a66',        // soft grey type and halftone (never black)
+  mapPaper: '#ecd9ad',       // old survey sheet
+  mapLine: '#b0875a',        // contour lines
+
+  // Seasons (roadmap #17)
+  duskOrange: '#f29a4a',     // Halloween: the warm half of the dusk wash
+  duskPurple: '#7b5aa6',     // …and the cool half; shadows stay periwinkle
+  pumpkin: '#f28a2e',
+  pumpkinDark: '#c9621c',
+  pumpkinStem: '#5f8a3a',
+  bat: '#4b3b66',            // bats are plum paper, never black
+  batWing: '#6a5690',
+  snowShade: '#dfe6f4',      // Winter: the blue shade on drifts
+  iceBlue: '#bcd8f0',
+  scarfRed: '#e0473f',       // the hero's knitted scarf
+  scarfRedDark: '#a8322e',
+  sash: '#8a4fc0',           // the hero's royal sash
+  sashDark: '#5e3390',
+
   // Confetti
   c1: '#ff5a5f',
   c2: '#ffd23f',

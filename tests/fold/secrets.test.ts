@@ -321,3 +321,67 @@ describe('page secrets: every trigger, once', () => {
     }
   })
 })
+
+describe('page secrets: C6 follow-ups', () => {
+  /** Count `ballistaFire` events while tapping at (x, z). */
+  const bolts = (g: FoldGame, x: number, z: number): number => {
+    g.tap(x, z)
+    let n = 0
+    for (let i = 0; i < g.events.count; i++) if (g.events.items[i]!.type === 'ballistaFire') n++
+    g.events.clear()
+    g.update(0.2)
+    g.events.clear()
+    return n
+  }
+
+  it('Home: a tap clearly on the hero never also looses a ballista bolt; the rim and elsewhere still fire', () => {
+    const g = game(2, 1)
+    // Both ballistas open, with bolts.
+    for (let i = 0; i < g.folds.length; i++) if (g.folds[i]!.def.kind === 'ballista') expect(g.foldNow(i)).toBe(true)
+    step(g, 0.5)
+    expect(g.folds.filter((f) => f.def.kind === 'ballista' && f.phase === 'up').length).toBe(2)
+    // Where the view says the hero appears (he stands up off the page, so his spot is up the page from his feet).
+    g.secrets.spotX = 0
+    g.secrets.spotZ = 4.4
+    const r = g.secrets.def!.r
+    expect(bolts(g, 0, 4.4)).toBe(0)
+    expect(bolts(g, r * SECRET.heroClear * 0.9, 4.4)).toBe(0)
+    // Near the rim of his reach a shot past him is as likely meant: it fires.
+    expect(bolts(g, r * 0.95, 4.4)).toBe(1)
+    // Up the page, away from him: fires as ever.
+    expect(bolts(g, -1.5, -2)).toBe(1)
+  })
+
+  it('Home: the hero taps still count for his wave', () => {
+    const g = game(2, 1)
+    for (let i = 0; i < g.folds.length; i++) if (g.folds[i]!.def.kind === 'ballista') g.foldNow(i)
+    step(g, 0.5)
+    g.secrets.spotX = 0
+    g.secrets.spotZ = 4.4
+    const out: { a: number; b: number }[] = []
+    tapSpot(g, out)
+    expect(out).toEqual([{ a: code('wave'), b: 1 }])
+  })
+
+  it('Siege: the catapult flaps re-arm, so the fling can be tried again on the same visit', () => {
+    const g = game(1, 3)
+    const out: { a: number; b: number }[] = []
+    const l = fold(g, 'p3-launch-l')
+    const r = fold(g, 'p3-launch-r')
+    // A first try, too slow: one flap, then the other well after.
+    expect(g.foldNow(l)).toBe(true)
+    collect(g, SECRET.pairGap + 0.4, out)
+    expect(g.foldNow(r)).toBe(true)
+    collect(g, 0.3, out)
+    expect(out).toEqual([])
+    // No test shortcut: both flaps come back by themselves.
+    for (let t = 0; t < 12 && (g.folds[l]!.phase !== 'ready' || g.folds[r]!.phase !== 'ready'); t += DT) collect(g, DT, out)
+    expect(g.folds[l]!.phase).toBe('ready')
+    expect(g.folds[r]!.phase).toBe('ready')
+    // A second try, both at once: the secret.
+    expect(g.foldNow(l)).toBe(true)
+    expect(g.foldNow(r)).toBe(true)
+    collect(g, 0.3, out)
+    expect(out).toEqual([{ a: code('fling'), b: 1 }])
+  })
+})

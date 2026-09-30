@@ -9,12 +9,18 @@
  * - Glows (overlay pass, additive): the toon gears, sparkles and halos.
  *
  * Everything is pooled; nothing allocates after construction.
+ *
+ * The chips' cut (roadmap #6) is a cosmetic the stars unlock: squares, stars,
+ * hearts or little cranes. All four geometries are built up front and the
+ * one instanced mesh swaps between them (`setConfettiShape`): the same
+ * material and program, so a swap costs nothing and never hitches.
  */
 
 import {
-  AdditiveBlending, Color, DynamicDrawUsage, Group, InstancedMesh, Mesh, PlaneGeometry, RingGeometry,
-  Sprite, SpriteMaterial, Vector3, type PerspectiveCamera, type Scene, type Texture
+  AdditiveBlending, Color, DynamicDrawUsage, Group, InstancedMesh, Mesh, PlaneGeometry, RingGeometry, Shape,
+  ShapeGeometry, Sprite, SpriteMaterial, Vector3, type BufferGeometry, type PerspectiveCamera, type Scene, type Texture
 } from 'three'
+import type { ConfettiShape } from '../../logic/cosmetics'
 import { CONFETTI_KEYS, HEX, type PaletteKey } from '../palette'
 import { createPaperMaterial, type PaperMaterial } from '../paperMaterial'
 import { TMP } from '../paperGeometry'
@@ -39,6 +45,36 @@ const PALETTES: Record<ConfettiPalette, PaletteKey[]> = {
   apple: ['enemyRed', 'dragonRed', 'c1', 'forest']
 }
 
+/**
+ * The chip cuts, each about as much paper as the classic 0.1 × 0.16 slip so a
+ * burst keeps its weight. Built once per `Effects`.
+ */
+export const confettiGeometry = (shape: ConfettiShape): BufferGeometry => {
+  if (shape === 'squares') return new PlaneGeometry(0.1, 0.16)
+  const s = new Shape()
+  if (shape === 'stars') {
+    for (let i = 0; i < 10; i++) {
+      const a = Math.PI / 2 + (i / 10) * Math.PI * 2
+      const r = i % 2 ? 0.045 : 0.1
+      if (i === 0) s.moveTo(Math.cos(a) * r, Math.sin(a) * r)
+      else s.lineTo(Math.cos(a) * r, Math.sin(a) * r)
+    }
+  } else if (shape === 'hearts') {
+    s.moveTo(0, -0.08)
+    s.bezierCurveTo(-0.03, -0.05, -0.1, -0.01, -0.09, 0.04)
+    s.bezierCurveTo(-0.08, 0.09, -0.02, 0.09, 0, 0.05)
+    s.bezierCurveTo(0.02, 0.09, 0.08, 0.09, 0.09, 0.04)
+    s.bezierCurveTo(0.1, -0.01, 0.03, -0.05, 0, -0.08)
+  } else {
+    // A little origami crane in profile: tail, wing peak, neck and head.
+    const p = [-0.11, 0.02, -0.03, -0.02, 0.0, 0.09, 0.03, -0.02, 0.08, 0.05, 0.11, 0.035, 0.06, -0.03, 0.02, -0.05, -0.04, -0.045]
+    s.moveTo(p[0]!, p[1]!)
+    for (let i = 2; i < p.length; i += 2) s.lineTo(p[i]!, p[i + 1]!)
+  }
+  s.closePath()
+  return new ShapeGeometry(s, 3)
+}
+
 export interface ConfettiOptions {
   count: number
   speed?: number
@@ -60,6 +96,8 @@ export class Effects {
   readonly group = new Group()
   private readonly confetti: InstancedMesh
   private readonly confMat: PaperMaterial
+  /** Every chip cut, built up front (see the header). */
+  private readonly shapes: Record<ConfettiShape, BufferGeometry>
   // Confetti state (struct of arrays).
   private readonly px = new Float32Array(MAX_CONFETTI)
   private readonly py = new Float32Array(MAX_CONFETTI)
@@ -105,8 +143,13 @@ export class Effects {
 
   constructor(private readonly sprites: SpriteTextures, overlay: Scene) {
     this.confMat = createPaperMaterial({ doubleSided: true, backTint: '#e8e2d8', grain: 0, id: 127 })
-    const geo = new PlaneGeometry(0.1, 0.16)
-    this.confetti = new InstancedMesh(geo, this.confMat, MAX_CONFETTI)
+    this.shapes = {
+      squares: confettiGeometry('squares'),
+      stars: confettiGeometry('stars'),
+      hearts: confettiGeometry('hearts'),
+      cranes: confettiGeometry('cranes')
+    }
+    this.confetti = new InstancedMesh(this.shapes.squares, this.confMat, MAX_CONFETTI)
     this.confetti.instanceMatrix.setUsage(DynamicDrawUsage)
     this.confetti.frustumCulled = false
     this.confetti.castShadow = true
@@ -141,6 +184,17 @@ export class Effects {
       overlay.add(s)
     }
     this.group.userData.perfTag = 'fold.vfx'
+  }
+
+  /** The equipped chip cut (roadmap #6). Chips already flying change with it. */
+  setConfettiShape(shape: ConfettiShape): void {
+    const g = this.shapes[shape] ?? this.shapes.squares
+    if (this.confetti.geometry !== g) this.confetti.geometry = g
+  }
+
+  get confettiShape(): ConfettiShape {
+    for (const k of Object.keys(this.shapes) as ConfettiShape[]) if (this.shapes[k] === this.confetti.geometry) return k
+    return 'squares'
   }
 
   // ─── Spawners ────────────────────────────────────────────────────────────
@@ -362,7 +416,7 @@ export class Effects {
   }
 
   dispose(): void {
-    this.confetti.geometry.dispose()
+    for (const g of Object.values(this.shapes)) g.dispose()
     this.confMat.dispose()
     this.confetti.dispose()
     this.rings[0]?.geometry.dispose()

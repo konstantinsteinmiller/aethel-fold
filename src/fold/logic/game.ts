@@ -43,7 +43,7 @@ import {
 import { bossAwake, bossPhaseCode, bossTiming, brokenCount, createBoss, nextWeakPoint, resetBoss } from './boss'
 import { bossPageOf, createRushState, rushPar } from './rush'
 import {
-  countSecretTap, createSecretState, enterSecretPage, markFound, noteSecretSnap, readSecretList, secretById, secretCode,
+  countSecretTap, tapOnSpot, createSecretState, enterSecretPage, markFound, noteSecretSnap, readSecretList, secretById, secretCode,
   slingSecretHit, type SecretDef, type SecretId
 } from './secrets'
 import {
@@ -881,8 +881,9 @@ export class FoldGame {
     // The frog and the crane can be tapped once they are folded (their secrets), after the page stops taking input.
     if (!this.acceptsInput()) return this.finaleTap(x, z)
     this.touched()
-    // A secret tap never eats the tap: whatever else it hits still happens.
-    this.secretTap(x, z)
+    // A secret tap never eats the tap: whatever else it hits still happens —
+    // except a ballista bolt when the finger was clearly on the hero (below).
+    const onHero = this.secretTap(x, z)
     let best = -1
     let bestD = Infinity
     for (let i = 0; i < this.folds.length; i++) {
@@ -901,8 +902,10 @@ export class FoldGame {
       }
     }
     if (best >= 0) return this.stamp(best)
-    // Nothing to stamp: an open ballista shoots where the finger tapped.
-    if (this.fireBallista(x, z)) return true
+    // Nothing to stamp: an open ballista shoots where the finger tapped — but
+    // not at the hero himself: a tap clearly on him (Home's wave secret) is a
+    // tap on him, not a shot aimed past the keep's towers.
+    if (!onHero && this.fireBallista(x, z)) return true
     this.events.emit('tap', 0, 0, 0, x, z)
     return false
   }
@@ -921,11 +924,14 @@ export class FoldGame {
     return p === 'intro' || p === 'play' || p === 'cleared'
   }
 
-  private secretTap(x: number, z: number): void {
+  /** A tap on the page's tap secret. Returns true when it was clearly on the hero (a hero-target secret). */
+  private secretTap(x: number, z: number): boolean {
     const s = this.secrets
     const d = s.def
-    if (!d || d.trigger !== 'taps' || !this.secretLive(d)) return
+    if (!d || d.trigger !== 'taps' || !this.secretLive(d)) return false
+    const onHero = d.hero && tapOnSpot(s, x, z, SECRET.heroClear)
     if (countSecretTap(s, x, z)) this.discover(d, s.spotX, s.spotZ)
+    return onHero
   }
 
   /** Taps once the page stops taking input: only the finale's folded frog or crane listens. */

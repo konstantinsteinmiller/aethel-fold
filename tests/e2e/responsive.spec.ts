@@ -143,6 +143,9 @@ for (const vp of [{ width: 658, height: 320 }, { width: 844, height: 390 }]) {
     await page.goto('/')
     await waitForGame(page)
     expect((await page.evaluate(() => window.__fold!.state().shelf.inView))).toBe(true)
+    // Book 1 is won: its Dragon Rush figurine stands on the top board with the secrets card —
+    // `shelfTop` counts them (C6 follow-up), so the ribbon keeps clear of them too.
+    expect((await page.evaluate(() => window.__fold!.state().shelf.rush))[0]).toBe('open')
     await page.evaluate(() => window.__fold!.fastForward(1))
     await page.evaluate(() => window.__fold!.clearPage())
     await page.evaluate(() => window.__fold!.fastForward(0.2))
@@ -171,8 +174,9 @@ for (const vp of [{ width: 658, height: 320 }, { width: 844, height: 390 }]) {
   })
 }
 
-// The settings face of the pause (with the accessibility rows, roadmap #14) fits
-// the smallest phone both ways: every row inside the card, none overlapping.
+// The settings face of the pause (with the accessibility rows, roadmap #14, and
+// the seasonal switch, #17) fits the smallest phone both ways: every row inside
+// the card, none overlapping.
 for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }]) {
   test(`the settings face fits at ${vp.width}×${vp.height}`, async ({ page }) => {
     await page.setViewportSize(vp)
@@ -200,7 +204,7 @@ for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }]) {
       }))
       return { card, rows }
     })
-    expect(r.rows.length).toBe(9)
+    expect(r.rows.length).toBe(10)
     const overlap = (a: any, b: any) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5
     for (const row of r.rows) {
       expect(row.row.x).toBeGreaterThanOrEqual(r.card.x - 0.5)
@@ -213,6 +217,77 @@ for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }]) {
       for (let j = i + 1; j < r.rows.length; j++) expect(overlap(r.rows[i]!.row, r.rows[j]!.row), `rows ${i}/${j}`).toBe(false)
     }
     await page.screenshot({ path: `test-results/settings-${vp.width}x${vp.height}.png` })
+  })
+}
+
+// The paper cosmetics picker (roadmap #6) on the settings face: every swatch
+// (and the star badge under a locked one) inside the card, none on another,
+// the rows clear of each other, at the smallest phone both ways.
+for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }]) {
+  test(`the cosmetics picker fits at ${vp.width}×${vp.height}`, async ({ page }) => {
+    await page.setViewportSize(vp)
+    // 11 stars: some owned, some locked, in every row.
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('__seeded')) return
+      sessionStorage.setItem('__seeded', '1')
+      localStorage.setItem('aethel_state', JSON.stringify({ fold_stars: { b1p1: 3, b1p2: 3, b1p3: 3, b1p4: 2 } }))
+    })
+    await page.goto('/')
+    await waitForGame(page)
+    await page.getByRole('button', { name: /pause and settings/i }).click()
+    await page.getByRole('button', { name: /^settings$/i }).click()
+    const picker = page.getByTestId('cosmetics')
+    await picker.scrollIntoViewIfNeeded()
+    await page.waitForFunction(() => {
+      const card = document.querySelector('.cootie__card')
+      return !!card && card.getAnimations({ subtree: true }).length === 0 && getComputedStyle(card).transform === 'none'
+    })
+    const r = await page.evaluate(() => {
+      const box = (e: Element) => {
+        const b = e.getBoundingClientRect()
+        return { x: b.x, y: b.y, w: b.width, h: b.height }
+      }
+      const scroll = document.querySelector('.cootie__scroll')!
+      return {
+        card: box(scroll),
+        scrollW: scroll.scrollWidth,
+        clientW: scroll.clientWidth,
+        rows: [...document.querySelectorAll('.cootie__look')].map((row) => ({
+          name: box(row.querySelector('.cootie__look-name')!),
+          swatches: [...row.querySelectorAll('.cootie__swatch')].map(box),
+          badges: [...row.querySelectorAll('.cootie__swatch-req')].map(box),
+          row: box(row)
+        })),
+        locked: document.querySelectorAll('.cootie__swatch--locked').length,
+        owned: document.querySelectorAll('.cootie__swatch:not(.cootie__swatch--locked)').length
+      }
+    })
+    const overlap = (a: any, b: any) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5
+    const inside = (a: any) => a.x >= r.card.x - 0.5 && a.x + a.w <= r.card.x + r.card.w + 0.5
+    expect(r.rows.length).toBe(3)
+    expect(r.locked).toBeGreaterThan(0)
+    expect(r.owned).toBeGreaterThan(3)
+    expect(r.scrollW, 'no sideways scroll').toBeLessThanOrEqual(r.clientW + 1)
+    for (const row of r.rows) {
+      for (const s of [...row.swatches, ...row.badges, row.name]) expect(inside(s), JSON.stringify(s)).toBe(true)
+      // A swatch is a finger-sized target.
+      for (const s of row.swatches) expect(Math.min(s.w, s.h)).toBeGreaterThanOrEqual(32)
+      for (let i = 0; i < row.swatches.length; i++) {
+        for (let j = i + 1; j < row.swatches.length; j++) expect(overlap(row.swatches[i], row.swatches[j]), `swatches ${i}/${j}`).toBe(false)
+        expect(overlap(row.name, row.swatches[i])).toBe(false)
+      }
+    }
+    for (let i = 0; i < r.rows.length; i++) {
+      for (let j = i + 1; j < r.rows.length; j++) {
+        // A locked swatch's badge never reaches the next row's name or swatches.
+        for (const b of r.rows[i]!.badges) {
+          expect(overlap(b, r.rows[j]!.name), `badge row ${i} vs name row ${j}`).toBe(false)
+          for (const s of r.rows[j]!.swatches) expect(overlap(b, s)).toBe(false)
+        }
+        expect(overlap(r.rows[i]!.row, r.rows[j]!.row), `rows ${i}/${j}`).toBe(false)
+      }
+    }
+    await page.screenshot({ path: `test-results/cosmetics-${vp.width}x${vp.height}.png` })
   })
 }
 
