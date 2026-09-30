@@ -143,16 +143,23 @@ defineExpose({ play, clear })
 // page is thinner than the band, and the turning sheet rises through it. The
 // desk right of the book is empty (the book spans ~±34vh around the centre and
 // turns leftward), so the ribbon hangs in the middle of that column instead.
+//
+// With a book won, the desk bookshelf stands in that column too: the ribbon
+// then fits between the HUD and the shelf's top (`--ribbon-room`, px, set by
+// FoldScene from where the shelf is drawn), shrinking its stars to fit.
 @media (orientation: landscape) and (max-height: 500px) and (min-aspect-ratio: 3/2)
   .star-ribbon
+    --gap: clamp(0.25rem, 2vh, 0.6rem)
     left: calc(75% + 17vh)
-    top: calc(var(--hud-h, 3.5rem) + clamp(0.4rem, 3vh, 1rem))
+    top: calc(var(--hud-h, 3.5rem) + var(--gap))
   .star-ribbon__band
     gap: clamp(0.25rem, 1.2vw, 0.5rem)
     padding: clamp(0.2rem, 0.9vh, 0.4rem) clamp(0.9rem, 2.4vw, 1.2rem)
   .star-ribbon__slot
-    width: clamp(1.5rem, 9vh, 2.4rem)
-    height: clamp(1.5rem, 9vh, 2.4rem)
+    // Band = slot + padding + borders (≈ 1rem); keep a little air above the shelf.
+    --fit: max(1.1rem, calc(var(--ribbon-room, 100vh) - var(--gap) - 1.35rem))
+    width: min(clamp(1.5rem, 9vh, 2.4rem), var(--fit))
+    height: min(clamp(1.5rem, 9vh, 2.4rem), var(--fit))
 
 @media (prefers-reduced-motion: reduce)
   .star-ribbon.is-on

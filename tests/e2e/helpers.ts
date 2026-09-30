@@ -38,6 +38,7 @@ declare global {
       screenOf(x: number, z: number, y?: number): { x: number; y: number }
       shelfScreen(slot: number): { x: number; y: number }
       toggleShelf(): boolean
+      boot(): { boot_ms: number; first_input_ms: number; precompile_ms: number; precompile_parallel: boolean; stages: Record<number, number> }
       game: any
       engine: any
     }
@@ -104,4 +105,27 @@ export const collectErrors = (page: Page): string[] => {
   })
   page.on('pageerror', (e) => errors.push(e.message))
   return errors
+}
+
+/**
+ * Freeze the star ribbon (roadmap #1) in its settled hang: the band half-way
+ * through its hang (between the drop and the lift) and every star folded in.
+ * Measuring after a fixed wait was flaky on SwiftShader, whose frame rate
+ * decides how far the CSS animation has got.
+ */
+export const settleRibbon = async (page: Page): Promise<void> => {
+  await page.locator('.star-ribbon.is-on').waitFor({ state: 'attached' })
+  await page.evaluate(() => {
+    const root = document.querySelector('.star-ribbon.is-on')!
+    for (const a of root.getAnimations({ subtree: true })) {
+      const t = a.effect!.getComputedTiming()
+      const delay = Number(t.delay ?? 0)
+      const active = Number(t.activeDuration)
+      const band = (a.effect as KeyframeEffect).target === root
+      a.pause()
+      a.currentTime = band ? delay + active * 0.5 : delay + active
+    }
+  })
+  // Two frames for the paused styles to land.
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
 }

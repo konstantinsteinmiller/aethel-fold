@@ -1,5 +1,5 @@
 import { createApp, watch } from 'vue'
-import router from '@/router'
+import router, { prefetchGame } from '@/router'
 import { BOOT, bootStage } from '@/use/useBoot'
 import '@/assets/css/tailwind.css'
 import '@/assets/css/index.sass'
@@ -31,6 +31,8 @@ import { bootstrapVConsoleFromUrl } from '@/use/useVConsole'
 
 const bootstrap = async () => {
   bootStage(BOOT.js)
+  // The game chunk downloads while the save hydrates (roadmap #13).
+  prefetchGame()
   // Wire the universal pause gate → audio mute before anything can show an
   // ad. One subscriber, every build: rewarded / interstitial ads, tab-hide,
   // platform SDK pause, and app modals all suspend music + SFX through this

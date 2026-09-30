@@ -435,3 +435,13 @@ export type GamePhase =
   | 'finale'      // page 6: fold the dragon into a frog
   | 'victory'     // ribbon + confetti, run summary
   | 'paused'
+
+/**
+ * The actionable-highlight modes (roadmap #14, `FoldSettings.highlightMode`):
+ *   standard — GDD §9's pulsing yellow glow along the outline;
+ *   steady   — the same glow at a constant, bright level (no pulsing);
+ *   bold     — steady, plus a thick highlight halo edged in ink around the
+ *              whole silhouette, readable against pale paper.
+ */
+export type HighlightMode = 'standard' | 'steady' | 'bold'
+export const HIGHLIGHT_MODES: readonly HighlightMode[] = ['standard', 'steady', 'bold']

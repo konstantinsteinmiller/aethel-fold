@@ -14,7 +14,8 @@ import {
   Scene, SRGBColorSpace, UnsignedByteType, UnsignedIntType, WebGLRenderTarget, WebGLRenderer,
   type Camera, type ShaderMaterial
 } from 'three'
-import { createCompositeMaterial } from './compositeShader'
+import { createCompositeMaterial, highlightUniforms } from './compositeShader'
+import type { HighlightMode } from '../logic/types'
 
 export interface RendererOptions {
   canvas: HTMLCanvasElement
@@ -37,6 +38,8 @@ export class FoldRenderer {
   scale = 1
   /** Lock the scale (settings "quality: high/low"). null = adaptive. */
   scaleLock: number | null = null
+  /** Bold-highlight halo width in CSS px (0 = off); kept constant on screen like the ink. */
+  private hlBand = 0
   private frameTimes = new Float32Array(90)
   private frameIdx = 0
   private lastAdapt = 0
@@ -116,6 +119,16 @@ export class FoldRenderer {
     // faceted trees read as heavy black scribbles.
     u.uInkWidth!.value = Math.max(1, 1.4 * this.dpr * this.effectiveScale)
     u.uTiltRadius!.value = 5.5 * this.dpr * this.effectiveScale
+    u.uHlBand!.value = this.hlBand * this.dpr * this.effectiveScale
+  }
+
+  /** The actionable-highlight mode (roadmap #14). */
+  setHighlight(mode: HighlightMode): void {
+    const h = highlightUniforms(mode)
+    this.hlBand = h.band
+    const u = this.composite.uniforms
+    u.uHlSteady!.value = h.steady
+    u.uHlBand!.value = this.hlBand * this.dpr * this.effectiveScale
   }
 
   /** Record a frame's wall time (ms) and adapt resolution. */
@@ -129,6 +142,48 @@ export class FoldRenderer {
     if (p90 > 22) this.scale = Math.max(0.65, this.scale - 0.1)
     else if (p90 < 15 && this.scale < 1) this.scale = Math.min(1, this.scale + 0.05)
     if (this.scale !== prev) this.applySize()
+  }
+
+  /**
+   * Compile the programs `scene` (into the MRT), the composite quad and the
+   * overlay need, before anything is drawn. Uses `compileAsync` (which waits on
+   * `KHR_parallel_shader_compile` without blocking) where the GPU has it,
+   * plain `compile` otherwise (it issues the programs; the driver links them
+   * before they are first drawn). Resolves with whether the compile ran in
+   * parallel; never rejects (a failure only means the first frame compiles).
+   */
+  canCompileParallel(): boolean {
+    return typeof this.renderer.compileAsync === 'function' && this.renderer.extensions.has('KHR_parallel_shader_compile')
+  }
+
+  async precompile(scene: Scene, camera: Camera): Promise<boolean> {
+    const r = this.renderer
+    const parallel = this.canCompileParallel()
+    const prev = r.getRenderTarget()
+    try {
+      // No parallel compile: plain `compile` (compileAsync would only warn and poll).
+      if (!parallel) {
+        r.setRenderTarget(this.mrt)
+        r.compile(scene, camera)
+        r.setRenderTarget(null)
+        r.compile(this.quadScene, this.quadCam)
+        r.compile(this.overlay, camera)
+        return false
+      }
+      // Program keys depend on the bound target (MRT vs canvas), so each pass
+      // compiles against the target it will draw into.
+      r.setRenderTarget(this.mrt)
+      const main = r.compileAsync(scene, camera)
+      r.setRenderTarget(null)
+      const quad = r.compileAsync(this.quadScene, this.quadCam)
+      const over = r.compileAsync(this.overlay, camera)
+      await Promise.all([main, quad, over])
+      return parallel
+    } catch {
+      return false
+    } finally {
+      r.setRenderTarget(prev)
+    }
   }
 
   /** Render one frame of `scene` through the ink pipeline to the canvas. */
@@ -176,6 +231,8 @@ export class FoldRenderer {
     u.uFar!.value = camera.far
     u.uRes!.value.set(target.width, target.height)
     u.uInkWidth!.value = Math.max(1.2, target.width / 720)
+    const band = u.uHlBand!.value
+    if (band > 0) u.uHlBand!.value = Math.max(2, (this.hlBand * target.width) / 420)
     u.uTiltBand!.value = 0
     u.uVignette!.value = 0
     u.uGrain!.value = 0
@@ -187,6 +244,7 @@ export class FoldRenderer {
     r.setRenderTarget(null)
     u.uRes!.value.copy(res)
     u.uInkWidth!.value = ink
+    u.uHlBand!.value = band
     u.uTiltBand!.value = tilt
     u.uVignette!.value = vig
     u.uGrain!.value = grain

@@ -220,7 +220,11 @@ export default {
       'sling': 'Zieh die Schleuder zurück, ziele und lass los',
       'leaper': 'Springer hüpfen über Mauern – triff sie mit der Schleuder!',
       'shelf': 'Tippe ein Buch an, um es anzusehen, und noch einmal, um es zu öffnen',
-      'shelfZoom': 'Hier geht es zu deinem Bücherregal'
+      'shelfZoom': 'Hier geht es zu deinem Bücherregal',
+      'hold': 'Halte die leuchtende Lasche gedrückt, um sie zu falten',
+      'holdPeel': 'Halte die Ecke gedrückt, um die Seite abzuziehen',
+      'holdCrease': 'Halte den leuchtenden Knick gedrückt',
+      'slingTap': 'Tippe dorthin, wo der Stein landen soll'
     },
     'pause': {
       'title': 'Pause',
@@ -242,7 +246,13 @@ export default {
       'qualityAuto': 'Auto',
       'qualityHigh': 'Scharf',
       'qualityLow': 'Schnell',
-      'language': 'Sprache'
+      'language': 'Sprache',
+      'holdToFold': 'Halten zum Falten',
+      'slowMode': 'Zeitlupe',
+      'highlight': 'Markierung',
+      'highlight_standard': 'Pulsierend',
+      'highlight_steady': 'Ruhig',
+      'highlight_bold': 'Kräftig'
     },
     'victory': {
       'title': 'SIEG',

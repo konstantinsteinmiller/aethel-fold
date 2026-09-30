@@ -15,6 +15,38 @@ test.describe('Aethel Fold — gameplay', () => {
     expect(errors).toEqual([])
   })
 
+  test('boot telemetry records boot_ms and first_input_ms (roadmap #13)', async ({ page }) => {
+    await page.goto('/')
+    await waitForGame(page)
+    const before = await page.evaluate(() => window.__fold!.boot())
+    expect(before.boot_ms).toBeGreaterThan(0)
+    expect(before.first_input_ms).toBe(-1)
+    expect(before.precompile_ms).toBeGreaterThanOrEqual(0)
+    const box = (await page.locator('canvas.fold-canvas').boundingBox())!
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.85)
+    const after = await page.evaluate(() => window.__fold!.boot())
+    expect(after.first_input_ms).toBeGreaterThanOrEqual(after.boot_ms)
+    expect(after.boot_ms).toBe(before.boot_ms)
+    // Nothing of it is persisted: the save stays the one aethel_state object.
+    const keys = await page.evaluate(() => Object.keys(localStorage).filter((k) => /boot/i.test(k)))
+    expect(keys).toEqual([])
+  })
+
+  test('hold to fold: a press held on the wall folds it, no swipe (roadmap #14)', async ({ page }) => {
+    await seedState(page, { fold_lessons: ALL_LESSONS, fold_settings: { haptics: true, shake: true, quality: 'auto', holdToFold: true } })
+    await page.goto('/')
+    await waitForGame(page)
+    for (let i = 0; i < 40 && (await state(page)).folds[0]?.phase !== 'ready'; i++) await ff(page, 0.25)
+    expect((await state(page)).folds[0]!.phase).toBe('ready')
+    const a = await screenOf(page, 0, -0.75)
+    await page.mouse.move(a.x, a.y)
+    await page.mouse.down()
+    // The hold runs on the real clock, frame by frame (SwiftShader is slow: give it time).
+    await expect.poll(async () => (await state(page)).folds[0]!.phase, { timeout: 15_000 }).not.toBe('ready')
+    await expect.poll(async () => (await state(page)).folds[0]!.phase, { timeout: 15_000 }).toMatch(/snapping|up/)
+    await page.mouse.up()
+  })
+
   test('the wordless swipe lesson slows time, shows the ghost hand, and a real swipe snaps the wall', async ({ page }) => {
     await page.goto('/')
     await waitForGame(page)

@@ -11,6 +11,15 @@
  *   mouse wheel over a crease ..................... Spread (desktop)
  *   one finger right → left over the won book ...... Fold it shut: off to the desk bookshelf
  *
+ * Hold to fold (roadmap #14, `holdToFold`): a finger pressed still on a fold,
+ * crease, tear or the peel corner for `HOLD_MS` starts it, and keeping it down
+ * carries it through in `HOLD_FOLD_MS` (lifting early lets go, exactly like
+ * ending a swipe there). The host drives it with `frame(now)` on the real
+ * clock. Stamping and the ballista stay taps; unfolding is automatic for every
+ * fold kind, so nothing needs a gesture back. The two-finger spread becomes a
+ * hold on the crease, and the sling becomes a tap where the stone should land.
+ * Swipes keep working alongside.
+ *
  * Pure logic: it never touches the DOM. The host feeds it pointer events with
  * screen coordinates and a `project` function that maps a screen point onto
  * the page plane. No allocation per move event.
@@ -63,6 +72,10 @@ const TAP_MS = 420
 const ALIGN = 0.28
 /** Screen travel (fraction of the short side) that folds the won book shut. */
 const SHUT = 0.28
+/** Hold to fold: a still press this long (ms) takes hold of what is under it. */
+export const HOLD_MS = 260
+/** Hold to fold: ms of holding that carry a fold (tear, crease, peel) from flat to done. */
+export const HOLD_FOLD_MS = 650
 
 export class GestureRecognizer {
   mode: Mode = 'idle'
@@ -70,6 +83,13 @@ export class GestureRecognizer {
   target = -1
   /** Latest progress 0…1 of the active manipulation (for the UI). */
   progress = 0
+  /** Accessibility: press and hold instead of swiping (roadmap #14). */
+  holdToFold = false
+  /** The active manipulation is a hold (time-driven), not a drag. */
+  holding = false
+  private holdT0 = 0
+  /** This press has already been looked at for a hold. */
+  private holdTried = false
 
   private readonly a: Ptr = mkPtr()
   private readonly b: Ptr = mkPtr()
@@ -98,6 +118,8 @@ export class GestureRecognizer {
       this.target = -1
       this.progress = 0
       this.speed = 0
+      this.holding = false
+      this.holdTried = false
       if (g.pickSling(this.a.x, this.a.z) && g.grabSling()) {
         this.mode = 'sling'
         this.host.feedback?.('grab', 0)
@@ -114,6 +136,7 @@ export class GestureRecognizer {
     if (this.mode === 'sling') return
     if (!this.fill(this.b, id, sx, sy, now)) return
     // Second finger: this is a spread. Let go of whatever the first was doing.
+    this.holding = false
     if (this.mode === 'fold' && this.target >= 0) g.release(this.target, 0)
     if (this.mode === 'crease') g.releaseWeak()
     if (this.mode === 'tear' && this.target !== -1) g.releaseTear(this.target)
@@ -144,6 +167,8 @@ export class GestureRecognizer {
       p.x = this.tmp.x
       p.z = this.tmp.z
     }
+    // A hold follows the clock, not the finger.
+    if (this.holding) return
     const g = this.game
     const minDim = Math.max(1, this.host.minDim())
     switch (this.mode) {
@@ -239,7 +264,10 @@ export class GestureRecognizer {
     // Primary finger lifted.
     switch (this.mode) {
       case 'pending':
-        if (now - this.a.t0 < TAP_MS) g.tap(this.a.x, this.a.z)
+        if (now - this.a.t0 < TAP_MS) {
+          // Hold-to-fold mode: a tap that hit nothing shoots the loaded sling at that spot.
+          if (!g.tap(this.a.x, this.a.z) && this.holdToFold) g.slingAt(this.a.x, this.a.z)
+        }
         break
       case 'fold':
         g.release(this.target, this.speed)
@@ -262,6 +290,7 @@ export class GestureRecognizer {
         break
     }
     this.a.active = false
+    this.holding = false
     if (this.b.active) {
       // The remaining finger shouldn't start anything new mid-gesture.
       this.mode = 'none'
@@ -282,9 +311,107 @@ export class GestureRecognizer {
     if (this.mode === 'sling') g.cancelSling()
     this.a.active = false
     this.b.active = false
+    this.holding = false
     this.mode = 'idle'
     this.target = -1
     this.progress = 0
+  }
+
+  /**
+   * Per frame, on the real clock (hold to fold). Starts a hold once a still
+   * press has lasted `HOLD_MS`, then carries it through. No allocation.
+   */
+  frame(now: number): void {
+    if (!this.holdToFold || !this.a.active || this.b.active) return
+    if (!this.holding) {
+      if (this.holdTried || now - this.a.t0 < HOLD_MS) return
+      if (this.mode !== 'pending' && this.mode !== 'peel') return
+      // Only a still press is a hold (a peel already being dragged stays a drag).
+      const moved = Math.hypot(this.a.sx - this.a.startSx, this.a.sy - this.a.startSy)
+      if (moved >= Math.max(1, this.host.minDim()) * SLOP) return
+      this.holdTried = true
+      this.startHold(now)
+      return
+    }
+    const k = Math.min(1, (now - this.holdT0) / HOLD_FOLD_MS)
+    const g = this.game
+    this.progress = k
+    switch (this.mode) {
+      case 'fold':
+        g.drag(this.target, k)
+        this.tick(k, 'dragTick')
+        if (k >= 1) {
+          g.release(this.target, 0)
+          this.endHold()
+        }
+        break
+      case 'tear':
+        g.pullTear(this.target, k)
+        this.tick(k, 'tearTick')
+        if (k >= 1) this.endHold()
+        break
+      case 'crease':
+        g.pullWeak(k)
+        this.tick(k, 'dragTick')
+        if (k >= 1) {
+          g.releaseWeak()
+          this.endHold()
+        }
+        break
+      case 'peel':
+        g.peelDrag(k)
+        this.tick(k, 'peelTick')
+        if (k >= 1) {
+          g.peelRelease()
+          this.endHold()
+        }
+        break
+      default:
+        this.holding = false
+    }
+  }
+
+  /** The press has been still for `HOLD_MS`: take hold of what is under it, if anything. */
+  private startHold(now: number): void {
+    const g = this.game
+    const p = this.a
+    if (this.mode === 'peel') {
+      this.beginHold(now, -1)
+      return
+    }
+    if (this.tearCandidate !== -1) {
+      this.mode = 'tear'
+      this.beginHold(now, this.tearCandidate)
+      return
+    }
+    if (this.creaseCandidate >= 0) {
+      this.mode = 'crease'
+      this.beginHold(now, this.creaseCandidate)
+      return
+    }
+    const i = g.pickFold(p.x, p.z)
+    if (i >= 0 && g.grab(i)) {
+      this.mode = 'fold'
+      this.speed = 0
+      this.beginHold(now, i)
+      g.drag(i, 0)
+    }
+    // Nothing to hold: stay pending, so a slow tap still stamps.
+  }
+
+  private beginHold(now: number, target: number): void {
+    this.target = target
+    this.holding = true
+    this.holdT0 = now
+    this.progress = 0
+    this.tickAcc = 0
+    this.host.feedback?.('grab', 0)
+  }
+
+  /** The hold carried its target through: the rest of this press does nothing. */
+  private endHold(): void {
+    this.holding = false
+    this.mode = 'none'
   }
 
   /** Mouse wheel over a crease pulls it apart (desktop spread). */

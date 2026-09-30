@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { waitForGame } from './helpers'
+import { settleRibbon, waitForGame } from './helpers'
 
 const VIEWPORTS = [
   { name: 'phone-portrait-min', width: 320, height: 658 },
@@ -95,9 +95,8 @@ for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }, { wi
     await page.evaluate(() => window.__fold!.fastForward(1))
     await page.evaluate(() => window.__fold!.clearPage())
     await page.evaluate(() => window.__fold!.fastForward(0.2))
-    await expect(page.locator('.star-ribbon.is-on')).toBeAttached()
-    // Mid-hang: every earned star has folded in.
-    await page.waitForTimeout(1500)
+    // Mid-hang, every earned star folded in (frozen there: see settleRibbon).
+    await settleRibbon(page)
     const b = await page.evaluate(() => {
       const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect()
       const band = r('.star-ribbon__band')
@@ -120,6 +119,98 @@ for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }, { wi
     const clear = b.band.y + b.band.h <= book.top || b.band.x >= book.right || b.band.x + b.band.w <= book.left
     expect(clear, `ribbon ${JSON.stringify(b.band)} vs book ${JSON.stringify(book)}`).toBe(true)
     await page.screenshot({ path: `test-results/star-ribbon-${vp.width}x${vp.height}.png` })
+  })
+}
+
+// Short landscape with a book won: the desk bookshelf stands right of the book,
+// in the column the star ribbon hangs in. The ribbon fits above the shelf.
+for (const vp of [{ width: 658, height: 320 }, { width: 844, height: 390 }]) {
+  test(`the star ribbon stays clear of the desk bookshelf at ${vp.width}×${vp.height}`, async ({ page }) => {
+    await page.setViewportSize(vp)
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('__seeded')) return
+      sessionStorage.setItem('__seeded', '1')
+      localStorage.setItem('aethel_state', JSON.stringify({
+        fold_wins: 1, fold_cleared: 6,
+        fold_lessons: {
+          swipe: true, stamp: true, shield: true, launch: true, ridge: true, spread: true, peel: true, crease: true,
+          core: true, frog: true, crush: true, sling: true, leaper: true, ballista: true, shelf: true
+        }
+      }))
+    })
+    await page.goto('/')
+    await waitForGame(page)
+    expect((await page.evaluate(() => window.__fold!.state().shelf.inView))).toBe(true)
+    await page.evaluate(() => window.__fold!.fastForward(1))
+    await page.evaluate(() => window.__fold!.clearPage())
+    await page.evaluate(() => window.__fold!.fastForward(0.2))
+    await settleRibbon(page)
+    const b = await page.evaluate(() => {
+      const band = document.querySelector('.star-ribbon__band')!.getBoundingClientRect()
+      const hud = [...document.querySelectorAll('.page-badge, .hearts, .score__tag, .hud-right')].map((e) => e.getBoundingClientRect().bottom)
+      const f = window.__fold!
+      const pts = [[-5.4, -7.4], [5.4, -7.4], [-5.4, 7.4], [5.4, 7.4]].map(([x, z]) => f.screenOf(x!, z!))
+      return {
+        band: { x: band.x, y: band.y, w: band.width, h: band.height },
+        hudBottom: Math.max(...hud),
+        shelfTop: f.engine.shelfTop() as number,
+        bookRight: Math.max(...pts.map((p) => p.x)),
+        bookTop: Math.min(...pts.map((p) => p.y))
+      }
+    })
+    expect(Number.isFinite(b.shelfTop)).toBe(true)
+    expect(b.band.w).toBeGreaterThan(40)
+    expect(b.band.y, 'ribbon top vs HUD bottom').toBeGreaterThanOrEqual(b.hudBottom - 0.5)
+    expect(b.band.y + b.band.h, 'ribbon bottom vs shelf top').toBeLessThanOrEqual(b.shelfTop)
+    expect(b.band.x + b.band.w).toBeLessThanOrEqual(vp.width + 1)
+    const clearOfBook = b.band.y + b.band.h <= b.bookTop || b.band.x >= b.bookRight
+    expect(clearOfBook, `ribbon ${JSON.stringify(b.band)} vs book right ${b.bookRight} top ${b.bookTop}`).toBe(true)
+    await page.screenshot({ path: `test-results/star-ribbon-shelf-${vp.width}x${vp.height}.png` })
+  })
+}
+
+// The settings face of the pause (with the accessibility rows, roadmap #14) fits
+// the smallest phone both ways: every row inside the card, none overlapping.
+for (const vp of [{ width: 320, height: 658 }, { width: 658, height: 320 }]) {
+  test(`the settings face fits at ${vp.width}×${vp.height}`, async ({ page }) => {
+    await page.setViewportSize(vp)
+    await page.goto('/')
+    await waitForGame(page)
+    await page.getByRole('button', { name: /pause and settings/i }).click()
+    await page.getByRole('button', { name: /^settings$/i }).click()
+    await expect(page.getByTestId('setting-hold')).toBeAttached()
+    // The card folds in with a scale/rotate transition: measure once it has settled.
+    await page.waitForFunction(() => {
+      const card = document.querySelector('.cootie__card')
+      return !!card && card.getAnimations({ subtree: true }).length === 0 && getComputedStyle(card).transform === 'none'
+    })
+    const r = await page.evaluate(() => {
+      const box = (e: Element) => {
+        const b = e.getBoundingClientRect()
+        return { x: b.x, y: b.y, w: b.width, h: b.height }
+      }
+      const card = box(document.querySelector('.cootie__scroll')!)
+      const rows = [...document.querySelectorAll('.cootie__settings > .cootie__row')].map((row) => ({
+        row: box(row),
+        parts: [...row.children].map(box),
+        scrollW: row.scrollWidth,
+        clientW: row.clientWidth
+      }))
+      return { card, rows }
+    })
+    expect(r.rows.length).toBe(9)
+    const overlap = (a: any, b: any) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5
+    for (const row of r.rows) {
+      expect(row.row.x).toBeGreaterThanOrEqual(r.card.x - 0.5)
+      expect(row.row.x + row.row.w).toBeLessThanOrEqual(r.card.x + r.card.w + 0.5)
+      expect(row.scrollW, 'row content overflows').toBeLessThanOrEqual(row.clientW + 1)
+      // Label and control side by side, never on top of each other.
+      expect(overlap(row.parts[0], row.parts[1])).toBe(false)
+    }
+    for (let i = 0; i < r.rows.length; i++) {
+      for (let j = i + 1; j < r.rows.length; j++) expect(overlap(r.rows[i]!.row, r.rows[j]!.row), `rows ${i}/${j}`).toBe(false)
+    }
+    await page.screenshot({ path: `test-results/settings-${vp.width}x${vp.height}.png` })
   })
 }
 

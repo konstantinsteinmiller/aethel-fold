@@ -5,7 +5,7 @@ import {
 } from '@/keys'
 import { aethelState, getState, setState, setStates } from '@/use/useAethelState'
 import { saveDataVersion, flushSaveNow } from '@/use/useSaveStatus'
-import type { BookId, LessonId, PageId, Stars } from '@/fold/logic/types'
+import { HIGHLIGHT_MODES, type BookId, type HighlightMode, type LessonId, type PageId, type Stars } from '@/fold/logic/types'
 import { PAGE_COUNT, pageDef } from '@/fold/logic/pages'
 import { asStars, isRated, readStarRecord, starKey } from '@/fold/logic/stars'
 import { emptyStats, type GameStats } from '@/fold/logic/game'
@@ -27,6 +27,12 @@ export interface FoldSettings {
   haptics: boolean
   shake: boolean
   quality: Quality
+  /** Accessibility (roadmap #14): press and hold on a fold instead of swiping. */
+  holdToFold: boolean
+  /** Accessibility: the world runs at 0.75× (the player's folds don't). */
+  slowMode: boolean
+  /** Accessibility: how actionable things are marked. */
+  highlightMode: HighlightMode
 }
 
 export interface RunCheckpoint {
@@ -49,7 +55,9 @@ export interface Records {
   time: number
 }
 
-const DEFAULT_SETTINGS: FoldSettings = { haptics: true, shake: true, quality: 'auto' }
+const DEFAULT_SETTINGS: FoldSettings = {
+  haptics: true, shake: true, quality: 'auto', holdToFold: false, slowMode: false, highlightMode: 'standard'
+}
 
 const num = (v: unknown, fallback = 0): number => {
   const n = typeof v === 'number' ? v : parseFloat(String(v))
@@ -71,6 +79,9 @@ const readSettings = (): FoldSettings => {
   if (s.quality !== 'auto' && s.quality !== 'high' && s.quality !== 'low') s.quality = 'auto'
   s.haptics = s.haptics !== false
   s.shake = s.shake !== false
+  s.holdToFold = s.holdToFold === true
+  s.slowMode = s.slowMode === true
+  if (!HIGHLIGHT_MODES.includes(s.highlightMode)) s.highlightMode = 'standard'
   return s
 }
 

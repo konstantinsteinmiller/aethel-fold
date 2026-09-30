@@ -40,7 +40,7 @@ beforeEach(() => {
 
 /** A cloud snapshot for a player who is deep into the game, plus the meta blob
  *  the merge resolver needs in order to pick remote over an empty local. */
-const seededCloud = async () => {
+const seededCloud = async (extra: Record<string, unknown> = {}) => {
   const { META_KEY } = await import('@/utils/save/SaveMergePolicy')
   const cloudBlob = {
     fold_page: 4,
@@ -53,7 +53,8 @@ const seededCloud = async () => {
     fold_settings: { haptics: false, shake: true, quality: 'low' },
     fold_run: { score: 5120, hits: 2, time: 410.5 },
     user_sound_volume: 0.4,
-    user_language: 'es'
+    user_language: 'es',
+    ...extra
   }
   const meta = {
     savedAt: '2026-05-19T00:00:00.000Z',
@@ -169,7 +170,34 @@ describe('aethel_state cloud hydrate → composable refresh', () => {
     await bootCloudOnly(data)
 
     const p = await import('@/use/useFoldProgress')
-    expect(p.foldSettings.value).toEqual({ haptics: false, shake: true, quality: 'low' })
+    // A save from before the accessibility options (roadmap #14) gets their defaults.
+    expect(p.foldSettings.value).toEqual({
+      haptics: false, shake: true, quality: 'low', holdToFold: false, slowMode: false, highlightMode: 'standard'
+    })
+  })
+
+  it('restores the accessibility options (hold to fold, slow mode, highlight)', async () => {
+    const data = await seededCloud({
+      fold_settings: { haptics: true, shake: false, quality: 'auto', holdToFold: true, slowMode: true, highlightMode: 'bold' }
+    })
+    await bootCloudOnly(data)
+
+    const p = await import('@/use/useFoldProgress')
+    expect(p.foldSettings.value).toEqual({
+      haptics: true, shake: false, quality: 'auto', holdToFold: true, slowMode: true, highlightMode: 'bold'
+    })
+  })
+
+  it('sanitises a garbled accessibility setting back to its default', async () => {
+    const data = await seededCloud({
+      fold_settings: { haptics: true, shake: true, quality: 'auto', holdToFold: 'yes', slowMode: 1, highlightMode: 'neon' }
+    })
+    await bootCloudOnly(data)
+
+    const p = await import('@/use/useFoldProgress')
+    expect(p.foldSettings.value.holdToFold).toBe(false)
+    expect(p.foldSettings.value.slowMode).toBe(false)
+    expect(p.foldSettings.value.highlightMode).toBe('standard')
   })
 
   it('keeps no gameplay field in raw localStorage on a cloud-only build', async () => {
@@ -203,7 +231,7 @@ describe('hydrate failure modes', () => {
     expect(cloudBlob.fold_cleared).toBe(3)
     expect(cloudBlob.fold_page).toBe(4)
     expect(cloudBlob.fold_best).toEqual({ score: 8450, time: 0 })
-    expect(cloudBlob.fold_settings).toEqual({ haptics: false, shake: false, quality: 'low' })
+    expect(cloudBlob.fold_settings).toEqual({ haptics: false, shake: false, quality: 'low', holdToFold: false, slowMode: false, highlightMode: 'standard' })
   })
 
   it('retries a transient SDK failure before letting a returning player boot fresh', async () => {

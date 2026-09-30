@@ -23,7 +23,24 @@ import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
 import type { LessonState } from '@/fold/logic/lessons'
 import type { ScreenPoint } from '@/fold/render/GameView'
 
-const props = defineProps<{ touch: boolean }>()
+const props = defineProps<{
+  touch: boolean
+  /** Hold to fold is on (roadmap #14): the hint names the press-and-hold instead of the swipe. */
+  hold?: boolean
+}>()
+/** Lessons whose gesture hold to fold replaces. */
+const HOLD_HINT: Readonly<Record<string, string>> = {
+  swipe: 'fold.hint.hold',
+  shield: 'fold.hint.hold',
+  launch: 'fold.hint.hold',
+  ridge: 'fold.hint.hold',
+  frog: 'fold.hint.hold',
+  peel: 'fold.hint.holdPeel',
+  crease: 'fold.hint.holdCrease',
+  spread: 'fold.hint.holdCrease',
+  core: 'fold.hint.holdCrease',
+  sling: 'fold.hint.slingTap'
+}
 const { t } = useI18n()
 
 const root = ref<HTMLDivElement | null>(null)
@@ -42,6 +59,8 @@ let lastRev = -1
 const hintText = computed(() => {
   const id = lessonId.value
   if (!id) return ''
+  const held = props.hold ? HOLD_HINT[id] : undefined
+  if (held) return t(held)
   if (id === 'spread' || id === 'core') return t(props.touch ? 'fold.hint.spreadTouch' : 'fold.hint.spreadMouse')
   if (id === 'shelf') return t(step.value === 0 ? 'fold.hint.shelfZoom' : 'fold.hint.shelf')
   return t(`fold.hint.${id}`)

@@ -4,7 +4,10 @@
  *
  * 1. Sobel edge detection over view normals, linear depth and object ids →
  *    fine ink outlines of constant screen width, tinted by what they outline;
- * 2. the "actionable" id bit → a pulsing yellow glow along those outlines;
+ * 2. the "actionable" id bit → a pulsing yellow glow along those outlines
+ *    (roadmap #14's highlight modes: `uHlSteady` stops the pulse, `uHlBand`
+ *    adds a thick high-contrast halo — a highlight band edged in ink — around
+ *    everything actionable; see `HIGHLIGHT_MODES`);
  * 3. tilt-shift: the top and bottom 15 % of the frame blur like a macro lens;
  * 4. warm lamp vignette, a whisper of screen grain, hit flashes and the
  *    pause desaturation.
@@ -12,6 +15,11 @@
 
 import { Color, ShaderMaterial, Vector2, type Texture } from 'three'
 import { HEX } from './palette'
+import type { HighlightMode } from '../logic/types'
+
+/** Uniform values per highlight mode (see `HighlightMode`). `band` is the halo width in CSS px (the renderer scales it to drawing px). */
+export const highlightUniforms = (mode: HighlightMode): { steady: number; band: number } =>
+  mode === 'bold' ? { steady: 1, band: 5 } : mode === 'steady' ? { steady: 1, band: 0 } : { steady: 0, band: 0 }
 
 export const createCompositeMaterial = (): ShaderMaterial =>
   new ShaderMaterial({
@@ -29,6 +37,8 @@ export const createCompositeMaterial = (): ShaderMaterial =>
       uHighlight: { value: new Color(HEX.highlight) },
       uHighlightHot: { value: new Color(HEX.highlightHot) },
       uPulse: { value: 0 },
+      uHlSteady: { value: 0 },
+      uHlBand: { value: 0 },
       uTiltBand: { value: 0.15 },
       uTiltRadius: { value: 5 },
       uVignette: { value: 0.32 },
@@ -59,6 +69,8 @@ export const createCompositeMaterial = (): ShaderMaterial =>
       uniform vec3 uHighlight;
       uniform vec3 uHighlightHot;
       uniform float uPulse;
+      uniform float uHlSteady;
+      uniform float uHlBand;
       uniform float uTiltBand;
       uniform float uTiltRadius;
       uniform float uVignette;
@@ -142,6 +154,24 @@ export const createCompositeMaterial = (): ShaderMaterial =>
         return mix(uInk, base * 0.45, 0.3);
       }
 
+      // Bold highlight: how far outside an actionable silhouette this pixel is.
+      // 0 = not near one; 1 = in the inner (highlight) band; 2 = in the ink rim.
+      float haloAt(vec2 uv) {
+        vec4 c = texture2D(tNormal, uv);
+        if (hlOf(c.a) > 0.5 && idOf(c.a) < NO_INK) return 0.0;
+        float inner = 0.0;
+        float outer = 0.0;
+        for (int i = 0; i < 12; i++) {
+          float ang = float(i) * 0.5235988;
+          vec2 dir = vec2(cos(ang), sin(ang)) / uRes;
+          vec4 a = texture2D(tNormal, uv + dir * uHlBand * 0.62);
+          vec4 b = texture2D(tNormal, uv + dir * uHlBand);
+          inner = max(inner, hlOf(a.a) * step(idOf(a.a), NO_INK));
+          outer = max(outer, hlOf(b.a) * step(idOf(b.a), NO_INK));
+        }
+        return inner > 0.5 ? 1.0 : outer > 0.5 ? 2.0 : 0.0;
+      }
+
       void main() {
         vec2 uv = vUv;
         vec3 col = texture2D(tColor, uv).rgb;
@@ -171,9 +201,16 @@ export const createCompositeMaterial = (): ShaderMaterial =>
         vec3 inked = mix(col, ink, edge);
 
         // GDD §9: actionable things glow with a pulsing yellow highlight along the black outline.
+        // Steady / bold modes hold the pulse at a bright constant (no flashing).
+        float pulse = mix(uPulse, 0.8, uHlSteady);
         if (hl > 0.0) {
-          vec3 glow = mix(uHighlight, uHighlightHot, uPulse);
-          inked = mix(inked, glow, hl * (0.55 + 0.45 * uPulse));
+          vec3 glow = mix(uHighlight, uHighlightHot, pulse);
+          inked = mix(inked, glow, hl * (0.55 + 0.45 * pulse));
+        }
+        if (uHlBand > 0.0) {
+          float h = haloAt(uv);
+          if (h > 1.5) inked = uInk;
+          else if (h > 0.5) inked = uHighlight;
         }
 
         col = mix(inked, blurred, smoothstep(0.0, 1.0, tilt) * 0.92);

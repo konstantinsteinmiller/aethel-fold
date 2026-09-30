@@ -49,10 +49,10 @@ import { syncGameplayLifecycle } from '@/use/useGameplayLifecycle'
 import {
   addStats, bankScore, bookUnlocked, checkpoint, foldSettings, learnLesson, lessons, pageStars, pagesCleared,
   pagesCleared2, progressRevision, readKindness, recordStars, recordVictory, recordsFor, resumeBook, resumePage,
-  runCheckpoint, saveKindness, shelfProgress, startNewRun, wins, wins2
+  runCheckpoint, saveKindness, shelfProgress, startNewRun, wins, wins2, type FoldSettings
 } from '@/use/useFoldProgress'
 import { mobileCheck } from '@/utils/function'
-import { BOOT, bootStage, markGameReady } from '@/use/useBoot'
+import { BOOT, bootSnapshot, bootStage, markFirstInput, markGameReady, markInteractive, markPrecompiled } from '@/use/useBoot'
 
 const { t, locale } = useI18n()
 const { userSoundVolume, userMusicVolume } = useUser()
@@ -137,6 +137,7 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
     case 'pageCleared':
       // The stars fold in on the page-turn beat (c = 1…3); the best per page is
       // banked before the checkpoint below, whose flushSaveNow carries it.
+      roomForRibbon()
       fx.value?.stars(e.c)
       recordStars(g.book, e.a as PageId, e.c)
       bankStats(g)
@@ -185,6 +186,25 @@ const onEvent = (e: FoldEvent, g: FoldGame): void => {
   }
 }
 
+/**
+ * The star ribbon hangs between the HUD strip and whatever is under it; on a
+ * short landscape screen that is the desk bookshelf right of the book, so the
+ * ribbon gets `--ribbon-room` (px from the HUD's bottom to the shelf's top) to
+ * size itself into (roadmap #1, #2).
+ */
+const roomForRibbon = (): void => {
+  const eng = engine.value
+  const el = stage.value
+  if (!eng || !el) return
+  const top = eng.shelfTop()
+  if (!Number.isFinite(top)) {
+    el.style.removeProperty('--ribbon-room')
+    return
+  }
+  const hudPx = (hudTop.value?.getBoundingClientRect().bottom ?? 0) - el.getBoundingClientRect().top
+  el.style.setProperty('--ribbon-room', `${Math.max(0, Math.round(top - hudPx))}px`)
+}
+
 const word = (key: string, x: number, y: number, size: number, tone: string): void => {
   const g = engine.value?.game
   fx.value?.word(key, x, y, size, tone, { n: g?.combo ?? 0 })
@@ -193,7 +213,13 @@ const word = (key: string, x: number, y: number, size: number, tone: string): vo
 /** The storybook line printed on each page (`fold.story.b<book>p<page>`). */
 const caption = (def: PageDef): string => t(`fold.story.b${def.book}p${def.id}`)
 
+let interactive = false
 const onFrame = (g: FoldGame): void => {
+  if (!interactive) {
+    // The first frame is on screen and the canvas listens: boot telemetry's boot_ms.
+    interactive = true
+    markInteractive()
+  }
   if (hud.score !== g.score) hud.score = g.score
   if (hud.hp !== g.hero.hp) hud.hp = g.hero.hp
   const retry = g.phase === 'crumple' && g.defeated && g.phaseTime >= ALMOST.button
@@ -268,15 +294,13 @@ onMounted(() => {
   const { page, score, book } = bootPage()
   if (page === 1) startNewRun(book)
   const eng = markRaw(new FoldEngine(
-    c, { onEvent, word, onFrame, caption },
+    c, { onEvent, word, onFrame, caption, onFirstInput: markFirstInput },
     { learned: learnedMap(), startPage: page, startScore: score, book, kind: readKindness() }
   ))
   engine.value = eng
   eng.attach()
   eng.setVolumes(userSoundVolume.value, userMusicVolume.value)
-  eng.setQuality(foldSettings.value.quality)
-  eng.setShake(foldSettings.value.shake)
-  eng.setHaptics(foldSettings.value.haptics)
+  applySettings(eng, foldSettings.value)
   hud.book = book
   hud.page = page
   hud.score = score
@@ -284,12 +308,18 @@ onMounted(() => {
   if (stage.value) ro.observe(stage.value)
   if (hudTop.value) ro.observe(hudTop.value)
   layout()
-  eng.start()
   bootStage(BOOT.engine)
-  // Two frames later the first page is on screen: the splash may go.
-  requestAnimationFrame(() => requestAnimationFrame(() => markGameReady()))
   eng.setShelfProgress(shelfProgress())
   publishDebugHandle(eng)
+  // Behind the splash: build page 1 and compile its shaders (without blocking
+  // where the GPU allows), then start the loop (roadmap #13).
+  void eng.prewarm().then(({ ms, parallel }) => {
+    if (engine.value !== eng) return
+    markPrecompiled(ms, parallel)
+    eng.start()
+    // Two frames later the first page is on screen: the splash may go.
+    requestAnimationFrame(() => requestAnimationFrame(() => markGameReady()))
+  })
   // The printed story lines use the Angry font: repaint once it has loaded.
   void document.fonts?.load('40px Angry').then(() => engine.value?.refreshCaptions()).catch(() => undefined)
 })
@@ -309,12 +339,17 @@ onBeforeUnmount(() => {
 // ─── Settings & pause ────────────────────────────────────────────────────────
 
 watch([userSoundVolume, userMusicVolume], ([s, m]) => engine.value?.setVolumes(s, m))
-watch(foldSettings, (s) => {
-  const eng = engine.value
-  if (!eng) return
+const applySettings = (eng: FoldEngine, s: FoldSettings): void => {
   eng.setQuality(s.quality)
   eng.setShake(s.shake)
   eng.setHaptics(s.haptics)
+  eng.setHoldToFold(s.holdToFold)
+  eng.setSlowMode(s.slowMode)
+  eng.setHighlightMode(s.highlightMode)
+}
+watch(foldSettings, (s) => {
+  const eng = engine.value
+  if (eng) applySettings(eng, s)
 })
 
 const paused = computed(() => pauseOpen.value || isGamePaused.value)
@@ -423,6 +458,8 @@ const publishDebugHandle = (eng: FoldEngine): void => {
       return { x: out.x, y: out.y }
     },
     tryAgain: () => eng.tryAgain(),
+    /** Boot telemetry (roadmap #13): boot_ms, first_input_ms, precompile and stage times. */
+    boot: () => bootSnapshot(),
     fastForward: (s: number) => eng.fastForward(s),
     state: () => ({
       book: eng.game.book,
@@ -465,7 +502,7 @@ const pageAria = computed(() => t('fold.a11y.board'))
     canvas.fold-canvas(ref="canvas" :aria-label="pageAria" role="img" tabindex="-1")
 
     FxLayer(ref="fx")
-    GhostHand(ref="ghost" :touch="isTouch")
+    GhostHand(ref="ghost" :touch="isTouch" :hold="foldSettings.holdToFold")
 
     //- ── HUD ──
     div.hud-top(ref="hudTop")

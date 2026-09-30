@@ -60,4 +60,25 @@ test.describe('aethel_state — local persistence (plain web build)', () => {
     const save = await readSave(page)
     expect(save?.fold_settings?.haptics).toBe(false)
   })
+
+  test('the accessibility options persist in the same object and survive a reload (roadmap #14)', async ({ page }) => {
+    await page.goto('/')
+    await waitForGame(page)
+    await page.getByRole('button', { name: /pause and settings/i }).click()
+    await page.getByRole('button', { name: /^settings$/i }).click()
+    await page.getByTestId('setting-hold').click()
+    await page.getByTestId('setting-slow').click()
+    await page.waitForTimeout(800)
+    const save = await readSave(page)
+    expect(save?.fold_settings?.holdToFold).toBe(true)
+    expect(save?.fold_settings?.slowMode).toBe(true)
+    expect(Object.keys(save ?? {}).length).toBeGreaterThan(0)
+    await page.reload()
+    await waitForGame(page)
+    const live = await page.evaluate(() => ({
+      hold: window.__fold!.engine.gestures.holdToFold,
+      world: window.__fold!.game.worldScale
+    }))
+    expect(live).toEqual({ hold: true, world: 0.75 })
+  })
 })

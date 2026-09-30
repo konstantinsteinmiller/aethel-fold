@@ -172,6 +172,13 @@ export const HIT_STOP = 0.1
 /** Lesson slow-mo. */
 export const LESSON_TIME_SCALE = 0.14
 export const TIME_SCALE_RATE = 7
+/**
+ * Accessibility slow mode (roadmap #14): the world's clock runs at this
+ * fraction. It multiplies sim time on top of lesson slow-mo and the kind
+ * book's pacing; the player's own folds stay on the real clock, and hit-stop
+ * stays a real-time freeze.
+ */
+export const SLOW_MODE_SCALE = 0.75
 
 // ─── Scoring ───────────────────────────────────────────────────────────────
 

@@ -45,9 +45,25 @@ export interface FrameUV {
   v1: number
 }
 
+/**
+ * Frames no book-1 page shows until its victory: the cheering crowd and book 2's
+ * runners and leapers. `createStandeeAtlas` leaves their cells blank so the
+ * boot only paints what page 1 can show (roadmap #13); `paintDeferred` fills
+ * them in later (idle after the first input, or at once when a book-2 page or
+ * the victory crowd needs them). Blank cells are never on screen before then.
+ */
+const DEFERRED: ReadonlySet<FrameName> = new Set<FrameName>([
+  'personRed0', 'personRed1', 'personBlue0', 'personBlue1', 'personGreen0', 'personGreen1', 'personYellow0', 'personYellow1',
+  'runner0', 'runner1', 'runnerFlail', 'leaper0', 'leaper1', 'leaperJump', 'leaperFlail'
+])
+
 export interface StandeeAtlas {
   texture: CanvasTexture
   frame(name: FrameName): FrameUV
+  /** Paint the deferred frames (crowd, book 2) if not yet painted. Returns true if it painted now. */
+  paintDeferred(): boolean
+  /** Have the deferred frames been painted? */
+  readonly complete: boolean
   /** Try `/images/fold/units/manifest.json` overrides (non-blocking). */
   loadOverrides(baseUrl: string): Promise<number>
   dispose(): void
@@ -409,8 +425,27 @@ const PAINTERS: Record<FrameName, Painter> = {
 }
 
 /** Draw `paint` into a cell with the die-cut white paper margin around it. */
+/** Two cell-sized scratch canvases, shared by every cut-out (one pair instead of two canvases per frame). */
+let scratch: { figC: HTMLCanvasElement; fig: CanvasRenderingContext2D; silC: HTMLCanvasElement; sil: CanvasRenderingContext2D } | null = null
+const scratchCanvases = () => {
+  if (!scratch) {
+    const [figC, fig] = makeCanvas(CELL_W, CELL_H)
+    const [silC, sil] = makeCanvas(CELL_W, CELL_H)
+    scratch = { figC, fig, silC, sil }
+  }
+  const s = scratch
+  s.fig.setTransform(1, 0, 0, 1, 0, 0)
+  s.fig.globalAlpha = 1
+  s.fig.globalCompositeOperation = 'source-over'
+  s.fig.clearRect(0, 0, CELL_W, CELL_H)
+  s.sil.setTransform(1, 0, 0, 1, 0, 0)
+  s.sil.globalCompositeOperation = 'source-over'
+  s.sil.clearRect(0, 0, CELL_W, CELL_H)
+  return s
+}
+
 const cutOut = (ctx: CanvasRenderingContext2D, x: number, y: number, paint: Painter | HTMLImageElement): void => {
-  const [figC, fig] = makeCanvas(CELL_W, CELL_H)
+  const { figC, fig, silC, sil } = scratchCanvases()
   if (paint instanceof HTMLImageElement) {
     const s = Math.min((CELL_W - 16) / paint.width, (CELL_H - 12) / paint.height)
     const w = paint.width * s
@@ -420,7 +455,6 @@ const cutOut = (ctx: CanvasRenderingContext2D, x: number, y: number, paint: Pain
     paint(fig)
   }
   // White silhouette, dilated → the paper margin.
-  const [silC, sil] = makeCanvas(CELL_W, CELL_H)
   sil.drawImage(figC, 0, 0)
   sil.globalCompositeOperation = 'source-in'
   sil.fillStyle = HEX.paperWhite
@@ -450,9 +484,12 @@ export const createStandeeAtlas = (): StandeeAtlas => {
   const index = new Map<FrameName, number>()
   ORDER.forEach((name, i) => {
     index.set(name, i)
-    cutOut(ctx, (i % COLS) * CELL_W, Math.floor(i / COLS) * CELL_H, PAINTERS[name])
+    if (!DEFERRED.has(name)) cutOut(ctx, (i % COLS) * CELL_W, Math.floor(i / COLS) * CELL_H, PAINTERS[name])
   })
   const texture = toTexture(canvas, true)
+  let complete = false
+  /** Frames an override image replaced: a late paint must not draw over them. */
+  const overridden = new Set<FrameName>()
   const frames = new Map<FrameName, FrameUV>()
   const inset = 0.5
   for (const [name, i] of index) {
@@ -469,6 +506,20 @@ export const createStandeeAtlas = (): StandeeAtlas => {
   return {
     texture,
     frame: (n) => frames.get(n)!,
+    get complete() {
+      return complete
+    },
+    paintDeferred(): boolean {
+      if (complete) return false
+      complete = true
+      for (const name of DEFERRED) {
+        if (overridden.has(name)) continue
+        const i = index.get(name)!
+        cutOut(ctx, (i % COLS) * CELL_W, Math.floor(i / COLS) * CELL_H, PAINTERS[name])
+      }
+      texture.needsUpdate = true
+      return true
+    },
     async loadOverrides(baseUrl: string): Promise<number> {
       let names: string[] = []
       try {
@@ -498,6 +549,7 @@ export const createStandeeAtlas = (): StandeeAtlas => {
           const y = Math.floor(i / COLS) * CELL_H
           ctx.clearRect(x, y, CELL_W, CELL_H)
           cutOut(ctx, x, y, img)
+          overridden.add(t)
         }
         n++
       }

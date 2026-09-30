@@ -224,7 +224,11 @@ export default {
       'sling': 'Pull the sling back, aim, and let go',
       'leaper': 'Leapers jump walls. Sling them!',
       'shelf': 'Tap a book to look at it, tap again to open it',
-      'shelfZoom': 'Your bookshelf is over here'
+      'shelfZoom': 'Your bookshelf is over here',
+      'hold': 'Press and hold the glowing flap to fold it',
+      'holdPeel': 'Press and hold the corner to peel back the page',
+      'holdCrease': 'Press and hold the glowing crease',
+      'slingTap': 'Tap where the stone should land'
     },
     'pause': {
       'title': 'Paused',
@@ -246,7 +250,13 @@ export default {
       'qualityAuto': 'Auto',
       'qualityHigh': 'Sharp',
       'qualityLow': 'Fast',
-      'language': 'Language'
+      'language': 'Language',
+      'holdToFold': 'Hold to fold',
+      'slowMode': 'Slow mode',
+      'highlight': 'Highlight',
+      'highlight_standard': 'Pulse',
+      'highlight_steady': 'Steady',
+      'highlight_bold': 'Bold'
     },
     'victory': {
       'title': 'VICTORY',

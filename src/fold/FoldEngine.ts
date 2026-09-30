@@ -12,13 +12,14 @@
 
 import { FoldGame, type GameOptions } from './logic/game'
 import type { FoldEvent } from './logic/events'
-import type { BookId, PageDef, PageId } from './logic/types'
+import type { BookId, HighlightMode, PageDef, PageId } from './logic/types'
 import { GestureRecognizer, type GestureFeedback } from './input/gestures'
 import { GameView, type ScreenPoint } from './render/GameView'
 import { FoldAudio } from './audio/FoldAudio'
 import { haptics } from './haptics'
 import { getAudioContext } from '@/use/useAssets'
 import { SHELF_NONE, type ShelfProgress } from './logic/shelf'
+import { SLOW_MODE_SCALE } from './logic/config'
 
 export interface EngineHooks {
   /** Every simulation event, after the view and audio have reacted. */
@@ -29,7 +30,16 @@ export interface EngineHooks {
   onFrame?(game: FoldGame, dt: number): void
   /** The storybook line printed on a page. */
   caption?(def: PageDef): string
+  /** The player's first press on the canvas (boot telemetry, roadmap #13). Once. */
+  onFirstInput?(): void
 }
+
+/** ms after a page's intro before its successor is painted (once the player has touched the page). */
+const WARM_AFTER_INTRO = 2200
+/** ms after the first press before the deferred art starts (it then waits for idle time). */
+const WARM_AFTER_TOUCH = 400
+/** ms before the warm-up runs for a player who hasn't touched the page yet. */
+const WARM_UNTOUCHED = 6000
 
 export interface EngineOptions extends GameOptions {
   startPage?: PageId
@@ -48,6 +58,13 @@ export class FoldEngine {
   private cssW = 1
   private cssH = 1
   private warmTimer: ReturnType<typeof setTimeout> | null = null
+  /** The player has pressed the page at least once (gates the deferred art). */
+  private touched = false
+  /** The splash could not precompile in parallel: compile in the first idle warm-up. */
+  private compileLater = false
+  /** The page the next warm-up builds (0 = none). */
+  private warmPage: PageId | 0 = 0
+  private disposed = false
   private readonly onPointerDown = (e: PointerEvent) => this.pointer('down', e)
   private readonly onPointerMove = (e: PointerEvent) => this.pointer('move', e)
   private readonly onPointerUp = (e: PointerEvent) => this.pointer('up', e)
@@ -101,6 +118,35 @@ export class FoldEngine {
     c.removeEventListener('pointercancel', this.onPointerCancel)
     c.removeEventListener('lostpointercapture', this.onPointerCancel)
     c.removeEventListener('wheel', this.onWheel)
+  }
+
+  /**
+   * Splash-time preparation (roadmap #13): let the view build page 1 from the
+   * boot events, then — where the GPU can compile in parallel
+   * (`KHR_parallel_shader_compile`) — precompile every program the scene can
+   * draw with `compileAsync`, which leaves the main thread free for the splash.
+   * Without the extension a compile ahead of the first frame would only block
+   * the main thread for the programs page 1 doesn't draw yet, so those are
+   * compiled in idle time after the first press instead (`warmNow`). Resolves
+   * after at most `timeoutMs`, with how long it took and which path ran.
+   * Call before `start()`.
+   */
+  async prewarm(timeoutMs = 2000): Promise<{ ms: number; parallel: boolean }> {
+    const t0 = performance.now()
+    this.dispatch()
+    if (!this.view.canCompileParallel()) {
+      this.compileLater = true
+      return { ms: performance.now() - t0, parallel: false }
+    }
+    let timer: ReturnType<typeof setTimeout> | null = null
+    await Promise.race([
+      this.view.precompile(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, timeoutMs)
+      })
+    ])
+    if (timer) clearTimeout(timer)
+    return { ms: performance.now() - t0, parallel: true }
   }
 
   start(): void {
@@ -172,6 +218,25 @@ export class FoldEngine {
     haptics.setEnabled(on)
   }
 
+  // ─── Accessibility (roadmap #14) ─────────────────────────────────────────
+
+  /** Press and hold instead of swiping (swipes keep working too). */
+  setHoldToFold(on: boolean): void {
+    if (this.gestures.holdToFold === on) return
+    this.gestures.cancel()
+    this.gestures.holdToFold = on
+  }
+
+  /** The world at 0.75× (sim time only: the player's folds stay on the real clock). */
+  setSlowMode(on: boolean): void {
+    this.game.worldScale = on ? SLOW_MODE_SCALE : 1
+  }
+
+  /** How actionable things are marked: pulsing, steady, or bold with an ink-edged halo. */
+  setHighlightMode(mode: HighlightMode): void {
+    this.view.renderer.setHighlight(mode)
+  }
+
   project(x: number, y: number, z: number, out: ScreenPoint): ScreenPoint {
     return this.view.project(x, y, z, out)
   }
@@ -223,6 +288,7 @@ export class FoldEngine {
   }
 
   dispose(): void {
+    this.disposed = true
     this.stop()
     this.detach()
     if (this.warmTimer) clearTimeout(this.warmTimer)
@@ -237,9 +303,20 @@ export class FoldEngine {
     this.last = now
     const dt = Math.min(0.05, Math.max(0, dtMs / 1000))
     const g = this.game
+    // Hold to fold (roadmap #14) advances with the real clock, not the world's.
+    this.gestures.frame(now)
     g.update(dt)
     this.view.update(g.paused ? dt * 0.25 : dt)
-    // Events: view (VFX), audio, haptics, then the HUD / persistence hooks.
+    this.dispatch()
+    this.view.render()
+    this.audio?.update()
+    this.view.renderer.sample(dtMs, now)
+    this.hooks.onFrame?.(g, dt)
+  }
+
+  /** Events: view (VFX), audio, haptics, then the HUD / persistence hooks. */
+  private dispatch(): void {
+    const g = this.game
     const ev = g.events
     for (let i = 0; i < ev.count; i++) {
       const e = ev.items[i]!
@@ -250,10 +327,6 @@ export class FoldEngine {
       if (e.type === 'pageIntro') this.scheduleWarm(e.a as PageId)
     }
     ev.clear()
-    this.view.render()
-    this.audio?.update()
-    this.view.renderer.sample(dtMs, now)
-    this.hooks.onFrame?.(g, dt)
   }
 
   private hapticFor(e: FoldEvent): void {
@@ -278,17 +351,50 @@ export class FoldEngine {
     }
   }
 
-  /** Paint the next page's art while the player is busy with this one. */
+  /**
+   * Paint the next page's art (and the atlas frames page 1 doesn't need) while
+   * the player is busy with this one — but never before the first press: until
+   * then the boot owns the main thread (roadmap #13). The work runs in idle
+   * time; a player who never touches the page gets it after `WARM_UNTOUCHED`.
+   */
   private scheduleWarm(page: PageId): void {
     if (this.warmTimer) clearTimeout(this.warmTimer)
-    if (page >= 6) return
-    const next = (page + 1) as PageId
+    this.warmTimer = null
+    this.warmPage = page < 6 ? ((page + 1) as PageId) : 0
+    if (this.touched) this.armWarm(WARM_AFTER_INTRO)
+    else this.armWarm(WARM_UNTOUCHED)
+  }
+
+  private armWarm(delay: number): void {
+    if (this.warmTimer) clearTimeout(this.warmTimer)
     this.warmTimer = setTimeout(() => {
+      this.warmTimer = null
       const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback
-      const run = () => this.view.warm(next)
+      const run = (): void => this.warmNow()
       if (ric) ric(run, { timeout: 2500 })
       else run()
-    }, 2200)
+    }, delay)
+  }
+
+  private warmNow(): void {
+    if (this.disposed) return
+    // No parallel compile at boot: issue the programs the first page hasn't drawn yet
+    // (marchers, effects, the shelf) now, so the driver links them before they appear.
+    if (this.compileLater) {
+      this.compileLater = false
+      void this.view.precompile()
+    }
+    this.view.warmArt()
+    const next = this.warmPage
+    this.warmPage = 0
+    if (next) this.view.warm(next)
+  }
+
+  /** The first press: whatever warm-up was waiting on it can start soon. */
+  private firstTouch(): void {
+    this.touched = true
+    this.hooks.onFirstInput?.()
+    this.armWarm(WARM_AFTER_TOUCH)
   }
 
   // ─── Input ───────────────────────────────────────────────────────────────
@@ -299,6 +405,7 @@ export class FoldEngine {
     const y = e.clientY - r.top
     const now = performance.now()
     if (kind === 'down') {
+      if (!this.touched) this.firstTouch()
       this.audio?.start()
       if (this.audio && this.audio.ctx.state === 'suspended') void this.audio.ctx.resume().catch(() => undefined)
     }
@@ -355,6 +462,11 @@ export class FoldEngine {
       g.openShelf('tap', this.shelfHit)
     }
     return true
+  }
+
+  /** Screen y (CSS px) of the desk bookshelf's top, +Infinity while it isn't drawn (HUD layout). */
+  shelfTop(): number {
+    return this.view.shelfTop()
   }
 
   /** Screen point (CSS px) of a shelf slot's spine centre, as drawn (tests, the ghost hand). */

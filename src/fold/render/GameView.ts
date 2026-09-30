@@ -12,12 +12,12 @@ import { Color, Scene, SpotLight, Vector3, type WebGLRenderTarget } from 'three'
 import type { FoldGame } from '../logic/game'
 import type { FoldEvent } from '../logic/events'
 import { KILL_BOLT, KILL_CRUSH, KILL_FLING, KILL_LAUNCH, KILL_RIDGE, KILL_SHOT, KILL_TEAR } from '../logic/events'
-import { CASTLE, PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME, PAGE_HALF_D, PAGE_HALF_W } from '../logic/config'
+import { CASTLE, PAGE_TURN_TIME, CRUMPLE_TIME, PAGE_DROP_TIME, PAGE_HALF_D, PAGE_HALF_W, SHELF } from '../logic/config'
 import { PAGE_COUNT, pageDef } from '../logic/pages'
 import type { PageDef, PageId } from '../logic/types'
 import { createFold } from '../logic/folds'
 import { clamp01, easeInOutCubic, segmentDistance, smoothstep, v2 } from '../logic/math'
-import { SHELF_DESK, SHELF_NONE } from '../logic/shelf'
+import { SHELF_DESK, SHELF_NONE, shelfHalfWidth } from '../logic/shelf'
 import { FoldRenderer } from './FoldRenderer'
 import { DeskCamera, type CameraFrame } from './camera'
 import { paperGlobals } from './paperMaterial'
@@ -191,6 +191,28 @@ export class GameView {
       if (x <= PAGE_HALF_W + 0.3 && x >= -PAGE_HALF_W * 3 - 0.9 && Math.abs(z) <= PAGE_HALF_D + 0.3) return SHELF_DESK
     }
     return SHELF_NONE
+  }
+
+  private readonly corner = new Vector3()
+
+  /**
+   * Screen y (CSS px) of the desk bookshelf's top as drawn — the highest of
+   * its top board's four corners (`extras` sits on that board) — or +Infinity
+   * while it is hidden. Events and layout only (the star ribbon fits above it).
+   */
+  shelfTop(): number {
+    const sh = this.shelf
+    if (!sh.group.visible) return Infinity
+    sh.group.updateMatrixWorld()
+    const hw = shelfHalfWidth()
+    const d = (SHELF.bookD + 0.3) / 2
+    let best = Infinity
+    for (let i = 0; i < 4; i++) {
+      this.corner.set(i & 1 ? hw : -hw, 0, i & 2 ? d : -d)
+      sh.extras.localToWorld(this.corner)
+      best = Math.min(best, this.project(this.corner.x, this.corner.y, this.corner.z, this.sp).y)
+    }
+    return best
   }
 
   /** Ground-plane point under the screen position of a world point. */
@@ -446,6 +468,8 @@ export class GameView {
         break
       }
       case 'pageIntro': {
+        // Book 2's runners and leapers: their atlas frames must be painted before they can march on.
+        if (g.book === 2) this.atlas.paintDeferred()
         if (this.transition === 'drop') break
         this.adoptPage()
         if (this.transition !== 'turn' && this.transition !== 'peel') this.transition = 'none'
@@ -518,6 +542,7 @@ export class GameView {
         this.desk.shake(0.08)
         break
       case 'victory': {
+        this.atlas.paintDeferred()
         this.units.showCrowd(true)
         for (let i = 0; i < 5; i++) fx.burst(-4 + i * 2, 3 + (i % 2), -1 + (i % 3), { count: 70, palette: 'festive', speed: 5.5, up: 8 })
         break
@@ -686,6 +711,26 @@ export class GameView {
 
   render(): void {
     this.renderer.render(this.scene, this.desk.camera, this.time)
+  }
+
+  /**
+   * Compile every program the scene can draw (page 1, units, projectiles,
+   * effects, the shelf, the composite) while the splash is still up, so the
+   * first frame and the first marchers don't stall on shader compiles
+   * (roadmap #13). Resolves with whether the GPU could compile in parallel.
+   */
+  precompile(): Promise<boolean> {
+    return this.renderer.precompile(this.scene, this.desk.camera)
+  }
+
+  /** Can programs compile off the main thread (`KHR_parallel_shader_compile`)? */
+  canCompileParallel(): boolean {
+    return this.renderer.canCompileParallel()
+  }
+
+  /** The art the first page doesn't need (the crowd's and book 2's standee frames). Idle time only. */
+  warmArt(): void {
+    this.atlas.paintDeferred()
   }
 
   /** Prebuild a page's view off the hot path (idle time). */

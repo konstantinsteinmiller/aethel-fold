@@ -23,7 +23,7 @@ import {
   PAGE_HALF_D, PAGE_HALF_W, PAGE_TURN_TIME, PEEL_COMPLETE, SCORE, SPAWN_Z, TIME_SCALE_RATE, TORN_LINGER,
   FOLD_SNAP_THRESHOLD, LEAPER_HOP_EVERY, LEAPER_HOP_TIME, LEAPER_SHOT_CEILING, LEAPER_VAULT_LAND,
   LEAPER_VAULT_TIME, SLING_COOL, SLING_FLIGHT_BASE, SLING_FLIGHT_PER, SLING_GAIN, SLING_GRAB, SLING_MIN_PULL,
-  SLING_RADIUS, SLING_RANGE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED, ALMOST, DIFFICULTY, SHELF
+  SLING_RADIUS, SLING_RANGE, SLOW_MODE_SCALE, BALLISTA_SHOTS, BOLT_PIERCE, BOLT_RADIUS, BOLT_SPEED, ALMOST, DIFFICULTY, SHELF
 } from './config'
 import {
   type KindMemory, createKindMemory, difficultyFor, extraPerWave, foldSlowmoOn, noteCrumple, notePageWon,
@@ -176,6 +176,11 @@ export class FoldGame {
   timeScale = 1
   private timeTarget = 1
   hitStop = 0
+  /**
+   * Accessibility slow mode (roadmap #14): multiplies sim time on top of
+   * `timeScale`. A player setting, so a new run or page keeps it.
+   */
+  worldScale = 1
   paused = false
   /** Seconds since the last player input (real time). */
   idle = 0
@@ -452,7 +457,7 @@ export class FoldGame {
 
     this.timeScale = damp(this.timeScale, this.timeTarget, TIME_SCALE_RATE, realDt)
     if (this.timeTarget === 0 && this.timeScale < 0.01) this.timeScale = 0
-    const simDt = realDt * this.timeScale
+    const simDt = realDt * this.timeScale * this.worldScale
 
     this.updateFolds(realDt, simDt)
     this.updateTears(realDt)
@@ -992,6 +997,23 @@ export class FoldGame {
     }
     s.tx = clamp(s.def.x + dx, -PAGE_HALF_W + 0.25, PAGE_HALF_W - 0.25)
     s.tz = clamp(s.def.z + dz, -PAGE_HALF_D + 0.25, BREACH_Z - 0.2)
+  }
+
+  /**
+   * Hold-to-fold mode's sling (roadmap #14): a tap on the page shoots the
+   * loaded sling at that spot, no pull-back needed. Returns true if a stone flew.
+   */
+  slingAt(x: number, z: number): boolean {
+    const s = this.sling
+    if (!s || s.cool > 0 || !this.acceptsInput() || this.phase === 'peel') return false
+    const dx = x - s.def.x
+    const dz = z - s.def.z
+    const d = Math.hypot(dx, dz)
+    if (d < 0.05 || !this.grabSling()) return false
+    // The pull that aims at (x, z) — at least the arming pull (a very near spot then flies a little past).
+    const pull = Math.max(SLING_MIN_PULL, Math.min(d, SLING_RANGE) / SLING_GAIN)
+    this.aimSling((-dx / d) * pull, (-dz / d) * pull)
+    return this.releaseSling()
   }
 
   /** Is the current pull enough to shoot? (The view dims the aim when not.) */

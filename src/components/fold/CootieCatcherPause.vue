@@ -5,7 +5,8 @@
  * corners and meet in the middle; the menu is printed on the folded paper.
  *
  * Faces: the menu (resume / restart page / settings / books / start over),
- * the settings (music, effects, vibration, screen shake, graphics, language),
+ * the settings (music, effects, vibration, screen shake, hold to fold, slow
+ * mode, highlight, graphics, language),
  * the bookshelf (pick book 1 or, once it has been won, book 2, each with the
  * origami stars earned in it) and a confirm.
  *
@@ -23,7 +24,7 @@ import FSelect from '@/components/atoms/FSelect.vue'
 import OrigamiIcon from '@/components/icons/OrigamiIcon.vue'
 import PaperRibbon from '@/components/fold/PaperRibbon.vue'
 import StarTally from '@/components/fold/StarTally.vue'
-import type { BookId } from '@/fold/logic/types'
+import { HIGHLIGHT_MODES, type BookId, type HighlightMode } from '@/fold/logic/types'
 import useUser from '@/use/useUser'
 import { foldSettings, setFoldSetting, starsForBook, type Quality } from '@/use/useFoldProgress'
 import { LANGUAGES, LANGUAGE_AUTONYMS } from '@/utils/enums'
@@ -81,6 +82,19 @@ const shake = computed({
   get: () => foldSettings.value.shake,
   set: (v: boolean) => setFoldSetting('shake', v)
 })
+const holdToFold = computed({
+  get: () => foldSettings.value.holdToFold,
+  set: (v: boolean) => setFoldSetting('holdToFold', v)
+})
+const slowMode = computed({
+  get: () => foldSettings.value.slowMode,
+  set: (v: boolean) => setFoldSetting('slowMode', v)
+})
+const highlightMode = computed({
+  get: () => foldSettings.value.highlightMode,
+  set: (v: HighlightMode) => setFoldSetting('highlightMode', v)
+})
+const highlightOptions = computed(() => HIGHLIGHT_MODES.map((m) => ({ value: m, label: t(`fold.settings.highlight_${m}`) })))
 const quality = computed({
   get: () => foldSettings.value.quality,
   set: (v: Quality) => setFoldSetting('quality', v)
@@ -200,6 +214,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                 OrigamiIcon(name="shake" tone="purple")
                 span {{ t('fold.settings.shake') }}
               FSwitch(v-model="shake")
+            //- Accessibility (roadmap #14).
+            div.cootie__row.cootie__row--toggle
+              span.cootie__row-label.flex.items-center.gap-2
+                OrigamiIcon(name="hand" tone="yellow")
+                span {{ t('fold.settings.holdToFold') }}
+              FSwitch(v-model="holdToFold" data-testid="setting-hold")
+            div.cootie__row.cootie__row--toggle
+              span.cootie__row-label.flex.items-center.gap-2
+                OrigamiIcon(name="clock" tone="blue")
+                span {{ t('fold.settings.slowMode') }}
+              FSwitch(v-model="slowMode" data-testid="setting-slow")
+            div.cootie__row
+              span.cootie__row-label.flex.items-center.gap-2
+                OrigamiIcon(name="star" tone="yellow")
+                span {{ t('fold.settings.highlight') }}
+              FSelect(v-model="highlightMode" :options="highlightOptions" data-testid="setting-highlight")
             div.cootie__row
               span.cootie__row-label.flex.items-center.gap-2
                 OrigamiIcon(name="quality" tone="blue")
